@@ -94,9 +94,9 @@ object ThemePackageManager {
         themeName: String,
         excludeDirName: String? = null
     ): Boolean = withContext(IO) {
-        val normalizedDirName = themeName.trim().normalizeFileName()
+        val normalizedName = themeName.trim()
         loadLocal(isNightTheme).any {
-            it.dirName == normalizedDirName && it.dirName != excludeDirName
+            it.dirName != excludeDirName && it.packageInfo.name == normalizedName
         }
     }
 
@@ -119,15 +119,15 @@ object ThemePackageManager {
         themeName: String,
         excludeDirName: String? = null
     ): Boolean = withContext(IO) {
-        val normalizedDirName = themeName.trim().normalizeFileName()
+        val normalizedName = themeName.trim()
         val localExists = loadLocal(isNightTheme).any {
-            it.dirName == normalizedDirName && it.dirName != excludeDirName
+            it.dirName != excludeDirName && it.packageInfo.name == normalizedName
         }
         if (localExists) {
             return@withContext true
         }
         loadRemoteOrCache(isNightTheme).any {
-            it.dirName == normalizedDirName && it.dirName != excludeDirName
+            it.dirName != excludeDirName && it.packageInfo.name == normalizedName
         }
     }
 
@@ -417,7 +417,7 @@ object ThemePackageManager {
     private fun saveConfig(config: ThemeConfig.Config): Entry {
         val normalizedName = config.themeName.trim()
             .ifBlank { builtinName(config.isNightTheme) }
-        val dirName = normalizedName.normalizeFileName()
+        val dirName = uniqueDirName(config.isNightTheme, normalizedName.normalizeFileName(), normalizedName)
         val dir = localDir(config.isNightTheme, dirName).apply {
             if (!exists()) mkdirs()
         }
@@ -433,6 +433,18 @@ object ThemePackageManager {
         File(dir, packageFileName).writeText(GSON.toJson(pkg))
         ThemeConfig.addConfig(resolveConfigPaths(pkg, dir))
         return Entry(pkg, Source.LOCAL, localDir = dir)
+    }
+
+    private fun uniqueDirName(isNightTheme: Boolean, preferred: String, themeName: String): String {
+        val clean = preferred.ifBlank { builtinName(isNightTheme).normalizeFileName() }
+        val existing = readPackage(localDir(isNightTheme, clean))
+        if (existing == null || existing.name == themeName) return clean
+        var index = 1
+        while (true) {
+            val candidate = "${clean}_$index"
+            if (readPackage(localDir(isNightTheme, candidate)) == null) return candidate
+            index++
+        }
     }
 
     private fun saveConfigReplacingLocal(config: ThemeConfig.Config): Entry {

@@ -180,12 +180,13 @@ object TopBarConfig {
             oldEntry.dirName.isNotBlank() &&
             oldEntry.dirName != DEFAULT_DIR_NAME &&
             oldEntry.source != Source.REMOTE
+        val preferredDirName = name.normalizeFileName().ifBlank { "top_bar_${System.currentTimeMillis()}" }
         val dirName = if (keepOldDir) {
-            oldEntry!!.dirName
+            oldEntry.dirName
         } else {
-            name.normalizeFileName().ifBlank { "top_bar_${System.currentTimeMillis()}" }
+            uniqueDirName(normalized.isNightMode, preferredDirName)
         }
-        if (!keepOldDir && readEntry(localDir(normalized.isNightMode, dirName)) != null) {
+        if (localNameExists(normalized.isNightMode, name, oldEntry?.dirName)) {
             throw IllegalArgumentException(appCtx.getString(R.string.top_bar_name_exists))
         }
         val dir = localDir(normalized.isNightMode, dirName).apply { mkdirs() }
@@ -196,6 +197,23 @@ object TopBarConfig {
         )
         File(dir, packageFileName).writeText(GSON.toJson(next))
         return Entry(next, Source.LOCAL, dirName, localDir = dir)
+    }
+
+    private fun localNameExists(isNightMode: Boolean, name: String, excludeDirName: String? = null): Boolean {
+        return loadLocal(isNightMode).any {
+            it.dirName != excludeDirName && it.config.name == name
+        }
+    }
+
+    private fun uniqueDirName(isNightMode: Boolean, preferred: String): String {
+        val clean = preferred.normalizeFileName().ifBlank { "top_bar_${System.currentTimeMillis()}" }
+        if (readEntry(localDir(isNightMode, clean)) == null) return clean
+        var index = 1
+        while (true) {
+            val candidate = "${clean}_$index"
+            if (readEntry(localDir(isNightMode, candidate)) == null) return candidate
+            index++
+        }
     }
 
     fun apply(entry: Entry) {

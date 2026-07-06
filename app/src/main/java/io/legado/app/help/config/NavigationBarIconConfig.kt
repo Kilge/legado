@@ -309,12 +309,13 @@ object NavigationBarIconConfig {
             oldEntry.dirName.isNotBlank() &&
             oldEntry.dirName != DEFAULT_DIR_NAME &&
             oldEntry.source != Source.REMOTE
+        val preferredDirName = name.normalizeFileName().ifBlank { "navigation_${System.currentTimeMillis()}" }
         val dirName = if (keepOldDir) {
-            oldEntry!!.dirName
+            oldEntry.dirName
         } else {
-            name.normalizeFileName().ifBlank { "navigation_${System.currentTimeMillis()}" }
+            uniqueDirName(config.isNightMode, preferredDirName)
         }
-        if (!keepOldDir && readEntry(localDir(config.isNightMode, dirName)) != null) {
+        if (localNameExists(config.isNightMode, name, oldEntry?.dirName)) {
             throw IllegalArgumentException(appCtx.getString(R.string.navigation_bar_name_exists))
         }
         val dir = localDir(config.isNightMode, dirName).apply { mkdirs() }
@@ -333,6 +334,23 @@ object NavigationBarIconConfig {
         File(dir, packageFileName).writeText(GSON.toJson(normalized))
         clearRuntimeCache()
         return Entry(normalized, Source.LOCAL, dirName, localDir = dir)
+    }
+
+    private fun localNameExists(isNightMode: Boolean, name: String, excludeDirName: String? = null): Boolean {
+        return loadLocal(isNightMode).any {
+            it.dirName != excludeDirName && it.config.name == name
+        }
+    }
+
+    private fun uniqueDirName(isNightMode: Boolean, preferred: String): String {
+        val clean = preferred.normalizeFileName().ifBlank { "navigation_${System.currentTimeMillis()}" }
+        if (readEntry(localDir(isNightMode, clean)) == null) return clean
+        var index = 1
+        while (true) {
+            val candidate = "${clean}_$index"
+            if (readEntry(localDir(isNightMode, candidate)) == null) return candidate
+            index++
+        }
     }
 
     fun deleteLocal(entry: Entry) {
