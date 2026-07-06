@@ -37,10 +37,15 @@ data class ThemeUiPalette(
 
 private val themeUiColorKeys = listOf(
     PreferKey.themeCardColor,
+    PreferKey.themeCardColorN,
     PreferKey.themeMutedColor,
+    PreferKey.themeMutedColorN,
     PreferKey.themeSearchFieldBackgroundColor,
+    PreferKey.themeSearchFieldBackgroundColorN,
     PreferKey.themeTabBackgroundColor,
-    PreferKey.themeShelfColor
+    PreferKey.themeTabBackgroundColorN,
+    PreferKey.themeShelfColor,
+    PreferKey.themeShelfColorN
 )
 private val themeUiShapeKeys = listOf(
     PreferKey.panelBorderColor,
@@ -52,21 +57,33 @@ private val themeUiShapeKeys = listOf(
     PreferKey.panelBgScaleType,
     PreferKey.panelBgScaleTypeN,
     PreferKey.uiCornerScale,
+    PreferKey.uiCornerScaleN,
     PreferKey.uiCornerSearchFollow,
+    PreferKey.uiCornerSearchFollowN,
     PreferKey.uiCornerReplyFollow,
+    PreferKey.uiCornerReplyFollowN,
     PreferKey.uiLayoutAlpha,
+    PreferKey.uiLayoutAlphaN,
     PreferKey.uiCornerEffectLevel,
     PreferKey.dialogAlpha,
+    PreferKey.dialogAlphaN,
     PreferKey.themeCardShadow,
+    PreferKey.themeCardShadowN,
     PreferKey.themeCardBackgroundBlur,
+    PreferKey.themeCardBackgroundBlurN,
     PreferKey.bookCoverShadow
 )
 private val themeUiTypographyKeys = listOf(
     PreferKey.fontScale,
+    PreferKey.fontScaleN,
     PreferKey.uiFontPath,
+    PreferKey.uiFontPathN,
     PreferKey.titleFontPath,
+    PreferKey.titleFontPathN,
     PreferKey.uiFontColor,
-    PreferKey.titleFontColor
+    PreferKey.uiFontColorN,
+    PreferKey.titleFontColor,
+    PreferKey.titleFontColorN
 )
 private val themeUiDependencyKeySet = (
     themeUiColorKeys + themeUiShapeKeys + themeUiTypographyKeys + listOf(
@@ -139,19 +156,19 @@ fun Context.themeUiSignature(): String {
         "borderN=${getPrefString(PreferKey.panelBorderColorN).orEmpty()}",
         "borderAlpha=${getPrefInt(PreferKey.panelBorderAlpha, 100)}",
         "borderAlphaN=${getPrefInt(PreferKey.panelBorderAlphaN, 100)}",
-        "corner=${getPrefString(PreferKey.uiCornerScale, "1").orEmpty()}",
+        "corner=${getPrefString(ThemeRuntimeKeys.uiCornerScale(), "1").orEmpty()}",
         "searchFollow=${AppConfig.uiCornerSearchFollow}",
         "replyFollow=${AppConfig.uiCornerReplyFollow}",
         "layoutAlpha=${AppConfig.uiLayoutAlpha}",
         "dialogAlpha=${AppConfig.dialogAlpha}",
-        "cardShadow=${getPrefInt(PreferKey.themeCardShadow, -1)}",
-        "cardBackgroundBlur=${getPrefInt(PreferKey.themeCardBackgroundBlur, -1)}",
+        "cardShadow=${getPrefInt(ThemeRuntimeKeys.themeCardShadow(), -1)}",
+        "cardBackgroundBlur=${getPrefInt(ThemeRuntimeKeys.themeCardBackgroundBlur(), -1)}",
         "bookCoverShadow=${AppConfig.bookCoverShadow}",
-        "fontScale=${getPrefInt(PreferKey.fontScale, 0)}",
-        "uiFont=${getPrefString(PreferKey.uiFontPath).orEmpty()}",
-        "titleFont=${getPrefString(PreferKey.titleFontPath).orEmpty()}",
-        "uiFontColor=${getPrefString(PreferKey.uiFontColor).orEmpty()}",
-        "titleFontColor=${getPrefString(PreferKey.titleFontColor).orEmpty()}",
+        "fontScale=${getPrefInt(ThemeRuntimeKeys.fontScale(), 0)}",
+        "uiFont=${getPrefString(ThemeRuntimeKeys.uiFontPath()).orEmpty()}",
+        "titleFont=${getPrefString(ThemeRuntimeKeys.titleFontPath()).orEmpty()}",
+        "uiFontColor=${getPrefString(ThemeRuntimeKeys.uiFontColor()).orEmpty()}",
+        "titleFontColor=${getPrefString(ThemeRuntimeKeys.titleFontColor()).orEmpty()}",
         "panelImage=${themePanelImageSignature()}"
     ).joinToString("|")
     val computedColors = listOf(
@@ -230,7 +247,7 @@ fun Context.themeColorOrDefault(key: String, @ColorRes defaultColor: Int): Int {
 
 @ColorInt
 fun Context.themeColorOrNull(key: String): Int? {
-    return getPrefString(key).toThemeColorIntOrNull()
+    return getPrefString(ThemeRuntimeKeys.activeColorKey(key)).toThemeColorIntOrNull()
 }
 
 @ColorInt

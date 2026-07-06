@@ -8,6 +8,7 @@ import io.legado.app.constant.AppLog
 import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
 import io.legado.app.help.coroutine.Coroutine
+import io.legado.app.lib.theme.ThemeRuntimeKeys
 import io.legado.app.utils.GSON
 import io.legado.app.utils.canvasrecorder.CanvasRecorderFactory
 import io.legado.app.utils.fromJsonArray
@@ -2097,27 +2098,27 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
         }
 
     var uiFontPath: String
-        get() = appCtx.getPrefString(PreferKey.uiFontPath).orEmpty()
+        get() = appCtx.getPrefString(ThemeRuntimeKeys.uiFontPath(isNightTheme)).orEmpty()
         set(value) {
-            appCtx.putPrefString(PreferKey.uiFontPath, value)
+            appCtx.putPrefString(ThemeRuntimeKeys.uiFontPath(isNightTheme), value)
         }
 
     var titleFontPath: String
-        get() = appCtx.getPrefString(PreferKey.titleFontPath).orEmpty()
+        get() = appCtx.getPrefString(ThemeRuntimeKeys.titleFontPath(isNightTheme)).orEmpty()
         set(value) {
-            appCtx.putPrefString(PreferKey.titleFontPath, value)
+            appCtx.putPrefString(ThemeRuntimeKeys.titleFontPath(isNightTheme), value)
         }
 
     var uiFontColor: String
-        get() = appCtx.getPrefString(PreferKey.uiFontColor).orEmpty()
+        get() = appCtx.getPrefString(ThemeRuntimeKeys.uiFontColor(isNightTheme)).orEmpty()
         set(value) {
-            appCtx.putPrefString(PreferKey.uiFontColor, value)
+            appCtx.putPrefString(ThemeRuntimeKeys.uiFontColor(isNightTheme), value)
         }
 
     var titleFontColor: String
-        get() = appCtx.getPrefString(PreferKey.titleFontColor).orEmpty()
+        get() = appCtx.getPrefString(ThemeRuntimeKeys.titleFontColor(isNightTheme)).orEmpty()
         set(value) {
-            appCtx.putPrefString(PreferKey.titleFontColor, value)
+            appCtx.putPrefString(ThemeRuntimeKeys.titleFontColor(isNightTheme), value)
         }
 
     var bookCoverShadow: Boolean
@@ -2142,27 +2143,27 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
         }
 
     var uiCornerScale: Float
-        get() = appCtx.getPrefString(PreferKey.uiCornerScale, "1")
+        get() = appCtx.getPrefString(ThemeRuntimeKeys.uiCornerScale(isNightTheme), "1")
             ?.toFloatOrNull()
             ?.coerceIn(0f, 3f)
             ?: 1f
         set(value) {
-            appCtx.putPrefString(PreferKey.uiCornerScale, value.coerceIn(0f, 3f).toPlainScale())
+            appCtx.putPrefString(ThemeRuntimeKeys.uiCornerScale(isNightTheme), value.coerceIn(0f, 3f).toPlainScale())
         }
 
     var uiLayoutAlpha: Int
         get() = appCtx.getPrefInt(
-            PreferKey.uiLayoutAlpha,
-            appCtx.getPrefInt(PreferKey.uiCornerEffectLevel, 100)
+            ThemeRuntimeKeys.uiLayoutAlpha(isNightTheme),
+            if (isNightTheme) 100 else appCtx.getPrefInt(PreferKey.uiCornerEffectLevel, 100)
         ).coerceIn(0, 100)
         set(value) {
-            appCtx.putPrefInt(PreferKey.uiLayoutAlpha, value.coerceIn(0, 100))
+            appCtx.putPrefInt(ThemeRuntimeKeys.uiLayoutAlpha(isNightTheme), value.coerceIn(0, 100))
         }
 
     var dialogAlpha: Int
-        get() = appCtx.getPrefInt(PreferKey.dialogAlpha, 100).coerceIn(0, 100)
+        get() = appCtx.getPrefInt(ThemeRuntimeKeys.dialogAlpha(isNightTheme), 100).coerceIn(0, 100)
         set(value) {
-            appCtx.putPrefInt(PreferKey.dialogAlpha, value.coerceIn(0, 100))
+            appCtx.putPrefInt(ThemeRuntimeKeys.dialogAlpha(isNightTheme), value.coerceIn(0, 100))
         }
 
     @Deprecated("Use uiLayoutAlpha")
@@ -2180,10 +2181,10 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
         }
 
     val uiCornerSearchFollow: Boolean
-        get() = appCtx.getPrefBoolean(PreferKey.uiCornerSearchFollow, false)
+        get() = appCtx.getPrefBoolean(ThemeRuntimeKeys.uiCornerSearchFollow(isNightTheme), false)
 
     val uiCornerReplyFollow: Boolean
-        get() = appCtx.getPrefBoolean(PreferKey.uiCornerReplyFollow, false)
+        get() = appCtx.getPrefBoolean(ThemeRuntimeKeys.uiCornerReplyFollow(isNightTheme), false)
 
     var liquidGlassLevel: Int
         get() = appCtx.getPrefInt(PreferKey.liquidGlassLevel, 68).coerceIn(0, 100)

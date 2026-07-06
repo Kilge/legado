@@ -14,6 +14,7 @@ import io.legado.app.constant.PreferKey
 import io.legado.app.constant.Theme
 import io.legado.app.help.DefaultData
 import io.legado.app.lib.theme.ThemeStore
+import io.legado.app.lib.theme.ThemeRuntimeKeys
 import io.legado.app.lib.theme.UiCorner
 import io.legado.app.lib.theme.defaultThemeTextColor
 import io.legado.app.lib.theme.defaultThemeTextColorHex
@@ -327,26 +328,26 @@ object ThemeConfig {
             val panelBorderColor = config.panelBorderColor?.takeIf { it.isNotBlank() }
             val panelBorderAlpha = config.panelBorderAlpha?.coerceIn(0, 100) ?: 100
             config.uiCornerScale?.let {
-                context.putPrefString(PreferKey.uiCornerScale, it.coerceIn(0f, 3f).toPlainScale())
+                context.putPrefString(ThemeRuntimeKeys.uiCornerScale(isNightTheme), it.coerceIn(0f, 3f).toPlainScale())
             }
             config.uiLayoutAlpha?.let {
-                context.putPrefInt(PreferKey.uiLayoutAlpha, it.coerceIn(0, 100))
+                context.putPrefInt(ThemeRuntimeKeys.uiLayoutAlpha(isNightTheme), it.coerceIn(0, 100))
             }
             config.dialogAlpha?.let {
-                context.putPrefInt(PreferKey.dialogAlpha, it.coerceIn(0, 100))
+                context.putPrefInt(ThemeRuntimeKeys.dialogAlpha(isNightTheme), it.coerceIn(0, 100))
             }
             applyExtendedInterfaceColors(context, config)
             config.uiCornerSearchFollow?.let {
-                context.putPrefBoolean(PreferKey.uiCornerSearchFollow, it)
+                context.putPrefBoolean(ThemeRuntimeKeys.uiCornerSearchFollow(isNightTheme), it)
             }
             config.uiCornerReplyFollow?.let {
-                context.putPrefBoolean(PreferKey.uiCornerReplyFollow, it)
+                context.putPrefBoolean(ThemeRuntimeKeys.uiCornerReplyFollow(isNightTheme), it)
             }
             config.fontScale?.let {
-                context.putPrefInt(PreferKey.fontScale, it.coerceIn(0, 16))
+                context.putPrefInt(ThemeRuntimeKeys.fontScale(isNightTheme), it.coerceIn(0, 16))
             }
-            context.putPrefString(PreferKey.uiFontPath, config.uiFontPath.orEmpty())
-            context.putPrefString(PreferKey.titleFontPath, config.titleFontPath.orEmpty())
+            context.putPrefString(ThemeRuntimeKeys.uiFontPath(isNightTheme), config.uiFontPath.orEmpty())
+            context.putPrefString(ThemeRuntimeKeys.titleFontPath(isNightTheme), config.titleFontPath.orEmpty())
             applyFontColorPrefs(context, config.isNightTheme, config.uiFontColor, config.titleFontColor)
             if (backgroundPath != null && backgroundPath.startsWith("http")) {
                 val fileRoot = context.externalFiles
@@ -463,6 +464,32 @@ object ThemeConfig {
         }
     }
 
+    private fun Context.themeUiCornerScale(isNightTheme: Boolean): Float {
+        return getPrefString(ThemeRuntimeKeys.uiCornerScale(isNightTheme), "1")
+            ?.toFloatOrNull()
+            ?.coerceIn(0f, 3f)
+            ?: 1f
+    }
+
+    private fun Context.themeUiLayoutAlpha(isNightTheme: Boolean): Int {
+        return getPrefInt(
+            ThemeRuntimeKeys.uiLayoutAlpha(isNightTheme),
+            if (isNightTheme) 100 else getPrefInt(PreferKey.uiCornerEffectLevel, 100)
+        ).coerceIn(0, 100)
+    }
+
+    private fun Context.themeDialogAlpha(isNightTheme: Boolean): Int {
+        return getPrefInt(ThemeRuntimeKeys.dialogAlpha(isNightTheme), 100).coerceIn(0, 100)
+    }
+
+    private fun Context.themeUiCornerSearchFollow(isNightTheme: Boolean): Boolean {
+        return getPrefBoolean(ThemeRuntimeKeys.uiCornerSearchFollow(isNightTheme), false)
+    }
+
+    private fun Context.themeUiCornerReplyFollow(isNightTheme: Boolean): Boolean {
+        return getPrefBoolean(ThemeRuntimeKeys.uiCornerReplyFollow(isNightTheme), false)
+    }
+
     private fun getDayTheme(context: Context, name: String): Config {
         val primary =
             context.getPrefInt(PreferKey.cPrimary, context.getCompatColor(R.color.md_brown_500))
@@ -509,17 +536,17 @@ object ThemeConfig {
                 panelBackgroundScaleType = panelBgScaleType,
                 panelBorderColor = panelBorderColor,
                 panelBorderAlpha = panelBorderAlpha,
-                uiCornerScale = stored?.uiCornerScale ?: AppConfig.uiCornerScale,
-                uiLayoutAlpha = stored?.uiLayoutAlpha ?: AppConfig.uiLayoutAlpha,
-                dialogAlpha = stored?.dialogAlpha ?: AppConfig.dialogAlpha,
-                uiCornerSearchFollow = stored?.uiCornerSearchFollow ?: AppConfig.uiCornerSearchFollow,
-                uiCornerReplyFollow = stored?.uiCornerReplyFollow ?: AppConfig.uiCornerReplyFollow,
-                fontScale = stored?.fontScale ?: appCtx.getPrefInt(PreferKey.fontScale, 0),
-                uiFontPath = stored?.uiFontPath ?: AppConfig.uiFontPath,
-                titleFontPath = stored?.titleFontPath ?: AppConfig.titleFontPath,
-                uiFontColor = stored?.uiFontColor ?: AppConfig.uiFontColor
+                uiCornerScale = stored?.uiCornerScale ?: context.themeUiCornerScale(false),
+                uiLayoutAlpha = stored?.uiLayoutAlpha ?: context.themeUiLayoutAlpha(false),
+                dialogAlpha = stored?.dialogAlpha ?: context.themeDialogAlpha(false),
+                uiCornerSearchFollow = stored?.uiCornerSearchFollow ?: context.themeUiCornerSearchFollow(false),
+                uiCornerReplyFollow = stored?.uiCornerReplyFollow ?: context.themeUiCornerReplyFollow(false),
+                fontScale = stored?.fontScale ?: context.getPrefInt(ThemeRuntimeKeys.fontScale(false), 0),
+                uiFontPath = stored?.uiFontPath ?: context.getPrefString(ThemeRuntimeKeys.uiFontPath(false)).orEmpty(),
+                titleFontPath = stored?.titleFontPath ?: context.getPrefString(ThemeRuntimeKeys.titleFontPath(false)).orEmpty(),
+                uiFontColor = stored?.uiFontColor ?: context.getPrefString(ThemeRuntimeKeys.uiFontColor(false)).orEmpty()
                     .takeIf { it.isNotBlank() } ?: defaultThemeTextColorHex(false),
-                titleFontColor = stored?.titleFontColor ?: AppConfig.titleFontColor
+                titleFontColor = stored?.titleFontColor ?: context.getPrefString(ThemeRuntimeKeys.titleFontColor(false)).orEmpty()
                     .takeIf { it.isNotBlank() } ?: defaultThemeTextColorHex(false)
             )
         )
@@ -581,17 +608,17 @@ object ThemeConfig {
                 panelBackgroundScaleType = panelBgScaleType,
                 panelBorderColor = panelBorderColor,
                 panelBorderAlpha = panelBorderAlpha,
-                uiCornerScale = stored?.uiCornerScale ?: AppConfig.uiCornerScale,
-                uiLayoutAlpha = stored?.uiLayoutAlpha ?: AppConfig.uiLayoutAlpha,
-                dialogAlpha = stored?.dialogAlpha ?: AppConfig.dialogAlpha,
-                uiCornerSearchFollow = stored?.uiCornerSearchFollow ?: AppConfig.uiCornerSearchFollow,
-                uiCornerReplyFollow = stored?.uiCornerReplyFollow ?: AppConfig.uiCornerReplyFollow,
-                fontScale = stored?.fontScale ?: appCtx.getPrefInt(PreferKey.fontScale, 0),
-                uiFontPath = stored?.uiFontPath ?: AppConfig.uiFontPath,
-                titleFontPath = stored?.titleFontPath ?: AppConfig.titleFontPath,
-                uiFontColor = stored?.uiFontColor ?: AppConfig.uiFontColor
+                uiCornerScale = stored?.uiCornerScale ?: context.themeUiCornerScale(true),
+                uiLayoutAlpha = stored?.uiLayoutAlpha ?: context.themeUiLayoutAlpha(true),
+                dialogAlpha = stored?.dialogAlpha ?: context.themeDialogAlpha(true),
+                uiCornerSearchFollow = stored?.uiCornerSearchFollow ?: context.themeUiCornerSearchFollow(true),
+                uiCornerReplyFollow = stored?.uiCornerReplyFollow ?: context.themeUiCornerReplyFollow(true),
+                fontScale = stored?.fontScale ?: context.getPrefInt(ThemeRuntimeKeys.fontScale(true), 0),
+                uiFontPath = stored?.uiFontPath ?: context.getPrefString(ThemeRuntimeKeys.uiFontPath(true)).orEmpty(),
+                titleFontPath = stored?.titleFontPath ?: context.getPrefString(ThemeRuntimeKeys.titleFontPath(true)).orEmpty(),
+                uiFontColor = stored?.uiFontColor ?: context.getPrefString(ThemeRuntimeKeys.uiFontColor(true)).orEmpty()
                     .takeIf { it.isNotBlank() } ?: defaultThemeTextColorHex(true),
-                titleFontColor = stored?.titleFontColor ?: AppConfig.titleFontColor
+                titleFontColor = stored?.titleFontColor ?: context.getPrefString(ThemeRuntimeKeys.titleFontColor(true)).orEmpty()
                     .takeIf { it.isNotBlank() } ?: defaultThemeTextColorHex(true)
             )
         )
@@ -670,20 +697,21 @@ object ThemeConfig {
     }
 
     private fun applyExtendedInterfaceColors(context: Context, config: Config) {
-        context.putOrClearThemeColor(PreferKey.themeCardColor, config.cardColor)
-        context.putOrClearThemeColor(PreferKey.themeMutedColor, config.mutedColor)
+        val isNightTheme = config.isNightTheme
+        context.putOrClearThemeColor(ThemeRuntimeKeys.themeCardColor(isNightTheme), config.cardColor)
+        context.putOrClearThemeColor(ThemeRuntimeKeys.themeMutedColor(isNightTheme), config.mutedColor)
         context.putOrClearThemeColor(
-            PreferKey.themeSearchFieldBackgroundColor,
+            ThemeRuntimeKeys.themeSearchFieldBackgroundColor(isNightTheme),
             config.searchFieldBackgroundColor
         )
-        context.putOrClearThemeColor(PreferKey.themeTabBackgroundColor, config.tabBackgroundColor)
-        context.putOrClearThemeColor(PreferKey.themeShelfColor, config.shelfColor)
+        context.putOrClearThemeColor(ThemeRuntimeKeys.themeTabBackgroundColor(isNightTheme), config.tabBackgroundColor)
+        context.putOrClearThemeColor(ThemeRuntimeKeys.themeShelfColor(isNightTheme), config.shelfColor)
         config.cardShadow?.let {
-            context.putPrefInt(PreferKey.themeCardShadow, it.coerceIn(0, 24))
-        } ?: context.removePref(PreferKey.themeCardShadow)
+            context.putPrefInt(ThemeRuntimeKeys.themeCardShadow(isNightTheme), it.coerceIn(0, 24))
+        } ?: context.removePref(ThemeRuntimeKeys.themeCardShadow(isNightTheme))
         config.cardBackgroundBlur?.let {
-            context.putPrefInt(PreferKey.themeCardBackgroundBlur, (it * 10f).toInt().coerceIn(0, 250))
-        } ?: context.removePref(PreferKey.themeCardBackgroundBlur)
+            context.putPrefInt(ThemeRuntimeKeys.themeCardBackgroundBlur(isNightTheme), (it * 10f).toInt().coerceIn(0, 250))
+        } ?: context.removePref(ThemeRuntimeKeys.themeCardBackgroundBlur(isNightTheme))
     }
 
     private fun Context.putOrClearThemeColor(key: String, value: String?) {
@@ -732,8 +760,8 @@ object ThemeConfig {
         val defaultColor = defaultThemeTextColorHex(isNightTheme)
         val uiColor = normalizeThemeColor(uiFontColor) ?: defaultColor
         val titleColor = normalizeThemeColor(titleFontColor) ?: defaultColor
-        context.putPrefString(PreferKey.uiFontColor, uiColor)
-        context.putPrefString(PreferKey.titleFontColor, titleColor)
+        context.putPrefString(ThemeRuntimeKeys.uiFontColor(isNightTheme), uiColor)
+        context.putPrefString(ThemeRuntimeKeys.titleFontColor(isNightTheme), titleColor)
     }
 
     private fun normalizeThemeColor(value: String?): String? {
@@ -756,7 +784,7 @@ object ThemeConfig {
     }
 
     private fun ThemeStore.applyUiFontColor(context: Context): ThemeStore {
-        val color = normalizeThemeColor(context.getPrefString(PreferKey.uiFontColor))
+        val color = normalizeThemeColor(context.getPrefString(ThemeRuntimeKeys.uiFontColor()))
             ?.toColorInt()
             ?: defaultThemeTextColor(AppConfig.isNightTheme)
         textColorPrimary(color)

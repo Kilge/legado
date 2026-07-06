@@ -82,6 +82,7 @@ import io.legado.app.help.glide.ImageLoader
 import io.legado.app.lib.dialogs.AndroidAlertBuilder
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.dialogs.selector
+import io.legado.app.lib.theme.ThemeRuntimeKeys
 import io.legado.app.lib.theme.ThemeStore
 import io.legado.app.lib.cloud.CloudStorageType
 import io.legado.app.lib.theme.UiCorner
@@ -475,6 +476,7 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
         current: ThemeConfig.Config,
         entry: ThemePackageManager.Entry?
     ): DialogThemePackageEditBinding {
+        val configNight = current.isNightTheme
         pendingMainBackgroundPath = current.backgroundImgPath
         pendingMainBackgroundCrop = current.backgroundImgCrop
         pendingBookInfoBackgroundPath = current.bookInfoBackgroundImgPath
@@ -483,9 +485,9 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
         pendingPanelBorderColor = normalizeOptionalColor(current.panelBorderColor)
         pendingPanelBorderAlpha = current.panelBorderAlpha ?: 100
         pendingBlur = current.backgroundImgBlur
-        pendingUiCornerScale = current.uiCornerScale ?: AppConfig.uiCornerScale
-        pendingUiLayoutAlpha = current.uiLayoutAlpha ?: AppConfig.uiLayoutAlpha
-        pendingDialogAlpha = current.dialogAlpha ?: AppConfig.dialogAlpha
+        pendingUiCornerScale = current.uiCornerScale ?: themeUiCornerScale(configNight)
+        pendingUiLayoutAlpha = current.uiLayoutAlpha ?: themeUiLayoutAlpha(configNight)
+        pendingDialogAlpha = current.dialogAlpha ?: themeDialogAlpha(configNight)
         pendingCardColor = normalizeOptionalColor(current.cardColor)
         pendingMutedColor = normalizeOptionalColor(current.mutedColor)
         pendingSearchFieldBackgroundColor = normalizeOptionalColor(current.searchFieldBackgroundColor)
@@ -493,19 +495,21 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
         pendingShelfColor = normalizeOptionalColor(current.shelfColor)
         pendingCardShadow = current.cardShadow
         pendingCardBackgroundBlur = current.cardBackgroundBlur
-        pendingFontScale = current.fontScale ?: getPrefInt(PreferKey.fontScale, 0)
-        pendingUiFontPath = current.uiFontPath ?: AppConfig.uiFontPath
-        pendingTitleFontPath = current.titleFontPath ?: AppConfig.titleFontPath
+        pendingFontScale = current.fontScale ?: getPrefInt(ThemeRuntimeKeys.fontScale(configNight), 0)
+        pendingUiFontPath = current.uiFontPath ?: getPrefString(ThemeRuntimeKeys.uiFontPath(configNight)).orEmpty()
+        pendingTitleFontPath = current.titleFontPath ?: getPrefString(ThemeRuntimeKeys.titleFontPath(configNight)).orEmpty()
         pendingUiFontColor = normalizeOptionalColor(
-            current.uiFontColor ?: AppConfig.uiFontColor.takeIf { it.isNotBlank() }
-            ?: defaultThemeTextColorHex(isNightTheme)
+            current.uiFontColor ?: getPrefString(ThemeRuntimeKeys.uiFontColor(configNight)).orEmpty()
+                .takeIf { it.isNotBlank() }
+            ?: defaultThemeTextColorHex(configNight)
         )
         pendingTitleFontColor = normalizeOptionalColor(
-            current.titleFontColor ?: AppConfig.titleFontColor.takeIf { it.isNotBlank() }
-            ?: defaultThemeTextColorHex(isNightTheme)
+            current.titleFontColor ?: getPrefString(ThemeRuntimeKeys.titleFontColor(configNight)).orEmpty()
+                .takeIf { it.isNotBlank() }
+            ?: defaultThemeTextColorHex(configNight)
         )
-        pendingUiCornerSearchFollow = current.uiCornerSearchFollow ?: AppConfig.uiCornerSearchFollow
-        pendingUiCornerReplyFollow = current.uiCornerReplyFollow ?: AppConfig.uiCornerReplyFollow
+        pendingUiCornerSearchFollow = current.uiCornerSearchFollow ?: themeUiCornerSearchFollow(configNight)
+        pendingUiCornerReplyFollow = current.uiCornerReplyFollow ?: themeUiCornerReplyFollow(configNight)
         return DialogThemePackageEditBinding.inflate(layoutInflater).apply {
             etName.setText(current.themeName)
             setupColorRow(
@@ -1395,28 +1399,58 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
                 ?: ThemeConfig.PANEL_BG_CROP,
             panelBorderColor = getPrefString(if (isNightTheme) PreferKey.panelBorderColorN else PreferKey.panelBorderColor),
             panelBorderAlpha = getPrefInt(if (isNightTheme) PreferKey.panelBorderAlphaN else PreferKey.panelBorderAlpha, 100),
-            uiCornerScale = AppConfig.uiCornerScale,
-            uiLayoutAlpha = AppConfig.uiLayoutAlpha,
-            dialogAlpha = AppConfig.dialogAlpha,
-            cardColor = getPrefString(PreferKey.themeCardColor),
-            mutedColor = getPrefString(PreferKey.themeMutedColor),
-            searchFieldBackgroundColor = getPrefString(PreferKey.themeSearchFieldBackgroundColor),
-            tabBackgroundColor = getPrefString(PreferKey.themeTabBackgroundColor),
-            shelfColor = getPrefString(PreferKey.themeShelfColor),
-            cardShadow = getPrefInt(PreferKey.themeCardShadow, -1).takeIf { it >= 0 },
-            cardBackgroundBlur = getPrefInt(PreferKey.themeCardBackgroundBlur, -1)
+            uiCornerScale = themeUiCornerScale(isNightTheme),
+            uiLayoutAlpha = themeUiLayoutAlpha(isNightTheme),
+            dialogAlpha = themeDialogAlpha(isNightTheme),
+            cardColor = getPrefString(ThemeRuntimeKeys.themeCardColor(isNightTheme)),
+            mutedColor = getPrefString(ThemeRuntimeKeys.themeMutedColor(isNightTheme)),
+            searchFieldBackgroundColor = getPrefString(
+                ThemeRuntimeKeys.themeSearchFieldBackgroundColor(isNightTheme)
+            ),
+            tabBackgroundColor = getPrefString(ThemeRuntimeKeys.themeTabBackgroundColor(isNightTheme)),
+            shelfColor = getPrefString(ThemeRuntimeKeys.themeShelfColor(isNightTheme)),
+            cardShadow = getPrefInt(ThemeRuntimeKeys.themeCardShadow(isNightTheme), -1).takeIf { it >= 0 },
+            cardBackgroundBlur = getPrefInt(ThemeRuntimeKeys.themeCardBackgroundBlur(isNightTheme), -1)
                 .takeIf { it >= 0 }
                 ?.let { it / 10f },
-            uiCornerSearchFollow = AppConfig.uiCornerSearchFollow,
-            uiCornerReplyFollow = AppConfig.uiCornerReplyFollow,
-            fontScale = getPrefInt(PreferKey.fontScale, 0),
-            uiFontPath = AppConfig.uiFontPath,
-            titleFontPath = AppConfig.titleFontPath,
-            uiFontColor = AppConfig.uiFontColor.takeIf { it.isNotBlank() }
+            uiCornerSearchFollow = themeUiCornerSearchFollow(isNightTheme),
+            uiCornerReplyFollow = themeUiCornerReplyFollow(isNightTheme),
+            fontScale = getPrefInt(ThemeRuntimeKeys.fontScale(isNightTheme), 0),
+            uiFontPath = getPrefString(ThemeRuntimeKeys.uiFontPath(isNightTheme)).orEmpty(),
+            titleFontPath = getPrefString(ThemeRuntimeKeys.titleFontPath(isNightTheme)).orEmpty(),
+            uiFontColor = getPrefString(ThemeRuntimeKeys.uiFontColor(isNightTheme)).orEmpty()
+                .takeIf { it.isNotBlank() }
                 ?: defaultThemeTextColorHex(isNightTheme),
-            titleFontColor = AppConfig.titleFontColor.takeIf { it.isNotBlank() }
+            titleFontColor = getPrefString(ThemeRuntimeKeys.titleFontColor(isNightTheme)).orEmpty()
+                .takeIf { it.isNotBlank() }
                 ?: defaultThemeTextColorHex(isNightTheme)
         )
+    }
+
+    private fun themeUiCornerScale(isNight: Boolean): Float {
+        return getPrefString(ThemeRuntimeKeys.uiCornerScale(isNight), "1")
+            ?.toFloatOrNull()
+            ?.coerceIn(0f, 3f)
+            ?: 1f
+    }
+
+    private fun themeUiLayoutAlpha(isNight: Boolean): Int {
+        return getPrefInt(
+            ThemeRuntimeKeys.uiLayoutAlpha(isNight),
+            if (isNight) 100 else getPrefInt(PreferKey.uiCornerEffectLevel, 100)
+        ).coerceIn(0, 100)
+    }
+
+    private fun themeDialogAlpha(isNight: Boolean): Int {
+        return getPrefInt(ThemeRuntimeKeys.dialogAlpha(isNight), 100).coerceIn(0, 100)
+    }
+
+    private fun themeUiCornerSearchFollow(isNight: Boolean): Boolean {
+        return getPrefBoolean(ThemeRuntimeKeys.uiCornerSearchFollow(isNight), false)
+    }
+
+    private fun themeUiCornerReplyFollow(isNight: Boolean): Boolean {
+        return getPrefBoolean(ThemeRuntimeKeys.uiCornerReplyFollow(isNight), false)
     }
 
     override val curFontPath: String

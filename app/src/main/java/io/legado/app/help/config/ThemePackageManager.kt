@@ -103,7 +103,7 @@ object ThemePackageManager {
     suspend fun addFromCurrent(context: Context, name: String, isNightTheme: Boolean): Entry =
         withContext(IO) {
             val normalizedName = name.trim().ifBlank { builtinName(isNightTheme) }
-            val config = ThemeConfig.getDurConfig(context).copy(
+            val config = ThemeConfig.getThemeConfig(context, isNightTheme).copy(
                 themeName = normalizedName,
                 isNightTheme = isNightTheme
             )

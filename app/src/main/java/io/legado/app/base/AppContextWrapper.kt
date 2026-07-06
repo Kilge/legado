@@ -7,6 +7,7 @@ import android.content.res.Resources
 import android.os.Build
 import android.os.LocaleList
 import io.legado.app.constant.PreferKey
+import io.legado.app.lib.theme.ThemeRuntimeKeys
 import io.legado.app.utils.getPrefInt
 import io.legado.app.utils.getPrefString
 import io.legado.app.utils.sysConfiguration
@@ -33,7 +34,13 @@ object AppContextWrapper {
     }
 
     fun getFontScale(context: Context): Float {
-        var fontScale = context.getPrefInt(PreferKey.fontScale) / 10f
+        val isNightTheme = when (context.getPrefString(PreferKey.themeMode, "0")) {
+            "1", "3" -> false
+            "2" -> true
+            else -> (context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
+                Configuration.UI_MODE_NIGHT_YES
+        }
+        var fontScale = context.getPrefInt(ThemeRuntimeKeys.fontScale(isNightTheme)) / 10f
         if (fontScale !in 0.8f..1.6f) {
             fontScale = sysConfiguration.fontScale
         }

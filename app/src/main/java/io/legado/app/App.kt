@@ -40,6 +40,7 @@ import io.legado.app.help.LifecycleHelp
 import io.legado.app.help.RuleBigDataHelp
 import io.legado.app.help.book.BookHelp
 import io.legado.app.help.config.AppConfig
+import io.legado.app.help.config.AppearanceKitManager
 import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.help.config.ThemeConfig.applyDayNight
 import io.legado.app.help.config.ThemeConfig.applyDayNightInit
@@ -138,7 +139,13 @@ class App : Application() {
         super.onConfigurationChanged(newConfig)
         val diff = newConfig.diff(oldConfig)
         if ((diff and ActivityInfo.CONFIG_UI_MODE) != 0) {
-            applyDayNight(this)
+            Coroutine.async {
+                runCatching {
+                    AppearanceKitManager.applyCurrentModeTheme(this@App)
+                }
+            }.onFinally {
+                applyDayNight(this@App)
+            }
         }
         oldConfig = Configuration(newConfig)
     }
