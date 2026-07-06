@@ -360,6 +360,8 @@ object PreferKey {
 
     const val dThemeName = "durThemeName"
     const val dNThemeName = "durThemeNameNight"
+    const val dThemeDirName = "durThemeDirName"
+    const val dNThemeDirName = "durThemeDirNameNight"
 
     const val cPrimary = "colorPrimary"
     const val cAccent = "colorAccent"

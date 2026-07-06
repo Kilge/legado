@@ -20,6 +20,7 @@ import io.legado.app.utils.getFile
 import io.legado.app.utils.getPrefString
 import io.legado.app.utils.isSameOrSubFileOf
 import io.legado.app.utils.normalizeFileName
+import io.legado.app.utils.putPrefString
 import io.legado.app.utils.readBytesLimited
 import io.legado.app.help.http.newCallResponse
 import io.legado.app.help.http.okHttpClient
@@ -240,6 +241,14 @@ object ThemePackageManager {
             validatedConfig(entry)
         }
         ThemeConfig.applyConfig(context, config, switchNightMode, notify)
+        recordAppliedThemeRef(context, entry)
+    }
+
+    private fun recordAppliedThemeRef(context: Context, entry: Entry) {
+        context.putPrefString(
+            if (entry.packageInfo.isNightTheme) PreferKey.dNThemeDirName else PreferKey.dThemeDirName,
+            entry.dirName
+        )
     }
 
     fun builtinEntryForKit(isNightTheme: Boolean): Entry {
@@ -300,12 +309,19 @@ object ThemePackageManager {
             ThemeConfig.applyConfig(context, config, switchNightMode = false, notify = false)
             return
         }
-        val normalizedDirName = themeName.normalizeFileName()
+        val storedDirName = context.getPrefString(
+            if (isNightTheme) PreferKey.dNThemeDirName else PreferKey.dThemeDirName
+        )?.trim().orEmpty()
+        val normalizedDirName = storedDirName.ifBlank { themeName.normalizeFileName() }
         val directDir = localDir(isNightTheme, normalizedDirName)
         val entry = readPackage(directDir)?.let { pkg ->
             Entry(pkg, Source.LOCAL, localDir = directDir)
         } ?: loadLocal(isNightTheme).firstOrNull {
-            it.dirName == normalizedDirName || it.packageInfo.name == themeName
+            if (storedDirName.isNotBlank()) {
+                it.dirName == storedDirName
+            } else {
+                it.dirName == normalizedDirName || it.packageInfo.name == themeName
+            }
         } ?: return
         val config = validatedConfig(entry)
         ThemeConfig.applyConfig(context, config, switchNightMode = false, notify = false)
@@ -321,9 +337,16 @@ object ThemePackageManager {
             ThemeConfig.applyConfig(context, config, switchNightMode = false, notify = false)
             return
         }
-        val normalizedDirName = themeName.normalizeFileName()
+        val storedDirName = context.getPrefString(
+            if (isNightTheme) PreferKey.dNThemeDirName else PreferKey.dThemeDirName
+        )?.trim().orEmpty()
+        val normalizedDirName = storedDirName.ifBlank { themeName.normalizeFileName() }
         val localEntry = loadLocal(isNightTheme).firstOrNull {
-            it.dirName == normalizedDirName || it.packageInfo.name == themeName
+            if (storedDirName.isNotBlank()) {
+                it.dirName == storedDirName
+            } else {
+                it.dirName == normalizedDirName || it.packageInfo.name == themeName
+            }
         }
         val localConfig = localEntry?.let { entry ->
             runCatching { validatedConfig(entry) }.getOrElse {
@@ -336,7 +359,11 @@ object ThemePackageManager {
             return
         }
         val remoteEntry = loadRemoteOrCache(isNightTheme).firstOrNull {
-            it.dirName == normalizedDirName || it.packageInfo.name == themeName
+            if (storedDirName.isNotBlank()) {
+                it.dirName == storedDirName
+            } else {
+                it.dirName == normalizedDirName || it.packageInfo.name == themeName
+            }
         } ?: run {
             AppLog.put("restore theme package not found: $themeName")
             applyBuiltinTheme(context, isNightTheme)

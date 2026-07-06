@@ -1284,9 +1284,9 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
                     ThemePackageManager.apply(this@ThemeManageActivity, entry, switchNightMode = false)
                     AppearanceKitManager.syncCurrentThemeRef(entry.packageInfo.isNightTheme, entry)
                     if (entry.packageInfo.isNightTheme) {
-                        appliedNightThemeOverride = entry.packageInfo.name
+                        appliedNightThemeOverride = entry.dirName
                     } else {
-                        appliedDayThemeOverride = entry.packageInfo.name
+                        appliedDayThemeOverride = entry.dirName
                     }
                 }
                 entry to wasApplied
@@ -1744,9 +1744,9 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
                 toastOnUi(getString(R.string.theme_apply_failed, it.localizedMessage))
             }.onSuccess {
                 if (it.packageInfo.isNightTheme) {
-                    appliedNightThemeOverride = it.packageInfo.name
+                    appliedNightThemeOverride = it.dirName
                 } else {
-                    appliedDayThemeOverride = it.packageInfo.name
+                    appliedDayThemeOverride = it.dirName
                 }
                 toastOnUi(getString(R.string.theme_applied))
                 loadThemes()
@@ -1761,10 +1761,15 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
             appliedDayThemeOverride
         }
         if (overrideName != null) {
-            return overrideName == entry.packageInfo.name
+            return overrideName == entry.dirName || overrideName == entry.packageInfo.name
         }
-        val key = if (entry.packageInfo.isNightTheme) PreferKey.dNThemeName else PreferKey.dThemeName
-        return getPrefString(key) == entry.packageInfo.name
+        val dirKey = if (entry.packageInfo.isNightTheme) PreferKey.dNThemeDirName else PreferKey.dThemeDirName
+        val storedDirName = getPrefString(dirKey).orEmpty()
+        if (storedDirName.isNotBlank()) {
+            return storedDirName == entry.dirName
+        }
+        val nameKey = if (entry.packageInfo.isNightTheme) PreferKey.dNThemeName else PreferKey.dThemeName
+        return getPrefString(nameKey) == entry.packageInfo.name
     }
 
     private fun entryInfo(entry: ThemePackageManager.Entry): String {

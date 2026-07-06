@@ -133,6 +133,13 @@ object AppearanceKitManager {
         postEvent(EventBus.RECREATE, "")
     }
 
+    suspend fun applyCurrentModeTheme(context: Context) {
+        val binding = loadIndex().firstOrNull { it.id == currentKitId() }?.binding ?: return
+        applyCurrentThemeRef(context, binding, AppConfig.isNightTheme)
+        ThemeConfig.applyTheme(context)
+        BookCover.upDefaultCover()
+    }
+
     suspend fun deleteImportedTheme(context: Context, kit: AppearanceKit): Boolean = withContext(IO) {
         if (kit.type != AppearanceKitType.IMPORTED_THEME) return@withContext false
         if (appCtx.getPrefString(PreferKey.currentAppearanceKitId, "") == kit.id) {
@@ -437,16 +444,9 @@ object AppearanceKitManager {
         val currentNight = AppConfig.isNightTheme
         val resolvedPreset = binding.preset?.takeIf { it.isNotBlank() } ?: MainLayoutPresetConfig.PRESET_REGULAR
         MainLayoutPresetConfig.apply(context, resolvedPreset, notify = false)
-        // uiLayoutAlpha/dialogAlpha/uiCornerScale/字体等是全局(不分日夜)偏好，写在 applyConfig 内。
-        // 必须让“当前模式”的主题最后应用，否则另一模式的值会覆盖全局偏好，
-        // 表现为应用主题后界面不透明度不随当前模式变化(需进编辑弹窗才生效)。
-        if (currentNight) {
-            applyThemeRef(context, false, binding.dayTheme)
-            applyThemeRef(context, true, binding.nightTheme)
-        } else {
-            applyThemeRef(context, true, binding.nightTheme)
-            applyThemeRef(context, false, binding.dayTheme)
-        }
+        // Apply only the active mode. The other mode remains an independent
+        // theme reference and is projected when day/night mode switches.
+        applyCurrentThemeRef(context, binding, currentNight)
         applyTopBarRef(false, binding.dayTopBar)
         applyTopBarRef(true, binding.nightTopBar)
         applyNavigationRef(false, binding.dayNavigationBar)
@@ -466,6 +466,10 @@ object AppearanceKitManager {
     private suspend fun applyThemeRef(context: Context, isNight: Boolean, ref: ComponentRef?) {
         val entry = ref?.let { findThemeEntry(isNight, it) } ?: ThemePackageManager.builtinEntryForKit(isNight)
         ThemePackageManager.apply(context, entry, switchNightMode = false, notify = false)
+    }
+
+    private suspend fun applyCurrentThemeRef(context: Context, binding: KitBinding, isNight: Boolean) {
+        applyThemeRef(context, isNight, if (isNight) binding.nightTheme else binding.dayTheme)
     }
 
     private suspend fun applyTopBarRef(isNight: Boolean, ref: ComponentRef?) {
@@ -489,7 +493,11 @@ object AppearanceKitManager {
 
     private suspend fun findThemeEntry(isNight: Boolean, ref: ComponentRef): ThemePackageManager.Entry? {
         return ThemePackageManager.loadLocalOnly(isNight).firstOrNull {
-            it.dirName == ref.dirName || it.packageInfo.name == ref.name
+            if (ref.dirName.isNotBlank()) {
+                it.dirName == ref.dirName
+            } else {
+                it.packageInfo.name == ref.name
+            }
         }
     }
 
@@ -603,7 +611,10 @@ object AppearanceKitManager {
     private fun currentThemeRef(context: Context, isNight: Boolean): ComponentRef? {
         val name = context.getPrefString(if (isNight) PreferKey.dNThemeName else PreferKey.dThemeName).orEmpty()
         if (name.isBlank() || ThemePackageManager.isBuiltinThemeForKit(isNight, name)) return null
-        return ComponentRef(name.normalizeFileName(), name)
+        val dirName = context.getPrefString(
+            if (isNight) PreferKey.dNThemeDirName else PreferKey.dThemeDirName
+        ).orEmpty().ifBlank { name.normalizeFileName() }
+        return ComponentRef(dirName, name)
     }
 
     private fun currentTopBarRef(context: Context, isNight: Boolean): ComponentRef? {

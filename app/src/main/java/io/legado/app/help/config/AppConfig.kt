@@ -7,6 +7,7 @@ import io.legado.app.constant.AppConst
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
+import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.utils.GSON
 import io.legado.app.utils.canvasrecorder.CanvasRecorderFactory
 import io.legado.app.utils.fromJsonArray
@@ -104,6 +105,13 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
             PreferKey.themeMode -> {
                 themeMode = appCtx.getPrefString(PreferKey.themeMode, "0")
                 isEInkMode = themeMode == "3"
+                Coroutine.async {
+                    runCatching {
+                        AppearanceKitManager.applyCurrentModeTheme(appCtx)
+                    }.onFailure {
+                        AppLog.put("apply current appearance kit theme failed\n${it.localizedMessage}", it)
+                    }
+                }
             }
 
             PreferKey.clickActionTL -> clickActionTL =
