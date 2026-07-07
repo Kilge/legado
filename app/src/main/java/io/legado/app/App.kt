@@ -44,6 +44,7 @@ import io.legado.app.help.config.AppearanceKitManager
 import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.help.config.ThemeConfig.applyDayNight
 import io.legado.app.help.config.ThemeConfig.applyDayNightInit
+import io.legado.app.lib.theme.ThemeRuntimeKeys
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.http.Cronet
 import io.legado.app.help.http.ObsoleteUrlFactory
@@ -132,6 +133,9 @@ class App : Application() {
     }
 
     override fun attachBaseContext(base: Context) {
+        runCatching {
+            ThemeRuntimeKeys.migrateLegacyNightValues(base)
+        }
         super.attachBaseContext(AppContextWrapper.wrap(base))
     }
 

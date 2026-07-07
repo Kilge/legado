@@ -5,6 +5,7 @@ import android.os.Build
 import io.legado.app.BuildConfig
 import io.legado.app.constant.AppConst
 import io.legado.app.constant.AppLog
+import io.legado.app.constant.EventBus
 import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
 import io.legado.app.help.coroutine.Coroutine
@@ -20,6 +21,7 @@ import io.legado.app.utils.getPrefString
 import io.legado.app.utils.getPrefStringSet
 import io.legado.app.utils.isNightMode
 import io.legado.app.utils.parseIpsFromString
+import io.legado.app.utils.postEvent
 import io.legado.app.utils.putPrefBoolean
 import io.legado.app.utils.putPrefInt
 import io.legado.app.utils.putPrefLong
@@ -108,7 +110,12 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
                 isEInkMode = themeMode == "3"
                 Coroutine.async {
                     runCatching {
-                        AppearanceKitManager.applyCurrentModeTheme(appCtx)
+                        // 调用方在写入 themeMode 后会立刻同步 applyDayNight 重建界面，
+                        // 套件投影异步完成时界面可能已用旧偏好重建，需补发刷新事件。
+                        if (AppearanceKitManager.applyCurrentModeTheme(appCtx)) {
+                            postEvent(EventBus.MAIN_THEME_BACKGROUND_CHANGED, isNightTheme)
+                            postEvent(EventBus.RECREATE, "")
+                        }
                     }.onFailure {
                         AppLog.put("apply current appearance kit theme failed\n${it.localizedMessage}", it)
                     }
@@ -2154,7 +2161,7 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
     var uiLayoutAlpha: Int
         get() = appCtx.getPrefInt(
             ThemeRuntimeKeys.uiLayoutAlpha(isNightTheme),
-            if (isNightTheme) 100 else appCtx.getPrefInt(PreferKey.uiCornerEffectLevel, 100)
+            appCtx.getPrefInt(PreferKey.uiCornerEffectLevel, 100)
         ).coerceIn(0, 100)
         set(value) {
             appCtx.putPrefInt(ThemeRuntimeKeys.uiLayoutAlpha(isNightTheme), value.coerceIn(0, 100))

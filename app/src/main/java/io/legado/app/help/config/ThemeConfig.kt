@@ -7,6 +7,7 @@ import android.util.DisplayMetrics
 import androidx.annotation.Keep
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.graphics.toColorInt
+import androidx.core.graphics.ColorUtils as AndroidColorUtils
 import io.legado.app.R
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.EventBus
@@ -348,7 +349,7 @@ object ThemeConfig {
             }
             context.putPrefString(ThemeRuntimeKeys.uiFontPath(isNightTheme), config.uiFontPath.orEmpty())
             context.putPrefString(ThemeRuntimeKeys.titleFontPath(isNightTheme), config.titleFontPath.orEmpty())
-            applyFontColorPrefs(context, config.isNightTheme, config.uiFontColor, config.titleFontColor)
+            applyFontColorPrefs(context, config)
             if (backgroundPath != null && backgroundPath.startsWith("http")) {
                 val fileRoot = context.externalFiles
                 val preferenceKey = if (isNightTheme) {
@@ -474,7 +475,7 @@ object ThemeConfig {
     private fun Context.themeUiLayoutAlpha(isNightTheme: Boolean): Int {
         return getPrefInt(
             ThemeRuntimeKeys.uiLayoutAlpha(isNightTheme),
-            if (isNightTheme) 100 else getPrefInt(PreferKey.uiCornerEffectLevel, 100)
+            getPrefInt(PreferKey.uiCornerEffectLevel, 100)
         ).coerceIn(0, 100)
     }
 
@@ -751,17 +752,63 @@ object ThemeConfig {
         }
     }
 
-    private fun applyFontColorPrefs(
-        context: Context,
-        isNightTheme: Boolean,
-        uiFontColor: String?,
-        titleFontColor: String?
-    ) {
+    private fun applyFontColorPrefs(context: Context, config: Config) {
+        val isNightTheme = config.isNightTheme
+        // 文字主要落在主背景、卡片、底部背景上，字体色与这些表面撞色时文字会不可读；
+        // 设置了背景图时主背景色被图片遮盖，不参与判断以免误杀
+        val surfaces = listOfNotNull(
+            config.backgroundColor.toSurfaceColorOrNull()
+                .takeIf { config.backgroundImgPath.isNullOrBlank() },
+            config.cardColor?.toSurfaceColorOrNull(),
+            config.bottomBackground.toSurfaceColorOrNull()
+        )
         val defaultColor = defaultThemeTextColorHex(isNightTheme)
-        val uiColor = normalizeThemeColor(uiFontColor) ?: defaultColor
-        val titleColor = normalizeThemeColor(titleFontColor) ?: defaultColor
+        val uiColor = sanitizeFontColorAgainstSurfaces(
+            normalizeThemeColor(config.uiFontColor) ?: defaultColor, isNightTheme, surfaces
+        )
+        val titleColor = sanitizeFontColorAgainstSurfaces(
+            normalizeThemeColor(config.titleFontColor) ?: defaultColor, isNightTheme, surfaces
+        )
         context.putPrefString(ThemeRuntimeKeys.uiFontColor(isNightTheme), uiColor)
         context.putPrefString(ThemeRuntimeKeys.titleFontColor(isNightTheme), titleColor)
+    }
+
+    private const val MIN_FONT_SURFACE_CONTRAST = 1.3
+
+    private fun String.toSurfaceColorOrNull(): Int? {
+        val normalized = normalizeThemeColor(this) ?: return null
+        return runCatching { normalized.toColorInt() }.getOrNull()
+    }
+
+    private fun sanitizeFontColorAgainstSurfaces(
+        colorHex: String,
+        isNightTheme: Boolean,
+        surfaces: List<Int>
+    ): String {
+        if (surfaces.isEmpty()) return colorHex
+        val color = runCatching { colorHex.toColorInt() }.getOrNull() ?: return colorHex
+        if (surfaces.none { fontSurfaceContrast(color, it) < MIN_FONT_SURFACE_CONTRAST }) {
+            return colorHex
+        }
+        // 撞色：在日夜两个默认文字色里选与所有表面最小对比度更高的那个
+        val fallbacks = listOf(
+            defaultThemeTextColorHex(isNightTheme),
+            defaultThemeTextColorHex(!isNightTheme)
+        )
+        return fallbacks.maxByOrNull { hex ->
+            val c = hex.toColorInt()
+            surfaces.minOf { fontSurfaceContrast(c, it) }
+        } ?: defaultThemeTextColorHex(isNightTheme)
+    }
+
+    private fun fontSurfaceContrast(foreground: Int, surface: Int): Double {
+        val opaqueSurface = AndroidColorUtils.setAlphaComponent(surface, 255)
+        val opaqueForeground = if (Color.alpha(foreground) == 255) {
+            foreground
+        } else {
+            AndroidColorUtils.compositeColors(foreground, opaqueSurface)
+        }
+        return AndroidColorUtils.calculateContrast(opaqueForeground, opaqueSurface)
     }
 
     private fun normalizeThemeColor(value: String?): String? {

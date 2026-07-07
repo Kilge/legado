@@ -1,9 +1,55 @@
 package io.legado.app.lib.theme
 
+import android.content.Context
 import io.legado.app.constant.PreferKey
 import io.legado.app.help.config.AppConfig
+import io.legado.app.utils.defaultSharedPreferences
 
 object ThemeRuntimeKeys {
+
+    private const val legacyNightMigratedKey = "themeNightExtMigrated"
+
+    // 日夜键拆分前，这些字段日夜共用旧键。首次升级时把旧值复制到夜间键，
+    // 否则夜间模式的字号/字体/颜色/透明度等会全部回落默认值。
+    private val legacyNightPairs = listOf(
+        PreferKey.fontScale to PreferKey.fontScaleN,
+        PreferKey.uiFontPath to PreferKey.uiFontPathN,
+        PreferKey.titleFontPath to PreferKey.titleFontPathN,
+        PreferKey.uiFontColor to PreferKey.uiFontColorN,
+        PreferKey.titleFontColor to PreferKey.titleFontColorN,
+        PreferKey.uiCornerScale to PreferKey.uiCornerScaleN,
+        PreferKey.uiLayoutAlpha to PreferKey.uiLayoutAlphaN,
+        PreferKey.dialogAlpha to PreferKey.dialogAlphaN,
+        PreferKey.uiCornerSearchFollow to PreferKey.uiCornerSearchFollowN,
+        PreferKey.uiCornerReplyFollow to PreferKey.uiCornerReplyFollowN,
+        PreferKey.themeCardColor to PreferKey.themeCardColorN,
+        PreferKey.themeMutedColor to PreferKey.themeMutedColorN,
+        PreferKey.themeSearchFieldBackgroundColor to PreferKey.themeSearchFieldBackgroundColorN,
+        PreferKey.themeTabBackgroundColor to PreferKey.themeTabBackgroundColorN,
+        PreferKey.themeShelfColor to PreferKey.themeShelfColorN,
+        PreferKey.themeCardShadow to PreferKey.themeCardShadowN,
+        PreferKey.themeCardBackgroundBlur to PreferKey.themeCardBackgroundBlurN
+    )
+
+    fun migrateLegacyNightValues(context: Context) {
+        val prefs = context.defaultSharedPreferences
+        if (prefs.getBoolean(legacyNightMigratedKey, false)) return
+        val all = prefs.all
+        val editor = prefs.edit()
+        legacyNightPairs.forEach { (dayKey, nightKey) ->
+            if (!all.containsKey(nightKey)) {
+                when (val value = all[dayKey]) {
+                    is Int -> editor.putInt(nightKey, value)
+                    is Boolean -> editor.putBoolean(nightKey, value)
+                    is String -> editor.putString(nightKey, value)
+                    is Float -> editor.putFloat(nightKey, value)
+                    is Long -> editor.putLong(nightKey, value)
+                }
+            }
+        }
+        editor.putBoolean(legacyNightMigratedKey, true)
+        editor.commit()
+    }
 
     fun fontScale(isNight: Boolean = AppConfig.isNightTheme): String =
         if (isNight) PreferKey.fontScaleN else PreferKey.fontScale

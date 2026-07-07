@@ -299,6 +299,18 @@ object ThemePackageManager {
             saveConfig(config.copy(isNightTheme = isNightTheme))
         }
 
+    // dirName 精确匹配优先（同名日夜主题消歧）；跨设备目录名可能不同，失配时回退按名称匹配
+    private fun List<Entry>.matchStoredEntry(
+        storedDirName: String,
+        normalizedDirName: String,
+        themeName: String
+    ): Entry? {
+        if (storedDirName.isNotBlank()) {
+            firstOrNull { it.dirName == storedDirName }?.let { return it }
+        }
+        return firstOrNull { it.dirName == normalizedDirName || it.packageInfo.name == themeName }
+    }
+
     private suspend fun reapplyRestoredAppliedTheme(context: Context, isNightTheme: Boolean) {
         val themeName = context.getPrefString(
             if (isNightTheme) PreferKey.dNThemeName else PreferKey.dThemeName
@@ -316,13 +328,8 @@ object ThemePackageManager {
         val directDir = localDir(isNightTheme, normalizedDirName)
         val entry = readPackage(directDir)?.let { pkg ->
             Entry(pkg, Source.LOCAL, localDir = directDir)
-        } ?: loadLocal(isNightTheme).firstOrNull {
-            if (storedDirName.isNotBlank()) {
-                it.dirName == storedDirName
-            } else {
-                it.dirName == normalizedDirName || it.packageInfo.name == themeName
-            }
-        } ?: return
+        } ?: loadLocal(isNightTheme).matchStoredEntry(storedDirName, normalizedDirName, themeName)
+        ?: return
         val config = validatedConfig(entry)
         ThemeConfig.applyConfig(context, config, switchNightMode = false, notify = false)
     }
@@ -341,13 +348,8 @@ object ThemePackageManager {
             if (isNightTheme) PreferKey.dNThemeDirName else PreferKey.dThemeDirName
         )?.trim().orEmpty()
         val normalizedDirName = storedDirName.ifBlank { themeName.normalizeFileName() }
-        val localEntry = loadLocal(isNightTheme).firstOrNull {
-            if (storedDirName.isNotBlank()) {
-                it.dirName == storedDirName
-            } else {
-                it.dirName == normalizedDirName || it.packageInfo.name == themeName
-            }
-        }
+        val localEntry = loadLocal(isNightTheme)
+            .matchStoredEntry(storedDirName, normalizedDirName, themeName)
         val localConfig = localEntry?.let { entry ->
             runCatching { validatedConfig(entry) }.getOrElse {
                 AppLog.put("restore theme local package invalid: $themeName\n${it.localizedMessage}", it)
@@ -358,13 +360,9 @@ object ThemePackageManager {
             ThemeConfig.applyConfig(context, localConfig, switchNightMode = false, notify = false)
             return
         }
-        val remoteEntry = loadRemoteOrCache(isNightTheme).firstOrNull {
-            if (storedDirName.isNotBlank()) {
-                it.dirName == storedDirName
-            } else {
-                it.dirName == normalizedDirName || it.packageInfo.name == themeName
-            }
-        } ?: run {
+        val remoteEntry = loadRemoteOrCache(isNightTheme)
+            .matchStoredEntry(storedDirName, normalizedDirName, themeName)
+            ?: run {
             AppLog.put("restore theme package not found: $themeName")
             applyBuiltinTheme(context, isNightTheme)
             return

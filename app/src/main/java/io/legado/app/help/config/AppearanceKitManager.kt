@@ -133,11 +133,12 @@ object AppearanceKitManager {
         postEvent(EventBus.RECREATE, "")
     }
 
-    suspend fun applyCurrentModeTheme(context: Context) {
-        val binding = loadIndex().firstOrNull { it.id == currentKitId() }?.binding ?: return
+    suspend fun applyCurrentModeTheme(context: Context): Boolean {
+        val binding = loadIndex().firstOrNull { it.id == currentKitId() }?.binding ?: return false
         applyCurrentThemeRef(context, binding, AppConfig.isNightTheme)
         ThemeConfig.applyTheme(context)
         BookCover.upDefaultCover()
+        return true
     }
 
     suspend fun deleteImportedTheme(context: Context, kit: AppearanceKit): Boolean = withContext(IO) {
@@ -492,13 +493,11 @@ object AppearanceKitManager {
     }
 
     private suspend fun findThemeEntry(isNight: Boolean, ref: ComponentRef): ThemePackageManager.Entry? {
-        return ThemePackageManager.loadLocalOnly(isNight).firstOrNull {
-            if (ref.dirName.isNotBlank()) {
-                it.dirName == ref.dirName
-            } else {
-                it.packageInfo.name == ref.name
-            }
+        val entries = ThemePackageManager.loadLocalOnly(isNight)
+        if (ref.dirName.isNotBlank()) {
+            entries.firstOrNull { it.dirName == ref.dirName }?.let { return it }
         }
+        return entries.firstOrNull { it.packageInfo.name == ref.name }
     }
 
     private suspend fun findTopBarEntry(isNight: Boolean, ref: ComponentRef): TopBarConfig.Entry? {

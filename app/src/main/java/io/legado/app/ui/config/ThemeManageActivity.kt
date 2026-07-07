@@ -179,6 +179,7 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
     private var pendingUiCornerReplyFollow = false
     private var pendingUiFontPath: String? = null
     private var pendingTitleFontPath: String? = null
+    private var editingConfigNight: Boolean? = null
     private var pendingUiFontColor: String? = null
     private var pendingTitleFontColor: String? = null
     private var pendingFontTarget = FontTarget.UI
@@ -477,6 +478,7 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
         entry: ThemePackageManager.Entry?
     ): DialogThemePackageEditBinding {
         val configNight = current.isNightTheme
+        editingConfigNight = configNight
         pendingMainBackgroundPath = current.backgroundImgPath
         pendingMainBackgroundCrop = current.backgroundImgCrop
         pendingBookInfoBackgroundPath = current.bookInfoBackgroundImgPath
@@ -669,6 +671,10 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
     }
 
     private fun applyThemeEditFonts(binding: DialogThemePackageEditBinding) {
+        // 弹窗背景/卡片始终跟随当前界面模式；跨模式编辑（如白天编辑夜间主题）时
+        // 若再把文字染成另一模式的字体色，会出现"卡片不变、文字变夜间"的割裂，
+        // 甚至浅色文字叠浅色卡片不可读。模式不一致时文字保持当前主题色，颜色值看色板行。
+        val previewFontColors = editingConfigNight == AppConfig.isNightTheme
         val uiTf = loadUiTypeface(pendingUiFontPath.orEmpty()) ?: uiTypeface()
         binding.root.applyUiBodyTypefaceDeep(uiTf)
         val titleTf = loadUiTypeface(pendingTitleFontPath.orEmpty()) ?: titleTypeface()
@@ -709,17 +715,21 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
         ).forEach {
             it.applyUiTitleTypeface(this)
             it.typeface = titleTf
-            pendingTitleFontColor?.toColorInt()?.let { color ->
-                it.setTextColor(color)
+            if (previewFontColors) {
+                pendingTitleFontColor?.toColorInt()?.let { color ->
+                    it.setTextColor(color)
+                }
             }
         }
-        val uiFontDemoColor = pendingUiFontColor.toThemeManageColorOrNull() ?: defaultFontDemoColor()
-        val titleFontDemoColor = pendingTitleFontColor.toThemeManageColorOrNull() ?: defaultFontDemoColor()
-        listOf(binding.rowUiFont.tvValue, binding.rowUiFontColor.tvValue).forEach {
-            it.setTextColor(uiFontDemoColor)
-        }
-        listOf(binding.rowTitleFont.tvValue, binding.rowTitleFontColor.tvValue).forEach {
-            it.setTextColor(titleFontDemoColor)
+        if (previewFontColors) {
+            val uiFontDemoColor = pendingUiFontColor.toThemeManageColorOrNull() ?: defaultFontDemoColor()
+            val titleFontDemoColor = pendingTitleFontColor.toThemeManageColorOrNull() ?: defaultFontDemoColor()
+            listOf(binding.rowUiFont.tvValue, binding.rowUiFontColor.tvValue).forEach {
+                it.setTextColor(uiFontDemoColor)
+            }
+            listOf(binding.rowTitleFont.tvValue, binding.rowTitleFontColor.tvValue).forEach {
+                it.setTextColor(titleFontDemoColor)
+            }
         }
         val actionRadius = UiCorner.actionRadius(this)
         binding.btnCancel.background = UiCorner.actionSelector(
@@ -1437,7 +1447,7 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
     private fun themeUiLayoutAlpha(isNight: Boolean): Int {
         return getPrefInt(
             ThemeRuntimeKeys.uiLayoutAlpha(isNight),
-            if (isNight) 100 else getPrefInt(PreferKey.uiCornerEffectLevel, 100)
+            getPrefInt(PreferKey.uiCornerEffectLevel, 100)
         ).coerceIn(0, 100)
     }
 
