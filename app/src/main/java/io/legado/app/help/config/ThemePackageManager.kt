@@ -28,6 +28,8 @@ import io.legado.app.utils.compress.ZipUtils
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import splitties.init.appCtx
@@ -35,6 +37,7 @@ import java.io.ByteArrayInputStream
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
+import java.io.IOException
 import java.util.UUID
 import java.util.zip.GZIPInputStream
 import java.util.zip.ZipFile
@@ -53,6 +56,7 @@ object ThemePackageManager {
     private const val builtinNightDirName = "builtin_night"
     private const val builtinDayName = "\u5185\u7f6e\u65e5\u95f4\u4e3b\u9898"
     private const val builtinNightName = "\u5185\u7f6e\u591c\u95f4\u4e3b\u9898"
+    private val importMutex = Mutex()
     private val imageMagic = listOf(
         byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47) to ".png",
         byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte()) to ".jpg",
@@ -65,7 +69,9 @@ object ThemePackageManager {
         get() = appCtx.externalFiles.getFile("themePackages")
 
     suspend fun load(isNightTheme: Boolean, containerId: String? = null, scope: String? = null): List<Entry> = withContext(IO) {
-        val local = loadLocal(isNightTheme).filterNot(::isBuiltinDuplicate).associateBy { it.dirName }
+        val local = importMutex.withLock {
+            loadLocal(isNightTheme).filterNot(::isBuiltinDuplicate).associateBy { it.dirName }
+        }
         val remote = loadRemoteOrCache(isNightTheme, containerId, scope).associateBy { it.dirName }
         val keys = local.keys + remote.keys
         val mergedEntries = keys.mapNotNull { key ->
@@ -86,7 +92,9 @@ object ThemePackageManager {
     }
 
     suspend fun loadLocalOnly(isNightTheme: Boolean): List<Entry> = withContext(IO) {
-        sortEntries(listOf(builtinEntry(isNightTheme)) + loadLocal(isNightTheme).filterNot(::isBuiltinDuplicate))
+        importMutex.withLock {
+            sortEntries(listOf(builtinEntry(isNightTheme)) + loadLocal(isNightTheme).filterNot(::isBuiltinDuplicate))
+        }
     }
 
     suspend fun localThemeExists(
@@ -95,8 +103,10 @@ object ThemePackageManager {
         excludeDirName: String? = null
     ): Boolean = withContext(IO) {
         val normalizedName = themeName.trim()
-        loadLocal(isNightTheme).any {
-            it.dirName != excludeDirName && it.packageInfo.name == normalizedName
+        importMutex.withLock {
+            loadLocal(isNightTheme).any {
+                it.dirName != excludeDirName && it.packageInfo.name == normalizedName
+            }
         }
     }
 
@@ -107,11 +117,11 @@ object ThemePackageManager {
                 themeName = normalizedName,
                 isNightTheme = isNightTheme
             )
-            saveConfig(config)
+            importMutex.withLock { saveConfig(config) }
         }
 
     suspend fun addFromConfig(config: ThemeConfig.Config): Entry = withContext(IO) {
-        saveConfig(config)
+        importMutex.withLock { saveConfig(config) }
     }
 
     suspend fun themeExists(
@@ -120,8 +130,10 @@ object ThemePackageManager {
         excludeDirName: String? = null
     ): Boolean = withContext(IO) {
         val normalizedName = themeName.trim()
-        val localExists = loadLocal(isNightTheme).any {
-            it.dirName != excludeDirName && it.packageInfo.name == normalizedName
+        val localExists = importMutex.withLock {
+            loadLocal(isNightTheme).any {
+                it.dirName != excludeDirName && it.packageInfo.name == normalizedName
+            }
         }
         if (localExists) {
             return@withContext true
@@ -213,17 +225,21 @@ object ThemePackageManager {
             throw IllegalArgumentException(appCtx.getString(R.string.theme_builtin_export_forbidden))
         }
         val localEntry = if (entry.source == Source.REMOTE) download(entry) else entry
-        val dir = localEntry.localDir ?: localDir(localEntry.packageInfo.isNightTheme, localEntry.dirName)
-        val zipFile = tempDir.getFile("${localEntry.dirName}.zip")
-        if (zipFile.exists()) zipFile.delete()
-        ZipUtils.zipFile(dir, zipFile)
-        zipFile
+        importMutex.withLock {
+            val dir = localEntry.localDir ?: localDir(localEntry.packageInfo.isNightTheme, localEntry.dirName)
+            val zipFile = tempDir.getFile("${localEntry.dirName}.zip")
+            if (zipFile.exists()) zipFile.delete()
+            ZipUtils.zipFile(dir, zipFile)
+            zipFile
+        }
     }
 
     suspend fun deleteLocal(entry: Entry) = withContext(IO) {
         if (entry.source == Source.BUILTIN) return@withContext
-        entry.localDir?.let { FileUtils.delete(it, deleteRootDir = true) }
-        removeThemeConfig(entry.packageInfo.isNightTheme, entry.packageInfo.name, entry.dirName)
+        importMutex.withLock {
+            entry.localDir?.let { FileUtils.delete(it, deleteRootDir = true) }
+            removeThemeConfig(entry.packageInfo.isNightTheme, entry.packageInfo.name, entry.dirName)
+        }
     }
 
     suspend fun deleteRemote(entry: Entry, containerId: String? = null, scope: String? = null) = withContext(IO) {
@@ -238,7 +254,7 @@ object ThemePackageManager {
         notify: Boolean = true
     ) {
         val config = withContext(IO) {
-            validatedConfig(entry)
+            importMutex.withLock { validatedConfig(entry) }
         }
         ThemeConfig.applyConfig(context, config, switchNightMode, notify)
         recordAppliedThemeRef(context, entry)
@@ -277,26 +293,28 @@ object ThemePackageManager {
 
     suspend fun ensureLocalAppliedTheme(context: Context, isNightTheme: Boolean): Entry =
         withContext(IO) {
-            val currentConfig = ThemeConfig.getThemeConfig(context, isNightTheme)
-            val themeName = currentConfig.themeName.trim()
-            if (isBuiltinTheme(isNightTheme, themeName)) {
-                return@withContext builtinEntry(isNightTheme)
-            }
-            val config = currentConfig.copy(
-                isNightTheme = isNightTheme,
-                themeName = themeName.ifBlank { builtinName(isNightTheme) }
-            )
-            if (isBuiltinTheme(isNightTheme, config.themeName)) {
-                return@withContext builtinEntry(isNightTheme)
-            }
-            val dirName = config.themeName.normalizeFileName()
-            val dir = localDir(isNightTheme, dirName)
-            readPackage(dir)?.let { pkg ->
-                if (!isBuiltinPackage(pkg)) {
-                    return@withContext Entry(pkg, Source.LOCAL, localDir = dir)
+            importMutex.withLock {
+                val currentConfig = ThemeConfig.getThemeConfig(context, isNightTheme)
+                val themeName = currentConfig.themeName.trim()
+                if (isBuiltinTheme(isNightTheme, themeName)) {
+                    return@withLock builtinEntry(isNightTheme)
                 }
+                val config = currentConfig.copy(
+                    isNightTheme = isNightTheme,
+                    themeName = themeName.ifBlank { builtinName(isNightTheme) }
+                )
+                if (isBuiltinTheme(isNightTheme, config.themeName)) {
+                    return@withLock builtinEntry(isNightTheme)
+                }
+                val dirName = config.themeName.normalizeFileName()
+                val dir = localDir(isNightTheme, dirName)
+                readPackage(dir)?.let { pkg ->
+                    if (!isBuiltinPackage(pkg)) {
+                        return@withLock Entry(pkg, Source.LOCAL, localDir = dir)
+                    }
+                }
+                saveConfig(config.copy(isNightTheme = isNightTheme))
             }
-            saveConfig(config.copy(isNightTheme = isNightTheme))
         }
 
     // dirName 精确匹配优先（同名日夜主题消歧）；跨设备目录名可能不同，失配时回退按名称匹配
@@ -612,7 +630,7 @@ object ThemePackageManager {
         }
     }
 
-    private fun importRedGzip(file: File): List<Entry> {
+    private suspend fun importRedGzip(file: File): List<Entry> {
         val redPackage = readRedThemePackage(file)
         if (redPackage.type != "theme" || redPackage.data.isEmpty()) {
             throw IllegalArgumentException(appCtx.getString(R.string.theme_red_invalid))
@@ -630,7 +648,7 @@ object ThemePackageManager {
         if (configs.isEmpty()) {
             throw IllegalArgumentException(appCtx.getString(R.string.theme_red_invalid))
         }
-        return configs.map(::saveConfigReplacingLocal)
+        return importMutex.withLock { configs.map(::saveConfigReplacingLocal) }
     }
 
     private fun detectRedPackageFormat(file: File): RedPackageFormat? {
@@ -705,14 +723,15 @@ object ThemePackageManager {
             }
             val themeFile = File(unzipDir, packageFileName)
             val redTheme = GSON.fromJsonObject<RedThemeV4>(themeFile.readText()).getOrThrow()
-            val entries = listOfNotNull(
+            val configs = listOfNotNull(
                 redTheme.light
                     ?.takeIf { it.hasMeaningfulThemeContent(File(unzipDir, "light/theme_bg.img").takeIf(File::isFile)?.absolutePath) }
                     ?.toThemeConfig(redTheme.name, false, unzipDir),
                 redTheme.dark
                     ?.takeIf { it.hasMeaningfulThemeContent(File(unzipDir, "dark/theme_bg.img").takeIf(File::isFile)?.absolutePath) }
                     ?.toThemeConfig(redTheme.name, true, unzipDir)
-            ).map(::saveConfigReplacingLocal)
+            )
+            val entries = importMutex.withLock { configs.map(::saveConfigReplacingLocal) }
             if (entries.isEmpty()) {
                 throw IllegalArgumentException(appCtx.getString(R.string.theme_red_invalid))
             }
@@ -1010,36 +1029,158 @@ object ThemePackageManager {
         }
     }
 
-    private fun importZipInternal(zipFile: File, remoteUpdatedAt: Long): Entry {
-        val unzipDir = tempDir.getFile("import_${System.currentTimeMillis()}").apply {
-            if (exists()) FileUtils.delete(this, deleteRootDir = true)
-            mkdirs()
+    private suspend fun importZipInternal(zipFile: File, remoteUpdatedAt: Long): Entry = importMutex.withLock {
+        val unzipDir = tempDir.getFile("import_${UUID.randomUUID()}").apply {
+            check(mkdirs()) { "failed to create ${absolutePath}" }
         }
         try {
             ZipUtils.unZipToPath(zipFile, unzipDir)
-            val packageFile = unzipDir.walkTopDown().firstOrNull { it.isFile && it.name == packageFileName }
-                ?: throw IllegalArgumentException(appCtx.getString(R.string.theme_config_file_missing))
+            val packageFiles = unzipDir.walkTopDown()
+                .filter { it.isFile && it.name == packageFileName }
+                .toList()
+            if (packageFiles.isEmpty()) {
+                throw IllegalArgumentException(appCtx.getString(R.string.theme_config_file_missing))
+            }
+            require(packageFiles.size == 1) { "theme package contains multiple $packageFileName files" }
+            val packageFile = packageFiles.single()
             val pkg = GSON.fromJsonObject<Package>(packageFile.readText()).getOrThrow()
-            val dirName = pkg.dirName.ifBlank { pkg.name.normalizeFileName() }
-            val targetDir = localDir(pkg.isNightTheme, dirName)
-            if (targetDir.exists()) {
-                FileUtils.delete(targetDir, deleteRootDir = true)
+            val dirName = safeImportedDirName(pkg)
+            val parentDir = typeDir(pkg.isNightTheme).canonicalFile
+            val targetDir = File(parentDir, dirName).canonicalFile
+            require(targetDir.parentFile == parentDir) { "theme directory escapes package root" }
+            val stagingDir = File(parentDir, ".$dirName.staging-${UUID.randomUUID()}")
+            val backupDir = File(parentDir, ".$dirName.backup-${UUID.randomUUID()}")
+            val sourceDir = requireNotNull(packageFile.parentFile)
+            val oldPackage = readPackage(targetDir)
+
+            try {
+                check(sourceDir.copyRecursively(stagingDir, overwrite = false)) {
+                    "failed to stage imported theme"
+                }
+                val stagedPackage = readPackage(stagingDir)
+                    ?: throw IllegalArgumentException(appCtx.getString(R.string.theme_config_file_missing))
+                val targetPackage = stagedPackage.copy(
+                    dirName = dirName,
+                    updatedAt = if (remoteUpdatedAt == 0L) System.currentTimeMillis() else stagedPackage.updatedAt
+                )
+                File(stagingDir, packageFileName).writeText(GSON.toJson(targetPackage))
+                val verifiedPackage = readPackage(stagingDir)
+                    ?: throw IllegalArgumentException(appCtx.getString(R.string.theme_config_file_missing))
+                require(verifiedPackage.dirName == dirName && verifiedPackage.isNightTheme == pkg.isNightTheme) {
+                    "staged theme identity mismatch"
+                }
+
+                installStagedTheme(targetDir, stagingDir, backupDir) { installedDir ->
+                    val installedPackage = readPackage(installedDir)
+                        ?: throw IllegalStateException("installed theme package is unreadable")
+                    ThemeConfig.replaceImportedConfig(
+                        newConfig = resolveConfigPaths(installedPackage, installedDir),
+                        replacedThemeName = oldPackage?.name,
+                        replacedDirName = dirName
+                    )
+                    Entry(
+                        installedPackage,
+                        Source.LOCAL,
+                        localDir = installedDir,
+                        remoteUpdatedAt = remoteUpdatedAt
+                    )
+                }
+            } finally {
+                deletePathBestEffort(stagingDir)
             }
-            targetDir.mkdirs()
-            packageFile.parentFile?.copyRecursively(targetDir, overwrite = true)
-            val restoredPackage = readPackage(targetDir) ?: pkg
-            val targetPackage = if (remoteUpdatedAt == 0L) {
-                restoredPackage.copy(updatedAt = System.currentTimeMillis())
-            } else {
-                restoredPackage
-            }
-            File(targetDir, packageFileName).writeText(GSON.toJson(targetPackage))
-            ThemeConfig.addConfig(resolveConfigPaths(targetPackage, targetDir))
-            return Entry(targetPackage, Source.LOCAL, localDir = targetDir, remoteUpdatedAt = remoteUpdatedAt)
         } finally {
             FileUtils.delete(unzipDir, deleteRootDir = true)
         }
     }
+
+    private fun safeImportedDirName(pkg: Package): String {
+        val dirName = pkg.dirName.ifBlank { pkg.name.normalizeFileName() }.trim()
+        require(dirName.isNotEmpty() && dirName != "." && dirName != "..") { "invalid theme directory" }
+        require(!File(dirName).isAbsolute && '/' !in dirName && '\\' !in dirName) {
+            "theme directory must be a single path segment"
+        }
+        return dirName
+    }
+
+    private fun <T> installStagedTheme(
+        targetDir: File,
+        stagingDir: File,
+        backupDir: File,
+        afterInstall: (File) -> T
+    ): T {
+        var backupCreated = false
+        try {
+            if (targetDir.exists()) {
+                NioFileExchange.move(targetDir, backupDir)
+                backupCreated = true
+            }
+            try {
+                NioFileExchange.move(stagingDir, targetDir)
+            } catch (installError: Exception) {
+                if (backupCreated) {
+                    restoreThemeBackup(backupDir, targetDir, installError)
+                }
+                throw installError
+            }
+
+            val result = try {
+                afterInstall(targetDir)
+            } catch (commitError: Exception) {
+                rollbackInstalledTheme(targetDir, backupDir.takeIf { backupCreated }, commitError)
+                throw commitError
+            }
+            if (backupCreated) {
+                deletePathBestEffort(backupDir)
+            }
+            return result
+        } finally {
+            deletePathBestEffort(stagingDir)
+        }
+    }
+
+    private fun restoreThemeBackup(backupDir: File, targetDir: File, originalError: Exception) {
+        try {
+            NioFileExchange.move(backupDir, targetDir)
+        } catch (restoreError: Exception) {
+            originalError.addSuppressed(restoreError)
+            throw ThemeDirectoryRestoreException(backupDir, originalError)
+        }
+    }
+
+    private fun rollbackInstalledTheme(targetDir: File, backupDir: File?, originalError: Exception) {
+        if (backupDir == null) {
+            if (!targetDir.deleteRecursively() && targetDir.exists()) {
+                throw IOException("failed to remove newly installed theme ${targetDir.absolutePath}", originalError)
+            }
+            return
+        }
+        val failedDir = File(targetDir.parentFile, ".${targetDir.name}.failed-${UUID.randomUUID()}")
+        try {
+            if (targetDir.exists()) {
+                NioFileExchange.move(targetDir, failedDir)
+            }
+            NioFileExchange.move(backupDir, targetDir)
+            deletePathBestEffort(failedDir)
+        } catch (restoreError: Exception) {
+            originalError.addSuppressed(restoreError)
+            throw ThemeDirectoryRestoreException(backupDir, originalError)
+        }
+    }
+
+    private fun deletePathBestEffort(file: File) {
+        runCatching {
+            if (file.exists() && !file.deleteRecursively()) {
+                throw IOException("failed to delete ${file.absolutePath}")
+            }
+        }.onFailure {
+            AppLog.put("theme transaction cleanup failed: ${file.absolutePath}", it)
+        }
+    }
+
+    private class ThemeDirectoryRestoreException(
+        val backupDir: File,
+        cause: Throwable
+    ) : IOException("failed to restore theme; backup kept at ${backupDir.absolutePath}", cause)
 
     private fun copyAssetsIntoPackage(
         config: ThemeConfig.Config,
@@ -1246,7 +1387,8 @@ object ThemePackageManager {
             }
             return null
         }
-        val packagedFile = File(dir, path)
+        val packagedFile = File(dir, path).canonicalFile
+        if (!packagedFile.isSameOrSubFileOf(dir)) return null
         if (isReadableOwnFile(packagedFile)) return packagedFile.absolutePath
         findPackagedAsset(dir, file.name)?.let { return it.absolutePath }
         return packagedFile.absolutePath
