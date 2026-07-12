@@ -687,54 +687,27 @@ class CacheManageViewModel(application: Application) : BaseViewModel(application
             hasCache = true
         }
         val audioDir = File(packageDir, "audio_cache").apply { mkdirs() }
-        val sourceChapters = appDb.bookChapterDao.getChapterList(book.bookUrl)
+        val databaseChapters = appDb.bookChapterDao.getChapterList(book.bookUrl)
+        val sourceChapters = databaseChapters
             .takeIf { it.isNotEmpty() }
             ?: CacheManifestHelper.read(book)?.let(CacheManifestHelper::toChapters).orEmpty()
         val chapters = sourceChapters
             .map { chapter ->
                 if (chapter.isVolume) {
-                    return@map AudioCacheManifest.Chapter(
-                        index = chapter.index,
-                        title = chapter.title,
-                        isVolume = true,
-                        url = chapter.url,
-                        resourceUrl = chapter.resourceUrl,
-                        fileCount = 0
-                    )
+                    return@map AudioCacheManifest.Chapter.from(chapter, fileCount = 0)
                 }
                 val chapterDir = File(audioDir, chapter.index.toString())
                 if (!ExoPlayerHelper.isMediaCached(chapter.resourceUrl)) {
                     chapterDir.deleteRecursively()
-                    return@map AudioCacheManifest.Chapter(
-                        index = chapter.index,
-                        title = chapter.title,
-                        isVolume = false,
-                        url = chapter.url,
-                        resourceUrl = chapter.resourceUrl,
-                        fileCount = 0
-                    )
+                    return@map AudioCacheManifest.Chapter.from(chapter, fileCount = 0)
                 }
                 val fileCount = ExoPlayerHelper.copyMediaCache(chapter.resourceUrl, chapterDir)
                 if (fileCount <= 0) {
                     chapterDir.deleteRecursively()
-                    return@map AudioCacheManifest.Chapter(
-                        index = chapter.index,
-                        title = chapter.title,
-                        isVolume = false,
-                        url = chapter.url,
-                        resourceUrl = chapter.resourceUrl,
-                        fileCount = 0
-                    )
+                    return@map AudioCacheManifest.Chapter.from(chapter, fileCount = 0)
                 }
                 hasCache = true
-                AudioCacheManifest.Chapter(
-                    index = chapter.index,
-                    title = chapter.title,
-                    isVolume = false,
-                    url = chapter.url,
-                    resourceUrl = chapter.resourceUrl,
-                    fileCount = fileCount
-                )
+                AudioCacheManifest.Chapter.from(chapter, fileCount = fileCount)
             }
         if (!hasCache) {
             packageDir.deleteRecursively()
@@ -743,6 +716,10 @@ class CacheManageViewModel(application: Application) : BaseViewModel(application
         File(packageDir, "manifest.json").writeText(
             GSON.toJson(
                 AudioCacheManifest(
+                    version = AUDIO_CACHE_MANIFEST_VERSION,
+                    catalogComplete = databaseChapters.isNotEmpty() &&
+                        (book.totalChapterNum <= 0 ||
+                            databaseChapters.count { !it.isVolume } >= book.totalChapterNum),
                     bookName = book.name,
                     author = book.author,
                     bookUrl = book.bookUrl,
@@ -1124,10 +1101,17 @@ class CacheManageViewModel(application: Application) : BaseViewModel(application
         return try {
             ZipUtils.unZipToPath(zipFile, unzipDir)
             if (mode == CacheManageMode.AUDIO) {
-                val manifestFile = File(resolveCachePayloadDir(unzipDir, "manifest.json"), "manifest.json")
+                val payloadDir = resolveCachePayloadDir(unzipDir, "manifest.json")
+                val manifestFile = File(payloadDir, "manifest.json")
                 GSON.fromJsonObject<AudioCacheManifest>(manifestFile.readText()).getOrNull()
-                    ?.chapters
-                    ?.count { !it.isVolume && it.fileCount > 0 }
+                    ?.chapterList()
+                    ?.count { chapter ->
+                        !chapter.isVolume &&
+                            !chapter.resourceUrl.isNullOrBlank() &&
+                            countImportableAudioFiles(
+                                File(payloadDir, "audio_cache/${chapter.resolvedCacheDir()}")
+                            ) > 0
+                    }
             } else {
                 val manifest = CacheManifestHelper.read(File(resolveCachePayloadDir(unzipDir, CacheManifestHelper.MANIFEST_FILE_NAME), CacheManifestHelper.MANIFEST_FILE_NAME))
                 manifest?.cachedChapterCount
@@ -1339,10 +1323,30 @@ class CacheManageViewModel(application: Application) : BaseViewModel(application
         strategy: CacheSyncStrategy = CacheSyncStrategy.OVERWRITE
     ) {
         val payloadDir = resolveCachePayloadDir(unzipDir, "manifest.json")
+        val manifestFile = File(payloadDir, "manifest.json")
+        require(manifestFile.isFile) {
+            context.getString(R.string.cache_manage_download_failed_simple)
+        }
+        val audioManifest = GSON.fromJsonObject<AudioCacheManifest>(manifestFile.readText()).getOrNull()
+            ?: throw IllegalArgumentException(context.getString(R.string.cache_manage_download_failed_simple))
+        require(audioManifest.bookUrl.isBlank() || audioManifest.bookUrl == book.bookUrl) {
+            context.getString(R.string.cache_manage_download_failed_simple)
+        }
+        val manifestChapters = audioManifest.chapterList()
+        val incomingChapters = manifestChapters.map { it.toBookChapter(book.bookUrl) }
+        val audioDir = File(payloadDir, "audio_cache")
+        val importTargets = manifestChapters.mapNotNull { chapter ->
+            if (chapter.isVolume || chapter.resourceUrl.isNullOrBlank()) return@mapNotNull null
+            val sourceDir = File(audioDir, chapter.resolvedCacheDir())
+            val expectedFiles = countImportableAudioFiles(sourceDir)
+            if (expectedFiles <= 0) return@mapNotNull null
+            Triple(chapter, sourceDir, expectedFiles)
+        }
+
         val chapterCacheDir = File(payloadDir, "chapter_cache")
-        if (chapterCacheDir.exists()) {
-            val cacheDir = BookHelp.getCacheDir(book)
-            val stagingDir = if (strategy == CacheSyncStrategy.MERGE) {
+        val cacheDir = BookHelp.getCacheDir(book)
+        val chapterCacheStaging = if (chapterCacheDir.exists()) {
+            if (strategy == CacheSyncStrategy.MERGE) {
                 copyMergedPayloadToStaging(
                     baseDir = cacheDir,
                     payloadDir = chapterCacheDir,
@@ -1352,32 +1356,30 @@ class CacheManageViewModel(application: Application) : BaseViewModel(application
             } else {
                 copyPayloadToStaging(chapterCacheDir, cacheDir)
             }
-            replaceDirectory(cacheDir, stagingDir)
-        }
-        val manifestFile = File(payloadDir, "manifest.json")
-        if (!manifestFile.isFile) return
-        val audioManifest = GSON.fromJsonObject<AudioCacheManifest>(manifestFile.readText()).getOrNull()
-            ?: return
-        val chapters = audioManifest.chapters.map { chapter ->
-            BookChapter(
-                url = chapter.url,
-                title = chapter.title,
-                isVolume = chapter.isVolume,
-                bookUrl = book.bookUrl,
-                index = chapter.index,
-                resourceUrl = chapter.resourceUrl
-            )
-        }
-        val audioDir = File(payloadDir, "audio_cache")
-        audioManifest.chapters.forEach { chapter ->
-            if (chapter.isVolume || chapter.fileCount <= 0) return@forEach
-            val resourceUrl = chapter.resourceUrl ?: return@forEach
-            val sourceDir = File(audioDir, chapter.index.toString())
-            if (!sourceDir.exists()) return@forEach
-            ExoPlayerHelper.importMediaCache(resourceUrl, sourceDir)
-        }
-        if (chapters.isNotEmpty() && appDb.bookDao.has(book.bookUrl)) {
-            replaceBookChapters(book.bookUrl, chapters)
+        } else null
+
+        try {
+            importTargets.forEach { (chapter, sourceDir, expectedFiles) ->
+                val imported = ExoPlayerHelper.importMediaCache(chapter.resourceUrl, sourceDir)
+                check(imported == expectedFiles) {
+                    context.getString(R.string.cache_manage_download_failed_simple)
+                }
+            }
+
+            chapterCacheStaging?.let { replaceDirectory(cacheDir, it) }
+
+            if (incomingChapters.isNotEmpty() && appDb.bookDao.has(book.bookUrl)) {
+                val existing = appDb.bookChapterDao.getChapterList(book.bookUrl)
+                val restored = mergeRestoredAudioCatalog(
+                    existing = existing,
+                    incoming = incomingChapters,
+                    replaceCatalog = audioManifest.canReplaceCatalog(book.bookUrl)
+                )
+                replaceBookChapters(book.bookUrl, restored)
+            }
+            refreshManifest(book)
+        } finally {
+            chapterCacheStaging?.takeIf { it.exists() }?.deleteRecursively()
         }
     }
 
@@ -1690,22 +1692,6 @@ data class CacheSummary(
     val cachedChapterCount: Int,
     val mode: CacheManageMode
 )
-
-private data class AudioCacheManifest(
-    val bookName: String,
-    val author: String,
-    val bookUrl: String,
-    val chapters: List<Chapter>
-) {
-    data class Chapter(
-        val index: Int,
-        val title: String,
-        val isVolume: Boolean = false,
-        val url: String,
-        val resourceUrl: String?,
-        val fileCount: Int
-    )
-}
 
 private fun CacheBookManifest.matches(mode: CacheManageMode): Boolean {
     return type and mode.bookType > 0
