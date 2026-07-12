@@ -2232,4 +2232,13 @@ bookUrl：%7$s
     <string name="bottom_bar_items_manage">底栏按钮管理</string>
     <string name="bottom_bar_item_locked">始终显示</string>
     <string name="bottom_bar_item_hidden">已隐藏</string>
+    <string name="continue_">继续</string>
+    <string name="import_">导入</string>
+    <string name="bubble_package">气泡包</string>
+    <string name="online_import_private_network_title">私有网络导入</string>
+    <string name="online_import_private_network_message">该地址指向私有网络。仅在你信任此链接及提供文件的设备时继续。</string>
+    <string name="online_import_confirm_title">确认在线导入</string>
+    <string name="online_import_preview_message">类型：%1$s\n原始来源：%2$s\n最终地址：%3$s\n大小：%4$s\n私有网络：%5$s</string>
+    <string name="online_import_paragraph_script_warning">警告：段落规则可能包含 JavaScript 或登录脚本。请仅导入可信来源的规则。</string>
+    <string name="online_import_paragraph_not_ready">段落规则包校验功能尚未完成。</string>
 </resources>

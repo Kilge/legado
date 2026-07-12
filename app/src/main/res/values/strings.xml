@@ -2369,4 +2369,13 @@ Selected text or question:
     <string name="share_note_no_template">暂无可用模板</string>
     <string name="share_note_render_failed">生成分享图片失败：%1$s</string>
     <string name="share_note_save_failed">保存图片失败：%1$s</string>
+    <string name="continue_">Continue</string>
+    <string name="import_">Import</string>
+    <string name="bubble_package">Bubble package</string>
+    <string name="online_import_private_network_title">Private network import</string>
+    <string name="online_import_private_network_message">This address points to a private network. Continue only if you trust the link and the device providing it.</string>
+    <string name="online_import_confirm_title">Confirm online import</string>
+    <string name="online_import_preview_message">Type: %1$s\nSource: %2$s\nFinal address: %3$s\nSize: %4$s\nPrivate network: %5$s</string>
+    <string name="online_import_paragraph_script_warning">Warning: Paragraph rules may contain JavaScript or login scripts. Import only from a trusted source.</string>
+    <string name="online_import_paragraph_not_ready">Paragraph rule package validation is not available yet.</string>
 </resources>
