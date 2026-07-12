@@ -8,7 +8,9 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.util.Objects;
 import java.util.Random;
+import java.util.zip.DataFormatException;
 import java.util.zip.Inflater;
 import java.nio.charset.StandardCharsets;
 
@@ -75,20 +77,48 @@ public class UmdUtils {
      * @throws Exception 解码时失败时
      */
     public static byte[] decompress(byte[] compress) throws Exception {
-        Inflater inflater = new Inflater();
-        inflater.reset();
-        inflater.setInput(compress);
+        return decompress(compress, Integer.MAX_VALUE);
+    }
 
-        ByteArrayOutputStream baos = new ByteArrayOutputStream(compress.length);
-        try (baos) {
-            byte[] buff = new byte[BUFFER_SIZE];
-            while (!inflater.finished()) {
-                int count = inflater.inflate(buff);
-                baos.write(buff, 0, count);
-            }
+    public static byte[] decompress(byte[] compress, int maxOutputBytes) throws IOException {
+        Objects.requireNonNull(compress, "compress");
+        if (maxOutputBytes < 0) {
+            throw new IllegalArgumentException("maxOutputBytes must not be negative");
         }
-        inflater.end();
-        return baos.toByteArray();
+        Inflater inflater = new Inflater();
+        int initialCapacity = Math.min(compress.length, Math.min(maxOutputBytes, BUFFER_SIZE));
+        ByteArrayOutputStream baos = new ByteArrayOutputStream(initialCapacity);
+        try {
+            inflater.setInput(compress);
+            byte[] buff = new byte[BUFFER_SIZE];
+            while (true) {
+                int count;
+                try {
+                    count = inflater.inflate(buff);
+                } catch (DataFormatException e) {
+                    throw new IOException("Invalid zlib data", e);
+                }
+                if (count > 0) {
+                    if (count > maxOutputBytes - baos.size()) {
+                        throw new IOException("Decompressed data exceeds limit of " + maxOutputBytes + " bytes");
+                    }
+                    baos.write(buff, 0, count);
+                    continue;
+                }
+                if (inflater.finished()) {
+                    return baos.toByteArray();
+                }
+                if (inflater.needsDictionary()) {
+                    throw new IOException("Zlib stream requires a preset dictionary");
+                }
+                if (inflater.needsInput()) {
+                    throw new IOException("Truncated zlib stream");
+                }
+                throw new IOException("Zlib decompression made no progress");
+            }
+        } finally {
+            inflater.end();
+        }
     }
 
 
