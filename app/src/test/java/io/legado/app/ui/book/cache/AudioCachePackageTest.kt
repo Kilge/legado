@@ -23,7 +23,7 @@ class AudioCachePackageTest {
 
         assertEquals(1, manifest.schemaVersion)
         assertFalse(manifest.hasCompleteCatalog)
-        assertFalse(manifest.canReplaceCatalog("book"))
+        manifest.validateForRestore("book")
     }
 
     @Test
@@ -42,6 +42,21 @@ class AudioCachePackageTest {
         assertEquals(5, merged.size)
         assertEquals(2, merged.count { it.isVolume })
         assertEquals("audio-2", merged.first { it.index == 2 }.resourceUrl)
+    }
+
+    @Test
+    fun importedAudioResourceUrlReplacesStaleDatabaseUrl() {
+        val existing = listOf(chapter(1, "one", resourceUrl = "old-audio"))
+        val incoming = listOf(chapter(1, "one", resourceUrl = "restored-audio"))
+
+        val merged = mergeRestoredAudioCatalog(
+            existing = existing,
+            incoming = incoming,
+            replaceCatalog = false,
+            preferIncomingResourceUrl = { true }
+        )
+
+        assertEquals("restored-audio", merged.single().resourceUrl)
     }
 
     @Test
@@ -67,26 +82,72 @@ class AudioCachePackageTest {
     }
 
     @Test
-    fun v2CompleteManifestRequiresMatchingBookAndUniqueIndexes() {
-        val valid = AudioCacheManifest(
-            version = 2,
-            catalogComplete = true,
+    fun manifestRejectsDuplicateOrUnsafeCacheDirectories() {
+        val duplicate = AudioCacheManifest(
             bookUrl = "book",
             chapters = listOf(
-                AudioCacheManifest.Chapter(index = 0, title = "one"),
-                AudioCacheManifest.Chapter(index = 1, title = "two")
+                AudioCacheManifest.Chapter(index = 0, title = "one", cacheDir = "same"),
+                AudioCacheManifest.Chapter(index = 1, title = "two", cacheDir = "same")
             )
         )
-        val duplicate = valid.copy(
+        val unsafe = AudioCacheManifest(
+            bookUrl = "book",
             chapters = listOf(
-                AudioCacheManifest.Chapter(index = 0, title = "one"),
-                AudioCacheManifest.Chapter(index = 0, title = "two")
+                AudioCacheManifest.Chapter(index = 0, title = "one", cacheDir = "../outside")
             )
         )
 
-        assertTrue(valid.canReplaceCatalog("book"))
-        assertFalse(valid.canReplaceCatalog("other"))
-        assertFalse(duplicate.canReplaceCatalog("book"))
+        assertTrue(runCatching { duplicate.validateForRestore("book") }.isFailure)
+        assertTrue(runCatching { unsafe.validateForRestore("book") }.isFailure)
+    }
+
+    @Test
+    fun manifestAllowsMultipleVolumeHeadersWithBlankUrls() {
+        val manifest = AudioCacheManifest(
+            bookUrl = "book",
+            chapters = listOf(
+                AudioCacheManifest.Chapter(index = 0, title = "volume-1", isVolume = true, url = ""),
+                AudioCacheManifest.Chapter(index = 2, title = "volume-2", isVolume = true, url = "")
+            )
+        )
+
+        manifest.validateForRestore("book")
+    }
+
+    @Test
+    fun packageMergePreservesRemoteOnlyChapterAndUsesLocalCachedChapter() {
+        val remote = listOf(
+            AudioCacheManifest.Chapter(
+                index = 0,
+                title = "remote-only",
+                url = "remote-only",
+                resourceUrl = "remote-audio",
+                cacheDir = "remote-0",
+                fileCount = 1
+            ),
+            AudioCacheManifest.Chapter(
+                index = 1,
+                title = "shared",
+                url = "shared",
+                resourceUrl = "old-audio",
+                cacheDir = "remote-1",
+                fileCount = 2
+            )
+        )
+        val local = listOf(
+            chapter(1, "shared", resourceUrl = "new-audio").copy(url = "shared"),
+            chapter(2, "local-only", resourceUrl = "local-audio")
+        )
+
+        val merged = mergeAudioPackageChapters(remote, local) { it.resourceUrl != null }
+
+        assertEquals(3, merged.size)
+        assertEquals("remote-0", merged.first { it.chapter.url == "remote-only" }.chapter.cacheDir)
+        val shared = merged.first { it.chapter.url == "shared" }
+        assertEquals("remote-1", shared.chapter.cacheDir)
+        assertEquals("new-audio", shared.chapter.resourceUrl)
+        assertTrue(shared.replacePackagedFiles)
+        assertTrue(merged.first { it.chapter.title == "local-only" }.chapter.cacheDir!!.startsWith("c_2_"))
     }
 
     private fun chapter(

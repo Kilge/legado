@@ -717,9 +717,9 @@ class CacheManageViewModel(application: Application) : BaseViewModel(application
             GSON.toJson(
                 AudioCacheManifest(
                     version = AUDIO_CACHE_MANIFEST_VERSION,
-                    catalogComplete = databaseChapters.isNotEmpty() &&
-                        (book.totalChapterNum <= 0 ||
-                            databaseChapters.count { !it.isVolume } >= book.totalChapterNum),
+                    // Audio manifests cannot currently prove that a source catalog is complete.
+                    // Restore therefore always merges with an existing database catalog.
+                    catalogComplete = false,
                     bookName = book.name,
                     author = book.author,
                     bookUrl = book.bookUrl,
@@ -1145,36 +1145,47 @@ class CacheManageViewModel(application: Application) : BaseViewModel(application
         val manifestFile = File(packageDir, "manifest.json")
         val oldManifest = manifestFile.takeIf { it.isFile }
             ?.let { GSON.fromJsonObject<AudioCacheManifest>(it.readText()).getOrNull() }
-        val chapters = appDb.bookChapterDao.getChapterList(book.bookUrl)
+        oldManifest?.validateForRestore(book.bookUrl)
+        val databaseChapters = appDb.bookChapterDao.getChapterList(book.bookUrl)
+        val localChapters = databaseChapters
             .takeIf { it.isNotEmpty() }
-            ?: oldManifest?.chapters?.map {
-                BookChapter(
-                    url = it.url,
-                    title = it.title,
-                    isVolume = it.isVolume,
-                    bookUrl = book.bookUrl,
-                    index = it.index,
-                    resourceUrl = it.resourceUrl
-                )
+            ?: CacheManifestHelper.read(book)?.let(CacheManifestHelper::toChapters).orEmpty()
+        val merged = mergeAudioPackageChapters(
+            remote = oldManifest?.chapterList().orEmpty(),
+            local = localChapters,
+            isLocallyCached = { ExoPlayerHelper.isMediaCached(it.resourceUrl) }
+        )
+        if (merged.isEmpty()) return
+
+        val audioDir = File(packageDir, "audio_cache").apply { mkdirs() }
+        val chapters = merged.map { item ->
+            val chapterDir = File(audioDir, item.chapter.resolvedCacheDir())
+            if (item.replacePackagedFiles) {
+                val localSource = checkNotNull(item.localSource)
+                val stagingDir = File(audioDir, ".local_${item.chapter.resolvedCacheDir()}_${System.nanoTime()}")
+                if (stagingDir.exists()) stagingDir.deleteRecursively()
+                stagingDir.mkdirs()
+                try {
+                    val copied = ExoPlayerHelper.copyMediaCache(localSource.resourceUrl, stagingDir)
+                    check(copied > 0 && countImportableAudioFiles(stagingDir) == copied) {
+                        context.getString(R.string.cache_manage_pack_failed)
+                    }
+                    replaceDirectory(chapterDir, stagingDir)
+                } finally {
+                    if (stagingDir.exists()) stagingDir.deleteRecursively()
+                }
             }
-            ?: emptyList()
-        if (chapters.isEmpty()) return
+            item.chapter.copy(fileCount = countImportableAudioFiles(chapterDir))
+        }
         manifestFile.writeText(
             GSON.toJson(
                 AudioCacheManifest(
-                    bookName = book.name,
-                    author = book.author,
+                    version = AUDIO_CACHE_MANIFEST_VERSION,
+                    catalogComplete = false,
+                    bookName = book.name.ifBlank { oldManifest?.bookName.orEmpty() },
+                    author = book.author.ifBlank { oldManifest?.author.orEmpty() },
                     bookUrl = book.bookUrl,
-                    chapters = chapters.map {
-                        AudioCacheManifest.Chapter(
-                            index = it.index,
-                            title = it.title,
-                            isVolume = it.isVolume,
-                            url = it.url,
-                            resourceUrl = it.resourceUrl,
-                            fileCount = 0
-                        )
-                    }
+                    chapters = chapters
                 )
             )
         )
@@ -1329,9 +1340,13 @@ class CacheManageViewModel(application: Application) : BaseViewModel(application
         }
         val audioManifest = GSON.fromJsonObject<AudioCacheManifest>(manifestFile.readText()).getOrNull()
             ?: throw IllegalArgumentException(context.getString(R.string.cache_manage_download_failed_simple))
-        require(audioManifest.bookUrl.isBlank() || audioManifest.bookUrl == book.bookUrl) {
-            context.getString(R.string.cache_manage_download_failed_simple)
-        }
+        runCatching { audioManifest.validateForRestore(book.bookUrl) }
+            .getOrElse {
+                throw IllegalArgumentException(
+                    context.getString(R.string.cache_manage_download_failed_simple),
+                    it
+                )
+            }
         val manifestChapters = audioManifest.chapterList()
         val incomingChapters = manifestChapters.map { it.toBookChapter(book.bookUrl) }
         val audioDir = File(payloadDir, "audio_cache")
@@ -1342,6 +1357,7 @@ class CacheManageViewModel(application: Application) : BaseViewModel(application
             if (expectedFiles <= 0) return@mapNotNull null
             Triple(chapter, sourceDir, expectedFiles)
         }
+        val importedResourceUrls = importTargets.mapNotNullTo(hashSetOf()) { it.first.resourceUrl }
 
         val chapterCacheDir = File(payloadDir, "chapter_cache")
         val cacheDir = BookHelp.getCacheDir(book)
@@ -1373,7 +1389,10 @@ class CacheManageViewModel(application: Application) : BaseViewModel(application
                 val restored = mergeRestoredAudioCatalog(
                     existing = existing,
                     incoming = incomingChapters,
-                    replaceCatalog = audioManifest.canReplaceCatalog(book.bookUrl)
+                    replaceCatalog = false,
+                    preferIncomingResourceUrl = { candidate ->
+                        candidate.resourceUrl in importedResourceUrls
+                    }
                 )
                 replaceBookChapters(book.bookUrl, restored)
             }

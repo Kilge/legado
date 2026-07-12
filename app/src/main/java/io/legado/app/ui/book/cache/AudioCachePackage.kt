@@ -2,15 +2,16 @@ package io.legado.app.ui.book.cache
 
 import io.legado.app.data.entities.BookChapter
 import java.io.File
+import java.security.MessageDigest
 
 internal const val AUDIO_CACHE_MANIFEST_VERSION = 2
 
 internal data class AudioCacheManifest(
     val version: Int = 0,
     val catalogComplete: Boolean = false,
-    val bookName: String = "",
-    val author: String = "",
-    val bookUrl: String = "",
+    val bookName: String? = "",
+    val author: String? = "",
+    val bookUrl: String? = "",
     val chapters: List<Chapter>? = emptyList()
 ) {
     val schemaVersion: Int
@@ -23,10 +24,10 @@ internal data class AudioCacheManifest(
 
     data class Chapter(
         val index: Int = 0,
-        val title: String = "",
+        val title: String? = "",
         val isVolume: Boolean = false,
-        val url: String = "",
-        val baseUrl: String = "",
+        val url: String? = "",
+        val baseUrl: String? = "",
         val isVip: Boolean = false,
         val isPay: Boolean = false,
         val resourceUrl: String? = null,
@@ -43,10 +44,10 @@ internal data class AudioCacheManifest(
     ) {
         fun toBookChapter(bookUrl: String): BookChapter {
             return BookChapter(
-                url = url,
-                title = title,
+                url = url.orEmpty(),
+                title = title.orEmpty(),
                 isVolume = isVolume,
-                baseUrl = baseUrl,
+                baseUrl = baseUrl.orEmpty(),
                 bookUrl = bookUrl,
                 index = index,
                 isVip = isVip,
@@ -63,7 +64,17 @@ internal data class AudioCacheManifest(
             )
         }
 
-        fun resolvedCacheDir(): String = cacheDir?.takeIf { it.isNotBlank() } ?: index.toString()
+        fun resolvedCacheDir(): String {
+            val value = cacheDir?.takeIf { it.isNotBlank() } ?: index.toString()
+            require(!File(value).isAbsolute &&
+                value != "." &&
+                value != ".." &&
+                File(value).name == value &&
+                !value.contains('/') &&
+                !value.contains('\\')
+            ) { "invalid audio cache directory" }
+            return value
+        }
 
         companion object {
             fun from(chapter: BookChapter, fileCount: Int, cacheDir: String? = null): Chapter {
@@ -92,19 +103,29 @@ internal data class AudioCacheManifest(
     }
 }
 
-internal fun AudioCacheManifest.canReplaceCatalog(expectedBookUrl: String): Boolean {
-    val items = chapterList()
-    return hasCompleteCatalog &&
-        bookUrl.isNotBlank() &&
-        bookUrl == expectedBookUrl &&
-        items.isNotEmpty() &&
-        items.map { it.index }.distinct().size == items.size
+internal fun AudioCacheManifest.validateForRestore(expectedBookUrl: String) {
+    require(bookUrl.isNullOrBlank() || bookUrl == expectedBookUrl) { "audio cache book mismatch" }
+    val cacheDirectories = hashSetOf<String>()
+    val chapterIndexes = hashSetOf<Int>()
+    val chapterUrls = hashSetOf<String>()
+    chapterList().forEach { chapter ->
+        require(chapterIndexes.add(chapter.index)) { "duplicate audio chapter index" }
+        chapter.url.orEmpty().takeIf { it.isNotBlank() }?.let { url ->
+            require(chapterUrls.add(url)) { "duplicate audio chapter url" }
+        }
+        if (!chapter.isVolume) {
+            require(cacheDirectories.add(chapter.resolvedCacheDir())) {
+                "duplicate audio cache directory"
+            }
+        }
+    }
 }
 
 internal fun mergeRestoredAudioCatalog(
     existing: List<BookChapter>,
     incoming: List<BookChapter>,
-    replaceCatalog: Boolean
+    replaceCatalog: Boolean,
+    preferIncomingResourceUrl: (BookChapter) -> Boolean = { false }
 ): List<BookChapter> {
     if (incoming.isEmpty()) return existing
     if (existing.isEmpty() || replaceCatalog) return incoming.sortedBy { it.index }
@@ -116,7 +137,9 @@ internal fun mergeRestoredAudioCatalog(
         }
         if (matchIndex >= 0) {
             val current = merged[matchIndex]
-            if (current.resourceUrl.isNullOrBlank() && !candidate.resourceUrl.isNullOrBlank()) {
+            if (!candidate.resourceUrl.isNullOrBlank() &&
+                (preferIncomingResourceUrl(candidate) || current.resourceUrl.isNullOrBlank())
+            ) {
                 merged[matchIndex] = current.copy(resourceUrl = candidate.resourceUrl)
             }
             return@forEach
@@ -131,6 +154,76 @@ internal fun mergeRestoredAudioCatalog(
         }
     }
     return merged.sortedBy { it.index }
+}
+
+internal data class AudioPackageChapterMerge(
+    val chapter: AudioCacheManifest.Chapter,
+    val localSource: BookChapter? = null,
+    val replacePackagedFiles: Boolean = false
+)
+
+internal fun mergeAudioPackageChapters(
+    remote: List<AudioCacheManifest.Chapter>,
+    local: List<BookChapter>,
+    isLocallyCached: (BookChapter) -> Boolean
+): List<AudioPackageChapterMerge> {
+    val merged = remote.map { AudioPackageChapterMerge(it) }.toMutableList()
+    local.forEach { localChapter ->
+        val remoteIndex = merged.indexOfFirst { item -> item.chapter.matches(localChapter) }
+        val hasLocalCache = !localChapter.isVolume && isLocallyCached(localChapter)
+        if (remoteIndex >= 0) {
+            val remoteChapter = merged[remoteIndex].chapter
+            val selectedResourceUrl = if (hasLocalCache) {
+                localChapter.resourceUrl
+            } else {
+                remoteChapter.resourceUrl ?: localChapter.resourceUrl
+            }
+            val updatedLocal = localChapter.copy(resourceUrl = selectedResourceUrl)
+            merged[remoteIndex] = AudioPackageChapterMerge(
+                chapter = AudioCacheManifest.Chapter.from(
+                    chapter = updatedLocal,
+                    fileCount = 0,
+                    cacheDir = remoteChapter.resolvedCacheDir()
+                ),
+                localSource = localChapter.takeIf { hasLocalCache },
+                replacePackagedFiles = hasLocalCache
+            )
+        } else {
+            merged += AudioPackageChapterMerge(
+                chapter = AudioCacheManifest.Chapter.from(
+                    chapter = localChapter,
+                    fileCount = 0,
+                    cacheDir = newAudioCacheDirectoryName(localChapter)
+                ),
+                localSource = localChapter.takeIf { hasLocalCache },
+                replacePackagedFiles = hasLocalCache
+            )
+        }
+    }
+    return merged.sortedBy { it.chapter.index }
+}
+
+private fun AudioCacheManifest.Chapter.matches(chapter: BookChapter): Boolean {
+    val chapterUrl = url.orEmpty()
+    if (chapterUrl.isNotBlank() && chapter.url.isNotBlank() && chapterUrl == chapter.url) return true
+    if (!resourceUrl.isNullOrBlank() &&
+        !chapter.resourceUrl.isNullOrBlank() &&
+        resourceUrl == chapter.resourceUrl
+    ) {
+        return true
+    }
+    return index == chapter.index && title.orEmpty().trim() == chapter.title.trim()
+}
+
+private fun newAudioCacheDirectoryName(chapter: BookChapter): String {
+    val identity = when {
+        chapter.url.isNotBlank() -> "url|${chapter.url}"
+        !chapter.resourceUrl.isNullOrBlank() -> "resource|${chapter.resourceUrl}"
+        else -> "index|${chapter.index}|${chapter.title.trim()}"
+    }
+    val digest = MessageDigest.getInstance("SHA-256").digest(identity.toByteArray())
+    val suffix = digest.take(8).joinToString("") { "%02x".format(it.toInt() and 0xff) }
+    return "c_${chapter.index}_$suffix"
 }
 
 private fun BookChapter.matchesAudioChapter(other: BookChapter): Boolean {
@@ -154,9 +247,12 @@ private fun File.hasAudioCacheFileName(): Boolean {
     val urlIndex = name.substringBefore('_', "").toIntOrNull() ?: return false
     val remainder = name.substringAfter('_', "")
     val position = remainder.substringBefore('_', "").toLongOrNull() ?: return false
-    val length = remainder.substringAfter("${position}_", "")
+    val declaredLength = remainder.substringAfter("${position}_", "")
         .substringBefore('_', "")
         .toLongOrNull()
         ?: return false
-    return urlIndex >= 0 && position >= 0L && length > 0L
+    return urlIndex >= 0 &&
+        position >= 0L &&
+        declaredLength > 0L &&
+        declaredLength == length()
 }
