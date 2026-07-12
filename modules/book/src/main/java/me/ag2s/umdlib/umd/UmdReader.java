@@ -20,7 +20,6 @@ import me.ag2s.umdlib.tool.UmdUtils;
  */
 public class UmdReader {
     UmdBook book;
-    InputStream inputStream;
     int _AdditionalCheckNumber;
     int _TotalContentLen;
     boolean end = false;
@@ -29,7 +28,9 @@ public class UmdReader {
     public synchronized UmdBook read(InputStream inputStream) throws Exception {
 
         book = new UmdBook();
-        this.inputStream = inputStream;
+        _AdditionalCheckNumber = 0;
+        _TotalContentLen = 0;
+        end = false;
         StreamReader reader = new StreamReader(inputStream);
         UmdHeader umdHeader = new UmdHeader();
         book.setHeader(umdHeader);
@@ -47,6 +48,9 @@ public class UmdReader {
             System.out.println("块标识:" + segType);
             //short length1 = reader.readByte();
             readSection(segType, segFlag, len, reader, umdHeader);
+            if (end) {
+                break;
+            }
 
             if ((int) segType == 241 || (int) segType == 10) {
                 segType = num1;
