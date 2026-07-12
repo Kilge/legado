@@ -33,7 +33,6 @@ class EpubGestureController(
     }
 
     private val touchSlop = ViewConfiguration.get(view.context).scaledTouchSlop
-    private val minFlingDistance = touchSlop * 4
     private var downX = 0f
     private var downY = 0f
     private var lastX = 0f

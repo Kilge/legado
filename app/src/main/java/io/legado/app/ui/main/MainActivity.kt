@@ -2321,10 +2321,6 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
         }
     }
 
-    private fun upHomePage() {
-        binding.viewPagerMain.setCurrentItem(resolveHomePagePosition(), false)
-    }
-
     fun selectAdjacentMainPage(direction: Int): Boolean {
         val target = (binding.viewPagerMain.currentItem + direction)
             .coerceIn(0, bottomMenuCount - 1)

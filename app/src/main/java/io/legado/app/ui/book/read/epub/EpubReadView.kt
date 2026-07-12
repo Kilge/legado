@@ -234,7 +234,6 @@ class EpubReadView @JvmOverloads constructor(
     private var selectionExistedOnDown = false
     private var selectionHandleDragActive = false
     private var selectionMenuPending = false
-    private var lastDownAt = 0L
     private var longPressTriggered = false
     private var selectionMagnifier: Magnifier? = null
     private val longPressRunnable = Runnable {

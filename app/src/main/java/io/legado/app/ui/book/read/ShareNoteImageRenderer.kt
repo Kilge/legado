@@ -6,9 +6,6 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
-import android.graphics.Paint
-import android.graphics.Path
-import android.graphics.RectF
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
@@ -1181,17 +1178,4 @@ object ShareNoteImageRenderer {
         }
     }
 
-    @Suppress("unused")
-    private fun roundBitmap(source: Bitmap, radius: Float): Bitmap {
-        val output = Bitmap.createBitmap(source.width, source.height, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(output)
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-        val path = Path().apply {
-            addRoundRect(RectF(0f, 0f, source.width.toFloat(), source.height.toFloat()), radius, radius, Path.Direction.CW)
-        }
-        canvas.clipPath(path)
-        canvas.drawBitmap(source, 0f, 0f, paint)
-        source.recycle()
-        return output
-    }
 }

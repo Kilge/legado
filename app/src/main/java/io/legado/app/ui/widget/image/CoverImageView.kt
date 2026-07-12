@@ -101,8 +101,6 @@ class CoverImageView @JvmOverloads constructor(
     private var name: String? = null
     private var author: String? = null
     private var drawNameOverlayForCurrentCover = false
-    private var nameHeight = 0f
-    private var authorHeight = 0f
     private val drawBookName = BookCover.drawBookName
     private val drawBookAuthor by lazy { BookCover.drawBookAuthor }
 

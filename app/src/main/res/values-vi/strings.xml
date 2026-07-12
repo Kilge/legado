@@ -1157,7 +1157,6 @@
     <string name="record_heap_dump_s">Lưu heap dump khi ứng dụng gặp sự cố OOM</string>
     <string name="record_heap_dump_t">Ghi heap dump</string>
     <string name="font_weight_text">Thường/Đậm/Nhạt</string>
-    <string name="keep_swipe_tip">Tiếp tục vuốt để tải chương tiếp theo…</string>
     <string name="enable_optimize_render">Bật tối ưu hóa vẽ</string>
     <string name="ignore_battery_permission_rationale">Đọc cần yêu cầu quyền chạy nền để giữ cho dịch vụ hoạt động bình thường</string>
     <string name="simulated_reading">Đọc mô phỏng</string>

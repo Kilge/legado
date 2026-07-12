@@ -60,7 +60,6 @@ abstract class PageDelegate(protected val readView: ReadView) {
 
     private var deferredAnimationRefresh = false
     private var deferredAnimationRefreshPosted = false
-    private var selectedOnDown = false
 
     init {
         curPage.resetPageOffset()
