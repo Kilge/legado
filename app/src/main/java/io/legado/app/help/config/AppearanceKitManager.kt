@@ -18,11 +18,15 @@ import io.legado.app.utils.postEvent
 import io.legado.app.utils.putPrefString
 import io.legado.app.utils.normalizeFileName
 import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
 import splitties.init.appCtx
 import java.io.File
 import java.io.FileOutputStream
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicLong
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 
@@ -34,6 +38,8 @@ object AppearanceKitManager {
     const val KIT_SIDEBAR = "builtin_sidebar"
     private const val kitManifestName = "appearance_kit.json"
     private const val kitVersion = 1
+    private val currentModeThemeMutex = Mutex()
+    private val currentModeThemeGeneration = AtomicLong()
 
     private val rootDir: File
         get() = appCtx.externalFiles.getFile("appThemeKits").apply { mkdirs() }
@@ -126,19 +132,42 @@ object AppearanceKitManager {
     }
 
     suspend fun apply(context: Context, kit: AppearanceKit) {
-        val binding = kit.binding ?: loadIndex().firstOrNull { it.id == kit.id }?.binding
-        applyBinding(context, binding ?: KitBinding(preset = MainLayoutPresetConfig.PRESET_DEFAULT))
-        context.putPrefString(PreferKey.currentAppearanceKitId, kit.id)
-        postEvent(EventBus.MAIN_APPEARANCE_KIT_CHANGED, true)
-        postEvent(EventBus.RECREATE, "")
+        currentModeThemeMutex.lock()
+        try {
+            currentModeThemeGeneration.incrementAndGet()
+            val binding = kit.binding ?: loadIndex().firstOrNull { it.id == kit.id }?.binding
+            applyBinding(context, binding ?: KitBinding(preset = MainLayoutPresetConfig.PRESET_DEFAULT))
+            context.putPrefString(PreferKey.currentAppearanceKitId, kit.id)
+            postEvent(EventBus.MAIN_APPEARANCE_KIT_CHANGED, true)
+            postEvent(EventBus.RECREATE, "")
+        } finally {
+            currentModeThemeMutex.unlock()
+        }
     }
 
-    suspend fun applyCurrentModeTheme(context: Context): Boolean {
-        val binding = loadIndex().firstOrNull { it.id == currentKitId() }?.binding ?: return false
-        applyCurrentThemeRef(context, binding, AppConfig.isNightTheme)
-        ThemeConfig.applyTheme(context)
-        BookCover.upDefaultCover()
-        return true
+    suspend fun applyCurrentModeTheme(
+        context: Context,
+        isNightTheme: Boolean = AppConfig.isNightTheme
+    ): Boolean {
+        val generation = currentModeThemeGeneration.incrementAndGet()
+        currentModeThemeMutex.lock()
+        try {
+            currentCoroutineContext().ensureActive()
+            if (generation != currentModeThemeGeneration.get()) return false
+            val binding = loadIndex().firstOrNull { it.id == currentKitId() }?.binding
+            currentCoroutineContext().ensureActive()
+            if (generation != currentModeThemeGeneration.get()) return false
+            if (binding != null) {
+                applyCurrentThemeRef(context, binding, isNightTheme)
+            }
+            currentCoroutineContext().ensureActive()
+            if (generation != currentModeThemeGeneration.get()) return false
+            ThemeConfig.applyTheme(context, isNightTheme)
+            BookCover.upDefaultCover()
+            return true
+        } finally {
+            currentModeThemeMutex.unlock()
+        }
     }
 
     suspend fun deleteImportedTheme(context: Context, kit: AppearanceKit): Boolean = withContext(IO) {

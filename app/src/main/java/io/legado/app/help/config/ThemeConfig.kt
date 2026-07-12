@@ -95,23 +95,24 @@ object ThemeConfig {
         return getTheme() == Theme.Dark
     }
 
-    fun applyDayNight(context: Context) {
+    fun applyDayNight(context: Context, isNightTheme: Boolean = AppConfig.isNightTheme) {
         clearUsableBgImageCache()
-        applyTheme(context)
-        initNightMode()
+        applyTheme(context, isNightTheme)
+        initNightMode(isNightTheme)
         BookCover.upDefaultCover()
-        postEvent(EventBus.MAIN_THEME_BACKGROUND_CHANGED, AppConfig.isNightTheme)
+        postEvent(EventBus.MAIN_THEME_BACKGROUND_CHANGED, isNightTheme)
         postEvent(EventBus.RECREATE, "")
     }
 
     fun applyDayNightInit(context: Context) {
-        applyTheme(context)
-        initNightMode()
+        val isNightTheme = AppConfig.isNightTheme
+        applyTheme(context, isNightTheme)
+        initNightMode(isNightTheme)
     }
 
-    private fun initNightMode() {
+    private fun initNightMode(isNightTheme: Boolean = AppConfig.isNightTheme) {
         val targetMode =
-            if (AppConfig.isNightTheme) {
+            if (isNightTheme) {
                 AppCompatDelegate.MODE_NIGHT_YES
             } else {
                 AppCompatDelegate.MODE_NIGHT_NO
@@ -929,10 +930,10 @@ object ThemeConfig {
         }.getOrNull()
     }
 
-    private fun ThemeStore.applyUiFontColor(context: Context): ThemeStore {
-        val color = normalizeThemeColor(context.getPrefString(ThemeRuntimeKeys.uiFontColor()))
+    private fun ThemeStore.applyUiFontColor(context: Context, isNightTheme: Boolean): ThemeStore {
+        val color = normalizeThemeColor(context.getPrefString(ThemeRuntimeKeys.uiFontColor(isNightTheme)))
             ?.toColorInt()
-            ?: defaultThemeTextColor(AppConfig.isNightTheme)
+            ?: defaultThemeTextColor(isNightTheme)
         textColorPrimary(color)
         return this
     }
@@ -945,7 +946,7 @@ object ThemeConfig {
     /**
      * 鏇存柊涓婚
      */
-    fun applyTheme(context: Context) = with(context) {
+    fun applyTheme(context: Context, isNightTheme: Boolean = AppConfig.isNightTheme) = with(context) {
         when {
             AppConfig.isEInkMode -> {
                 ThemeStore.editTheme(this)
@@ -954,11 +955,11 @@ object ThemeConfig {
                     .backgroundColor(Color.WHITE)
                     .bottomBackground(Color.WHITE)
                     .transparentNavBar(true)
-                    .applyUiFontColor(this)
+                    .applyUiFontColor(this, isNightTheme)
                     .apply()
             }
 
-            AppConfig.isNightTheme -> {
+            isNightTheme -> {
                 val primary =
                     getPrefInt(PreferKey.cNPrimary, getCompatColor(R.color.md_blue_grey_600))
                 val accent =
@@ -973,7 +974,7 @@ object ThemeConfig {
                     .backgroundColor(ColorUtils.withAlpha(background, 1f))
                     .bottomBackground(ColorUtils.withAlpha(bBackground, 1f))
                     .transparentNavBar(true)
-                    .applyUiFontColor(this)
+                    .applyUiFontColor(this, isNightTheme)
                     .apply()
             }
 
@@ -992,7 +993,7 @@ object ThemeConfig {
                     .backgroundColor(ColorUtils.withAlpha(background, 1f))
                     .bottomBackground(ColorUtils.withAlpha(bBackground, 1f))
                     .transparentNavBar(true)
-                    .applyUiFontColor(this)
+                    .applyUiFontColor(this, isNightTheme)
                     .apply()
             }
         }

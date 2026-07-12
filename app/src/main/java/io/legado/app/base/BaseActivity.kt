@@ -17,9 +17,11 @@ import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.viewbinding.ViewBinding
+import com.jeremyliao.liveeventbus.LiveEventBus
 import io.legado.app.R
 import io.legado.app.constant.AppConst
 import io.legado.app.constant.AppLog
+import io.legado.app.constant.EventBus
 import io.legado.app.constant.Theme
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ThemeConfig
@@ -53,6 +55,7 @@ abstract class BaseActivity<VB : ViewBinding>(
 
     protected abstract val binding: VB
     private var lastThemeValuesChanged = 0L
+    private var lastNightMode = false
 
     val isInMultiWindow: Boolean
         @SuppressLint("ObsoleteSdkInt")
@@ -95,9 +98,19 @@ abstract class BaseActivity<VB : ViewBinding>(
         window.decorView.disableAutoFill()
         initTheme()
         super.onCreate(savedInstanceState)
+        lastNightMode = AppConfig.isNightTheme
         applyPreferredRefreshRate()
         setupSystemBar()
         setContentView(binding.root)
+        LiveEventBus.get(EventBus.MAIN_THEME_BACKGROUND_CHANGED, Boolean::class.java)
+            .observe(this) { isNightTheme ->
+                if (isNightTheme == AppConfig.isNightTheme) {
+                    lastNightMode = isNightTheme
+                    lastThemeValuesChanged = ThemeStore.valuesChanged(this)
+                    applyRootBackgroundPolicy()
+                    upBackgroundImage()
+                }
+            }
         if (!AppConfig.isEInkMode) {
             binding.root.applyUiBodyTypefaceDeep(uiTypeface())
         }
@@ -141,10 +154,17 @@ abstract class BaseActivity<VB : ViewBinding>(
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
+        val isNightMode = AppConfig.isNightTheme
+        val nightModeChanged = isNightMode != lastNightMode
+        lastNightMode = isNightMode
         applyPreferredRefreshRate()
         findViewById<TitleBar>(R.id.title_bar)
             ?.onMultiWindowModeChanged(isInMultiWindow, fullScreen)
         setupSystemBar()
+        if (nightModeChanged) {
+            applyRootBackgroundPolicy()
+            upBackgroundImage()
+        }
     }
 
     abstract fun onActivityCreated(savedInstanceState: Bundle?)

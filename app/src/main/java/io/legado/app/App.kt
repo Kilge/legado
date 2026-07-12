@@ -21,6 +21,7 @@ import io.legado.app.constant.AppConst.channelIdAiTask
 import io.legado.app.constant.AppConst.channelIdReadAloud
 import io.legado.app.constant.AppConst.channelIdWeb
 import io.legado.app.constant.PreferKey
+import io.legado.app.constant.AppLog
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
@@ -60,16 +61,30 @@ import io.legado.app.utils.defaultSharedPreferences
 import io.legado.app.utils.getPrefBoolean
 import io.legado.app.utils.isDebuggable
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.withContext
 import org.chromium.base.ThreadUtils
 import splitties.init.appCtx
 import splitties.systemservices.notificationManager
 import java.net.URL
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicLong
 import java.util.logging.Level
 
 class App : Application() {
 
     private lateinit var oldConfig: Configuration
+    private val themeConfigurationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var themeConfigurationJob: Job? = null
+    private val themeConfigurationMutex = Mutex()
+    private val themeConfigurationGeneration = AtomicLong()
 
     override fun onCreate() {
         super.onCreate()
@@ -142,13 +157,38 @@ class App : Application() {
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         val diff = newConfig.diff(oldConfig)
-        if ((diff and ActivityInfo.CONFIG_UI_MODE) != 0) {
-            Coroutine.async {
-                runCatching {
-                    AppearanceKitManager.applyCurrentModeTheme(this@App)
+        if ((diff and ActivityInfo.CONFIG_UI_MODE) != 0 && AppConfig.themeMode == "0") {
+            val expectedNight = newConfig.uiMode and Configuration.UI_MODE_NIGHT_MASK ==
+                Configuration.UI_MODE_NIGHT_YES
+            val generation = themeConfigurationGeneration.incrementAndGet()
+            themeConfigurationJob?.cancel()
+            themeConfigurationJob = themeConfigurationScope.launch {
+                try {
+                    themeConfigurationMutex.lock()
+                    try {
+                        currentCoroutineContext().ensureActive()
+                        if (generation != themeConfigurationGeneration.get()) return@launch
+                        val applied = AppearanceKitManager.applyCurrentModeTheme(this@App, expectedNight)
+                        currentCoroutineContext().ensureActive()
+                        if (!applied || generation != themeConfigurationGeneration.get()) return@launch
+                    } finally {
+                        themeConfigurationMutex.unlock()
+                    }
+                    withContext(Dispatchers.Main.immediate) {
+                        val currentNight = resources.configuration.uiMode and
+                            Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
+                        if (generation == themeConfigurationGeneration.get() &&
+                            currentNight == expectedNight &&
+                            AppConfig.themeMode == "0"
+                        ) {
+                            applyDayNight(this@App, expectedNight)
+                        }
+                    }
+                } catch (_: CancellationException) {
+                    // A newer system theme request superseded this one.
+                } catch (e: Throwable) {
+                    AppLog.put("apply system theme failed\n${e.localizedMessage}", e)
                 }
-            }.onFinally {
-                applyDayNight(this@App)
             }
         }
         oldConfig = Configuration(newConfig)
