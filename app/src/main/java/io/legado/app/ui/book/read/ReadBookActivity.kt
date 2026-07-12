@@ -430,6 +430,7 @@ class ReadBookActivity : BaseReadBookActivity(),
     private var epubCoreBoundaryTargetEdge = EpubCorePageEdge.Start
     private var libraryCloudSession: LibraryCloudSession? = null
     private var libraryCloudState: LibraryCloudState = LibraryCloudState.DISABLED
+    private var lastReaderNightMode = AppConfig.isNightTheme
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onActivityCreated(savedInstanceState: Bundle?) {
@@ -677,10 +678,20 @@ class ReadBookActivity : BaseReadBookActivity(),
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
+        val readerNightMode = if (AppConfig.themeMode == "0") {
+            newConfig.uiMode and Configuration.UI_MODE_NIGHT_MASK ==
+                Configuration.UI_MODE_NIGHT_YES
+        } else {
+            AppConfig.isNightTheme
+        }
+        val readerNightModeChanged = readerNightMode != lastReaderNightMode
+        lastReaderNightMode = readerNightMode
         upSystemUiVisibility()
         binding.readView.upStatusBar()
         if (epubCoreActive) {
             refreshEpubCoreAfterConfigurationChange()
+        } else if (readerNightModeChanged) {
+            binding.readView.refreshVisualStyle()
         }
     }
 
@@ -2278,14 +2289,14 @@ class ReadBookActivity : BaseReadBookActivity(),
                 loadEpubCoreContent(resetPageOffset = false)
             } else {
                 upEpubRendererStyle()
-                binding.epubReadView.invalidate()
+                binding.epubReadView.invalidateRendererStyle()
             }
         }
     }
 
     private fun applyEpubRendererStyleOnly() {
         upEpubRendererStyle()
-        binding.epubReadView.invalidate()
+        binding.epubReadView.invalidateRendererStyle()
     }
 
     private fun showEpubCoreLoadingPage(chapterIndex: Int, config: EpubCoreLayoutConfig) {

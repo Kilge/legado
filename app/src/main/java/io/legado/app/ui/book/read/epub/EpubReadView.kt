@@ -1860,6 +1860,11 @@ class EpubReadView @JvmOverloads constructor(
         nextPlusSlot.invalidateDisplayList()
     }
 
+    fun invalidateRendererStyle() {
+        invalidateSlotDisplayLists()
+        invalidate()
+    }
+
     private fun invalidateSlotsIfRenderStateChanged() {
         val version = renderer.renderStateVersion
         if (observedRenderStateVersion == version) return
