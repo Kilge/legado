@@ -33,6 +33,7 @@ import io.legado.app.utils.getFile
 import io.legado.app.utils.getPrefInt
 import io.legado.app.utils.getPrefString
 import io.legado.app.utils.hexString
+import io.legado.app.utils.normalizeFileName
 import io.legado.app.utils.postEvent
 import io.legado.app.utils.printOnDebug
 import io.legado.app.utils.putPrefInt
@@ -72,11 +73,17 @@ object ThemeConfig {
     const val PANEL_BG_CROP = "crop"
     const val PANEL_BG_FIT = "fit"
     val configFilePath = FileUtils.getPath(appCtx.filesDir, configFileName)
+    private val configMutationLock = Any()
+    private val configStore by lazy { AtomicTextFileStore(File(configFilePath)) }
 
-    val configList: ArrayList<Config> by lazy {
-        val cList = normalizeConfigList(getConfigs() ?: DefaultData.themeConfigs)
-        ArrayList(cList)
-    }
+    @Volatile
+    private var configSnapshot: List<Config>? = null
+    val configList: List<Config>
+        get() = configSnapshot ?: synchronized(configMutationLock) {
+            configSnapshot ?: normalizeConfigList(getConfigs() ?: DefaultData.themeConfigs).also {
+                configSnapshot = it
+            }
+        }
 
     private var needClearImg = true
 
@@ -206,24 +213,24 @@ object ThemeConfig {
     }
 
     fun upConfig() {
-        configList.clear()
-        configList.addAll(normalizeConfigList(getConfigs() ?: DefaultData.themeConfigs))
+        synchronized(configMutationLock) {
+            val refreshed = normalizeConfigList(getConfigs() ?: DefaultData.themeConfigs)
+            configSnapshot = refreshed
+        }
     }
 
     fun save() {
-        val normalized = normalizeConfigList(configList)
-        if (normalized != configList) {
-            configList.clear()
-            configList.addAll(normalized)
+        synchronized(configMutationLock) {
+            commitConfigList(configList.toList())
         }
-        val json = GSON.toJson(configList)
-        FileUtils.delete(configFilePath)
-        FileUtils.createFileIfNotExist(configFilePath).writeText(json)
     }
 
     fun delConfig(index: Int) {
-        configList.removeAt(index)
-        save()
+        synchronized(configMutationLock) {
+            val candidate = configList.toMutableList()
+            candidate.removeAt(index)
+            commitConfigList(candidate)
+        }
     }
 
     fun addConfig(json: String): Boolean {
@@ -241,20 +248,19 @@ object ThemeConfig {
         if (!validateConfig(newConfig)) {
             return
         }
-        var hasTheme = false
-        configList.forEachIndexed { index, config ->
-            if (newConfig.themeName == config.themeName &&
-                newConfig.isNightTheme == config.isNightTheme
-            ) {
-                configList[index] = newConfig
-                hasTheme = true
-                return@forEachIndexed
+        synchronized(configMutationLock) {
+            val candidate = configList.toMutableList()
+            val existingIndex = candidate.indexOfFirst {
+                newConfig.themeName == it.themeName &&
+                    newConfig.isNightTheme == it.isNightTheme
             }
+            if (existingIndex >= 0) {
+                candidate[existingIndex] = newConfig
+            } else {
+                candidate.add(newConfig)
+            }
+            commitConfigList(candidate)
         }
-        if (!hasTheme) {
-            configList.add(newConfig)
-        }
-        save()
     }
 
     fun addConfigs(newConfigs: List<Config>?) {
@@ -264,18 +270,70 @@ object ThemeConfig {
         if (newConfigs.isNullOrEmpty()) {
             return
         }
-        newConfigs.forEach { newConfig ->
-            val existingIndex = configList.indexOfFirst {
-                it.themeName == newConfig.themeName &&
-                    it.isNightTheme == newConfig.isNightTheme
+        synchronized(configMutationLock) {
+            val candidate = configList.toMutableList()
+            newConfigs.forEach { newConfig ->
+                val existingIndex = candidate.indexOfFirst {
+                    it.themeName == newConfig.themeName &&
+                        it.isNightTheme == newConfig.isNightTheme
+                }
+                if (existingIndex != -1) {
+                    candidate[existingIndex] = newConfig
+                } else {
+                    candidate.add(newConfig)
+                }
             }
-            if (existingIndex != -1) {
-                configList[existingIndex] = newConfig
-            } else {
-                configList.add(newConfig)
-            }
+            commitConfigList(candidate)
         }
-        save()
+    }
+
+    internal fun replaceImportedConfig(
+        newConfig: Config,
+        replacedThemeName: String?,
+        replacedDirName: String?
+    ) {
+        require(validateConfig(newConfig)) { "invalid imported theme config" }
+        synchronized(configMutationLock) {
+            val oldName = replacedThemeName?.trim().orEmpty()
+            val oldDirName = replacedDirName?.trim().orEmpty()
+            val candidate = configList.filterNot { config ->
+                config.isNightTheme == newConfig.isNightTheme &&
+                    (config.themeName == newConfig.themeName ||
+                        (oldName.isNotEmpty() && config.themeName == oldName) ||
+                        (oldDirName.isNotEmpty() && config.themeName.normalizeFileName() == oldDirName))
+            } + newConfig
+            commitConfigList(candidate)
+        }
+    }
+
+    internal fun removePersistedConfig(
+        isNightTheme: Boolean,
+        themeName: String,
+        dirName: String
+    ): Boolean = synchronized(configMutationLock) {
+        val normalizedName = themeName.trim()
+        val normalizedDirName = dirName.trim().ifBlank { normalizedName.normalizeFileName() }
+        val candidate = configList.filterNot { config ->
+            config.isNightTheme == isNightTheme &&
+                (config.themeName == normalizedName ||
+                    config.themeName.normalizeFileName() == normalizedDirName)
+        }
+        if (candidate.size == configList.size) {
+            false
+        } else {
+            commitConfigList(candidate)
+            true
+        }
+    }
+
+    private fun commitConfigList(candidate: List<Config>) {
+        val normalized = normalizeConfigList(candidate)
+        val json = GSON.toJson(normalized)
+        configStore.writeVerified(json) { persistedJson ->
+            val persisted = GSON.fromJsonArray<Config>(persistedJson).getOrNull()
+            persisted != null && normalizeConfigList(persisted) == normalized
+        }
+        configSnapshot = normalized
     }
 
     private fun validateConfig(config: Config): Boolean {
@@ -302,6 +360,7 @@ object ThemeConfig {
 
     private fun getConfigs(): List<Config>? {
         val configFile = File(configFilePath)
+        configStore.recoverInterruptedCommit()
         if (configFile.exists()) {
             kotlin.runCatching {
                 val json = configFile.readText()

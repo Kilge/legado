@@ -458,15 +458,7 @@ object ThemePackageManager {
     }
 
     private fun removeThemeConfig(isNightTheme: Boolean, themeName: String, dirName: String) {
-        val normalizedName = themeName.trim()
-        val normalizedDirName = dirName.ifBlank { normalizedName.normalizeFileName() }
-        val removed = ThemeConfig.configList.removeAll { config ->
-            config.isNightTheme == isNightTheme &&
-                (config.themeName == normalizedName || config.themeName.normalizeFileName() == normalizedDirName)
-        }
-        if (removed) {
-            ThemeConfig.save()
-        }
+        ThemeConfig.removePersistedConfig(isNightTheme, themeName, dirName)
     }
 
     private fun loadLocal(isNightTheme: Boolean): List<Entry> {
