@@ -1,6 +1,7 @@
 package io.legado.app.help.config
 
 import android.content.Context
+import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.drawable.Drawable
 import android.util.DisplayMetrics
@@ -50,12 +51,21 @@ import io.legado.app.utils.MD5Utils
 import io.legado.app.utils.getPrefBoolean
 import io.legado.app.utils.putPrefBoolean
 import io.legado.app.utils.toastOnUi
-import java.io.FileOutputStream
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.sync.Mutex
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 
 @Keep
 object ThemeConfig {
 
+    private const val MAX_REMOTE_BACKGROUND_BYTES = 32L * 1024L * 1024L
+    private const val MAX_REMOTE_BACKGROUND_PIXELS = 100_000_000L
+    private const val MAX_NINE_PATCH_BACKGROUND_PIXELS = 4_000_000L
+    private const val MAX_NINE_PATCH_DIMENSION = 4096
+    private const val VALIDATION_DECODE_PIXELS = 1_000_000L
+    private val backgroundDownloadLocks = ConcurrentHashMap<String, Mutex>()
     private var usableBgImageCacheKey: String? = null
     private var usableBgImageCacheValue: Boolean = false
     const val configFileName = "themeConfig.json"
@@ -136,7 +146,7 @@ object ThemeConfig {
             val name = getUrlToFile(path)
             val fileRoot = context.externalFiles
             val filePath = FileUtils.getPath(fileRoot, preferenceKey, name)
-            if (!FileUtils.exist(filePath)) return null
+            if (!isUsableThemeImage(File(filePath))) return null
             path = filePath
         }
         if (path.endsWith(".9.png")) {
@@ -163,17 +173,17 @@ object ThemeConfig {
             else -> return false
         }
         val path = context.getPrefString(preferenceKey)?.takeIf { it.isNotBlank() } ?: return false
-        val cacheKey = "$preferenceKey|$path"
-        if (usableBgImageCacheKey == cacheKey) {
-            return usableBgImageCacheValue
-        }
         if (path.startsWith("http", ignoreCase = true)) {
-            val filePath = FileUtils.getPath(context.externalFiles, preferenceKey, getUrlToFile(path))
-            return FileUtils.exist(filePath).also {
+            val file = File(FileUtils.getPath(context.externalFiles, preferenceKey, getUrlToFile(path)))
+            val cacheKey = "$preferenceKey|$path|${file.length()}|${file.lastModified()}"
+            if (usableBgImageCacheKey == cacheKey) return usableBgImageCacheValue
+            return isUsableThemeImage(file).also {
                 usableBgImageCacheKey = cacheKey
                 usableBgImageCacheValue = it
             }
         }
+        val cacheKey = "$preferenceKey|$path"
+        if (usableBgImageCacheKey == cacheKey) return usableBgImageCacheValue
         return isReadableThemeFile(path).also {
             usableBgImageCacheKey = cacheKey
             usableBgImageCacheValue = it
@@ -363,27 +373,24 @@ object ThemeConfig {
                     fileFold.mkdirs()
                 }
                 val fileImg = File(fileFold, name)
-                if (!fileImg.exists()) {
+                if (!isUsableThemeImage(fileImg)) {
+                    if (fileImg.exists()) {
+                        fileImg.delete()
+                        clearUsableBgImageCache()
+                    }
                     appCtx.toastOnUi(R.string.theme_background_downloading)
                     Coroutine.async {
-                        kotlin.runCatching {
-                            val res = okHttpClient.newCallResponse(0) {
-                                url(backgroundPath)
-                            }
-                            res.body.byteStream().use { inputStream ->
-                                FileOutputStream(fileImg).use { outputStream ->
-                                    inputStream.copyTo(outputStream)
-                                }
-                            }
-                        }.onSuccess {
+                        downloadThemeBackground(backgroundPath, fileImg)
+                    }.onSuccess { downloaded ->
+                        if (downloaded) {
                             appCtx.toastOnUi(R.string.theme_background_downloaded)
                             if (notify) {
                                 postEvent(EventBus.MAIN_THEME_BACKGROUND_CHANGED, isNightTheme)
                                 postEvent(EventBus.RECREATE, "")
                             }
-                        }.onFailure {
-                            appCtx.toastOnUi(it.localizedMessage)
                         }
+                    }.onError {
+                        appCtx.toastOnUi(it.localizedMessage)
                     }
                 }
             }
@@ -731,6 +738,98 @@ object ThemeConfig {
         return runCatching {
             FileInputStream(file).use { true }
         }.getOrDefault(false)
+    }
+
+    private fun isUsableThemeImage(file: File, isNinePatchOverride: Boolean? = null): Boolean {
+        if (!file.isFile || file.length() <= 0L || file.length() > MAX_REMOTE_BACKGROUND_BYTES) {
+            return false
+        }
+        return runCatching {
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeFile(file.absolutePath, bounds)
+            if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return@runCatching false
+            val pixels = bounds.outWidth.toLong() * bounds.outHeight.toLong()
+            val isNinePatch = isNinePatchOverride
+                ?: file.name.endsWith(".9.png", ignoreCase = true)
+            if (isNinePatch) {
+                if (bounds.outWidth > MAX_NINE_PATCH_DIMENSION ||
+                    bounds.outHeight > MAX_NINE_PATCH_DIMENSION ||
+                    pixels > MAX_NINE_PATCH_BACKGROUND_PIXELS
+                ) {
+                    return@runCatching false
+                }
+            } else if (pixels > MAX_REMOTE_BACKGROUND_PIXELS) {
+                return@runCatching false
+            }
+
+            var sampleSize = 1
+            while ((bounds.outWidth / sampleSize).toLong() *
+                (bounds.outHeight / sampleSize).toLong() > VALIDATION_DECODE_PIXELS
+            ) {
+                sampleSize *= 2
+            }
+            val decoded = BitmapFactory.decodeFile(
+                file.absolutePath,
+                BitmapFactory.Options().apply { inSampleSize = sampleSize }
+            ) ?: return@runCatching false
+            decoded.recycle()
+            true
+        }.getOrDefault(false)
+    }
+
+    private suspend fun downloadThemeBackground(url: String, target: File): Boolean {
+        val mutex = backgroundDownloadLocks.getOrPut(target.absolutePath) { Mutex() }
+        mutex.lock()
+        try {
+            if (isUsableThemeImage(target)) return false
+            check(!target.exists() || target.delete()) { "failed to remove invalid theme background" }
+            target.parentFile?.mkdirs()
+            target.parentFile?.listFiles { file ->
+                file.name.startsWith(".${target.name}.") && file.name.endsWith(".part")
+            }?.forEach(File::delete)
+            val temp = File(target.parentFile, ".${target.name}.${System.nanoTime()}.part")
+            val isNinePatch = target.name.endsWith(".9.png", ignoreCase = true)
+            try {
+                okHttpClient.newCallResponse(0) { url(url) }.use { response ->
+                    check(response.isSuccessful) { "HTTP ${response.code}" }
+                    val contentLength = response.body.contentLength()
+                    check(contentLength < 0L || contentLength <= MAX_REMOTE_BACKGROUND_BYTES) {
+                        "theme background is too large"
+                    }
+                    response.body.byteStream().use { input ->
+                        temp.outputStream().buffered().use { output ->
+                            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                            var total = 0L
+                            while (true) {
+                                currentCoroutineContext().ensureActive()
+                                val read = input.read(buffer)
+                                if (read < 0) break
+                                total += read
+                                check(total <= MAX_REMOTE_BACKGROUND_BYTES) {
+                                    "theme background is too large"
+                                }
+                                output.write(buffer, 0, read)
+                            }
+                            check(contentLength < 0L || total == contentLength) {
+                                "incomplete theme background download"
+                            }
+                        }
+                    }
+                }
+                check(isUsableThemeImage(temp, isNinePatch)) { "invalid theme background image" }
+                check(temp.renameTo(target)) { "failed to install theme background" }
+                if (!isUsableThemeImage(target, isNinePatch)) {
+                    target.delete()
+                    error("invalid installed theme background")
+                }
+                clearUsableBgImageCache()
+                return true
+            } finally {
+                if (temp.exists()) temp.delete()
+            }
+        } finally {
+            mutex.unlock()
+        }
     }
 
     private fun isOtherAppExternalDataPath(path: String): Boolean {
