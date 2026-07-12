@@ -1038,26 +1038,30 @@ object ThemePackageManager {
             if (exists()) FileUtils.delete(this, deleteRootDir = true)
             mkdirs()
         }
-        ZipUtils.unZipToPath(zipFile, unzipDir)
-        val packageFile = unzipDir.walkTopDown().firstOrNull { it.isFile && it.name == packageFileName }
-            ?: throw IllegalArgumentException(appCtx.getString(R.string.theme_config_file_missing))
-        val pkg = GSON.fromJsonObject<Package>(packageFile.readText()).getOrThrow()
-        val dirName = pkg.dirName.ifBlank { pkg.name.normalizeFileName() }
-        val targetDir = localDir(pkg.isNightTheme, dirName)
-        if (targetDir.exists()) {
-            FileUtils.delete(targetDir, deleteRootDir = true)
+        try {
+            ZipUtils.unZipToPath(zipFile, unzipDir)
+            val packageFile = unzipDir.walkTopDown().firstOrNull { it.isFile && it.name == packageFileName }
+                ?: throw IllegalArgumentException(appCtx.getString(R.string.theme_config_file_missing))
+            val pkg = GSON.fromJsonObject<Package>(packageFile.readText()).getOrThrow()
+            val dirName = pkg.dirName.ifBlank { pkg.name.normalizeFileName() }
+            val targetDir = localDir(pkg.isNightTheme, dirName)
+            if (targetDir.exists()) {
+                FileUtils.delete(targetDir, deleteRootDir = true)
+            }
+            targetDir.mkdirs()
+            packageFile.parentFile?.copyRecursively(targetDir, overwrite = true)
+            val restoredPackage = readPackage(targetDir) ?: pkg
+            val targetPackage = if (remoteUpdatedAt == 0L) {
+                restoredPackage.copy(updatedAt = System.currentTimeMillis())
+            } else {
+                restoredPackage
+            }
+            File(targetDir, packageFileName).writeText(GSON.toJson(targetPackage))
+            ThemeConfig.addConfig(resolveConfigPaths(targetPackage, targetDir))
+            return Entry(targetPackage, Source.LOCAL, localDir = targetDir, remoteUpdatedAt = remoteUpdatedAt)
+        } finally {
+            FileUtils.delete(unzipDir, deleteRootDir = true)
         }
-        targetDir.mkdirs()
-        packageFile.parentFile?.copyRecursively(targetDir, overwrite = true)
-        val restoredPackage = readPackage(targetDir) ?: pkg
-        val targetPackage = if (remoteUpdatedAt == 0L) {
-            restoredPackage.copy(updatedAt = System.currentTimeMillis())
-        } else {
-            restoredPackage
-        }
-        File(targetDir, packageFileName).writeText(GSON.toJson(targetPackage))
-        ThemeConfig.addConfig(resolveConfigPaths(targetPackage, targetDir))
-        return Entry(targetPackage, Source.LOCAL, localDir = targetDir, remoteUpdatedAt = remoteUpdatedAt)
     }
 
     private fun copyAssetsIntoPackage(
