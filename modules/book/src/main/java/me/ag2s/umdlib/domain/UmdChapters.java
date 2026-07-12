@@ -3,6 +3,7 @@ package me.ag2s.umdlib.domain;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -29,7 +30,8 @@ public class UmdChapters {
 
     private final List<byte[]> titles = new ArrayList<>();
     public List<Integer> contentLengths = new ArrayList<>();
-    public ByteArrayOutputStream contents = new ByteArrayOutputStream();
+    // Keep the public field type for source/binary compatibility with the original library.
+    public ByteArrayOutputStream contents = new SliceableByteArrayOutputStream();
 
     public void addTitle(String s) {
         titles.add(UmdUtils.stringToUnicodeBytes(s));
@@ -49,19 +51,33 @@ public class UmdChapters {
 
     public byte[] getContent(int index) {
         int st = contentLengths.get(index);
-        byte[] b = contents.toByteArray();
         int end = index + 1 < contentLengths.size() ? contentLengths.get(index + 1) : getTotalContentLen();
-        System.out.println("总长度:" + contents.size());
-        System.out.println("起始值:" + st);
-        System.out.println("结束值:" + end);
-        byte[] bAr = new byte[end - st];
-        System.arraycopy(b, st, bAr, 0, bAr.length);
-        return bAr;
+        ByteArrayOutputStream currentContents = contents;
+        return copyContentRange(currentContents, st, end);
+    }
 
+    private byte[] copyContentRange(ByteArrayOutputStream currentContents, int start, int end) {
+        if (currentContents instanceof SliceableByteArrayOutputStream) {
+            return ((SliceableByteArrayOutputStream) currentContents).copyRange(start, end);
+        }
+        byte[] snapshot = currentContents.toByteArray();
+        byte[] chapter = new byte[end - start];
+        System.arraycopy(snapshot, start, chapter, 0, chapter.length);
+        return chapter;
     }
 
     public String getContentString(int index) {
-        return UmdUtils.unicodeBytesToString(getContent(index)).replace((char) 0x2029, '\n');
+        int start = contentLengths.get(index);
+        int end = index + 1 < contentLengths.size() ? contentLengths.get(index + 1) : getTotalContentLen();
+        String content;
+        ByteArrayOutputStream currentContents = contents;
+        if (currentContents instanceof SliceableByteArrayOutputStream) {
+            content = ((SliceableByteArrayOutputStream) currentContents)
+                    .decodeRange(start, end - start, StandardCharsets.UTF_16LE);
+        } else {
+            content = UmdUtils.unicodeBytesToString(copyContentRange(currentContents, start, end));
+        }
+        return content.replace((char) 0x2029, '\n');
 
     }
 
@@ -119,8 +135,12 @@ public class UmdChapters {
     }
 
     private void writeChaptersChunks(WrapOutputStream wos) throws IOException {
-        byte[] allContents = contents.toByteArray();
-
+        ByteArrayOutputStream currentContents = contents;
+        SliceableByteArrayOutputStream sliceableContents =
+                currentContents instanceof SliceableByteArrayOutputStream
+                        ? (SliceableByteArrayOutputStream) currentContents
+                        : null;
+        byte[] fallbackSnapshot = sliceableContents == null ? currentContents.toByteArray() : null;
         byte[] zero16 = new byte[16];
         Arrays.fill(zero16, 0, zero16.length, (byte) 0);
 
@@ -132,22 +152,26 @@ public class UmdChapters {
         ByteArrayOutputStream bos = new ByteArrayOutputStream(DEFAULT_CHUNK_INIT_SIZE + 256);
         List<byte[]> chunkRbList = new ArrayList<>();
 
-        while (startPos < allContents.length) {
-            left = allContents.length - startPos;
+        int contentSize = fallbackSnapshot == null ? sliceableContents.size() : fallbackSnapshot.length;
+        while (startPos < contentSize) {
+            left = contentSize - startPos;
             len = Math.min(DEFAULT_CHUNK_INIT_SIZE, left);
 
             bos.reset();
             DeflaterOutputStream zos = new DeflaterOutputStream(bos);
-            zos.write(allContents, startPos, len);
+            if (fallbackSnapshot == null) {
+                sliceableContents.writeRangeTo(zos, startPos, len);
+            } else {
+                zos.write(fallbackSnapshot, startPos, len);
+            }
             zos.close();
-            byte[] chunk = bos.toByteArray();
 
             byte[] rb = UmdUtils.genRandomBytes(4);
             wos.writeByte('$');
             wos.writeBytes(rb);  // 4 random
             chunkRbList.add(rb);
-            wos.writeInt(chunk.length + 9);
-            wos.write(chunk);
+            wos.writeInt(bos.size() + 9);
+            bos.writeTo(wos);
 
             // end of each chunk
             wos.writeBytes('#', 0xF1, 0, 0, 0x15);
