@@ -1284,14 +1284,12 @@
     <string name="path">path</string>
     <string name="direct_link_upload_rule">Straight chain upload rule</string>
     <string name="direct_link_upload_rule_summary">Used to generate direct link url when exporting book source, book list</string>
-    <string name="direct_link_upload_config">Direct link upload configuration</string>
     <string name="copy_play_url">Copy Play Url</string>
     <string name="skip_book_credits">Skip opening and closing</string>
     <string name="opening_credits">Opening</string>
     <string name="closing_credits">Closing</string>
     <string name="set_source_variable">Set source variable</string>
     <string name="set_book_variable">Set book variable</string>
-    <string name="summary">summary</string>
     <string name="cover_config">cover config</string>
     <string name="cover_config_summary">Generic Cover Rules and Default Cover Style</string>
     <string name="book_info_background_image">Book detail background image (day)</string>
@@ -1639,9 +1637,7 @@ function login() {
     <string name="export_chapter_index">The section index that needs to be exported</string>
     <string name="shrink_database">Shrink database</string>
     <string name="shrink_database_summary">Reduce the size of the database file</string>
-    <string name="is_compress">Compressed or not</string>
     <string name="sort_desc">Descend order</string>
-    <string name="test">Test</string>
     <string name="show_wait_up_count">Display the number of pending updates</string>
     <string name="exit_app">Exit</string>
     <string name="result_analyzed">Analyzed</string>

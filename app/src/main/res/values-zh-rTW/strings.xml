@@ -894,11 +894,9 @@
     <string name="path">路徑</string>
     <string name="direct_link_upload_rule">直鏈上傳規則</string>
     <string name="direct_link_upload_rule_summary">用於匯出書源書單時生成直鏈url</string>
-    <string name="direct_link_upload_config">直鏈上傳配置</string>
     <string name="copy_play_url">複製播放Url</string>
     <string name="set_source_variable">設定源變數</string>
     <string name="set_book_variable">設定書籍變數</string>
-    <string name="summary">注釋</string>
     <string name="cover_config">封面設定</string>
     <string name="cover_config_summary">通用封面規則及預設封面樣式</string>
     <string name="cover_show_name">顯示書名</string>
@@ -1129,9 +1127,7 @@
     <string name="export_chapter_index">需要輸出的章節</string>
     <string name="shrink_database">压缩数据库</string>
     <string name="shrink_database_summary">减小数据库文件的大小</string>
-    <string name="is_compress">是否压缩</string>
     <string name="sort_desc">反序</string>
-    <string name="test">测试</string>
     <string name="show_wait_up_count">显示等待更新数量</string>
     <string name="exit_app">退出软件</string>
     <string name="result_analyzed">解析示例</string>

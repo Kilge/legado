@@ -1074,14 +1074,12 @@
     <string name="path">路径</string>
     <string name="direct_link_upload_rule">直链上传规则</string>
     <string name="direct_link_upload_rule_summary">用于导出书源书单时生成直链 URL</string>
-    <string name="direct_link_upload_config">直链上传配置</string>
     <string name="copy_play_url">拷贝播放 URL</string>
     <string name="skip_book_credits">跳过片头片尾</string>
     <string name="opening_credits">片头</string>
     <string name="closing_credits">片尾</string>
     <string name="set_source_variable">设置源变量</string>
     <string name="set_book_variable">设置书籍变量</string>
-    <string name="summary">注释</string>
     <string name="cover_config">封面设置</string>
     <string name="cover_config_summary">通用封面规则及默认封面样式</string>
     <string name="book_info_background_image">详情页背景图（日间）</string>
@@ -1348,9 +1346,7 @@
     <string name="export_chapter_index">需要输出的章节</string>
     <string name="shrink_database">压缩数据库</string>
     <string name="shrink_database_summary">减小数据库文件的大小</string>
-    <string name="is_compress">是否压缩</string>
     <string name="sort_desc">反序</string>
-    <string name="test">测试</string>
     <string name="show_wait_up_count">显示等待更新数量</string>
     <string name="exit_app">退出软件</string>
     <string name="result_analyzed">解析示例</string>

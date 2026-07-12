@@ -894,11 +894,9 @@
     <string name="path">đường dẫn</string>
     <string name="direct_link_upload_rule">Quy tắc tải lên liên kết trực tiếp</string>
     <string name="direct_link_upload_rule_summary">Được sử dụng để tạo URL liên kết trực tiếp khi xuất nguồn sách, danh sách sách</string>
-    <string name="direct_link_upload_config">Cấu hình tải lên liên kết trực tiếp</string>
     <string name="copy_play_url">Sao chép URL phát</string>
     <string name="set_source_variable">Đặt biến nguồn</string>
     <string name="set_book_variable">Đặt biến sách</string>
-    <string name="summary">tóm tắt</string>
     <string name="cover_config">cấu hình bìa</string>
     <string name="cover_config_summary">Quy tắc bìa chung và kiểu bìa mặc định</string>
     <string name="cover_show_name">hiển thị tên</string>
@@ -1124,9 +1122,7 @@
     <string name="export_chapter_index">Chỉ mục phần cần xuất</string>
     <string name="shrink_database">Thu nhỏ cơ sở dữ liệu</string>
     <string name="shrink_database_summary">Giảm kích thước của tệp cơ sở dữ liệu</string>
-    <string name="is_compress">Có nén không</string>
     <string name="sort_desc">Thứ tự giảm dần</string>
-    <string name="test">Kiểm tra</string>
     <string name="show_wait_up_count">Hiển thị số lượng cập nhật đang chờ</string>
     <string name="exit_app">Thoát phần mềm</string>
     <string name="result_analyzed">Đã phân tích</string>
