@@ -103,7 +103,16 @@ public class StreamReader {
     }
 
     public void skip(int len) throws IOException {
-        readBytes(len);
+        if (len < 0) {
+            throw new IllegalArgumentException("Length must > 0: " + len);
+        }
+        byte[] buffer = new byte[Math.min(len, 8 * 1024)];
+        int remaining = len;
+        while (remaining > 0) {
+            int count = Math.min(remaining, buffer.length);
+            readFully(buffer, 0, count);
+            remaining -= count;
+        }
     }
 
 
