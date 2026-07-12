@@ -79,11 +79,6 @@ class PageView(context: Context) : FrameLayout(context) {
     private var pairedTextPage: TextPage? = null
     private var advancedTitleLottieKey: String? = null
     private var advancedTitlePairLottieKey: String? = null
-    private val lottieImageCache = object : LinkedHashMap<String, android.graphics.Bitmap>(8, 0.75f, true) {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, android.graphics.Bitmap>?): Boolean {
-            return size > MAX_LOTTIE_IMAGE_CACHE_SIZE
-        }
-    }
     private val styledLottieJsonCache = object : LinkedHashMap<String, String>(8, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, String>?): Boolean {
             return size > MAX_STYLED_LOTTIE_CACHE_SIZE
@@ -120,9 +115,6 @@ class PageView(context: Context) : FrameLayout(context) {
         binding.advancedTitleLottiePair.cancelAnimation()
         binding.contentTextView.setScrollFollowBackground(null, 255)
         binding.vwRoot.background = null
-        synchronized(lottieImageCache) {
-            lottieImageCache.clear()
-        }
         synchronized(styledLottieJsonCache) {
             styledLottieJsonCache.clear()
         }
@@ -730,14 +722,26 @@ class PageView(context: Context) : FrameLayout(context) {
         lottieView.translationY = resolveTitleTranslationY(block, targetHeight)
         lottieView.repeatCount = LottieDrawable.INFINITE
         lottieView.setFontAssetDelegate(defaultFontAssetDelegate)
-        lottieView.setImageAssetDelegate(dataUriImageAssetDelegate)
         val json = block.payload?.takeIf { it.isNotBlank() }
         val resolvedJson = json?.let { applyLottieTextFallbackStyle(it, advancedTitleTextLayerScale(block, pageWidth)) }
-        val nextKey = resolvedJson?.let { "advanced_title:${it.hashCode()}" } ?: "advanced_title:raw"
+        val compositionSize = resolvedJson?.let(::lottieCompositionSize)
+        lottieView.setMaintainOriginalImageBounds(true)
+        lottieView.setImageAssetDelegate(
+            dataUriImageAssetDelegate(
+                viewWidth = targetWidth,
+                viewHeight = targetHeight,
+                compositionWidth = compositionSize?.first ?: targetWidth,
+                compositionHeight = compositionSize?.second ?: targetHeight
+            )
+        )
+        lottieView.setCacheComposition(resolvedJson == null)
+        val nextKey = resolvedJson?.let {
+            "advanced_title:${it.hashCode()}:$targetWidth:$targetHeight"
+        } ?: "advanced_title:raw:$targetWidth:$targetHeight"
         if (currentKey != nextKey) {
             runCatching {
                 if (resolvedJson != null) {
-                    lottieView.setAnimationFromJson(resolvedJson, nextKey)
+                    lottieView.setAnimationFromJson(resolvedJson, null)
                 } else {
                     lottieView.setAnimation(R.raw.advanced_title_lottie)
                 }
@@ -900,18 +904,39 @@ class PageView(context: Context) : FrameLayout(context) {
         }
     }
 
-    private val dataUriImageAssetDelegate = ImageAssetDelegate { asset: LottieImageAsset ->
+    private fun lottieCompositionSize(json: String): Pair<Int, Int>? {
+        return runCatching {
+            val root = JSONObject(json)
+            val width = root.optInt("w")
+            val height = root.optInt("h")
+            if (width > 0 && height > 0) width to height else null
+        }.getOrNull()
+    }
+
+    private fun dataUriImageAssetDelegate(
+        viewWidth: Int,
+        viewHeight: Int,
+        compositionWidth: Int,
+        compositionHeight: Int
+    ) = ImageAssetDelegate { asset: LottieImageAsset ->
         val source = resolveLottieAssetSource(asset) ?: return@ImageAssetDelegate null
-        synchronized(lottieImageCache) {
-            lottieImageCache[source]?.let { return@ImageAssetDelegate it }
+        val decodeSize = LottieImageMemoryPolicy.decodeSize(
+            assetWidth = asset.width.takeIf { it > 0 } ?: compositionWidth.coerceAtLeast(viewWidth),
+            assetHeight = asset.height.takeIf { it > 0 } ?: compositionHeight.coerceAtLeast(viewHeight),
+            viewWidth = viewWidth,
+            viewHeight = viewHeight,
+            compositionWidth = compositionWidth,
+            compositionHeight = compositionHeight
+        ) ?: return@ImageAssetDelegate null
+        val cacheKey = LottieImageCacheKey(
+            sourceSha256 = LottieImageMemoryPolicy.sourceSha256(source),
+            width = decodeSize.width,
+            height = decodeSize.height
+        )
+        LottieImageBitmapCache.get(cacheKey)?.let { return@ImageAssetDelegate it }
+        loadLottieAssetBitmap(source, decodeSize)?.also { bitmap ->
+            LottieImageBitmapCache.put(cacheKey, bitmap)
         }
-        val bitmap = loadLottieAssetBitmap(source)
-        if (bitmap != null) {
-            synchronized(lottieImageCache) {
-                lottieImageCache[source] = bitmap
-            }
-        }
-        bitmap
     }
 
     private fun resolveLottieAssetSource(asset: LottieImageAsset): String? {
@@ -925,19 +950,46 @@ class PageView(context: Context) : FrameLayout(context) {
         }
     }
 
-    private fun loadLottieAssetBitmap(source: String): android.graphics.Bitmap? {
+    private fun loadLottieAssetBitmap(source: String, decodeSize: LottieDecodeSize): android.graphics.Bitmap? {
         return runCatching {
             val bytes = source.decodeBase64DataUrlBytes() ?: return@runCatching null
-            decodeBitmapByType(source, bytes)
+            decodeBitmapByType(source, bytes, decodeSize)
         }.getOrNull()
     }
 
-    private fun decodeBitmapByType(source: String, bytes: ByteArray): android.graphics.Bitmap? {
+    private fun decodeBitmapByType(
+        source: String,
+        bytes: ByteArray,
+        decodeSize: LottieDecodeSize
+    ): android.graphics.Bitmap? {
         val lower = source.lowercase()
         return if (lower.contains("image/svg+xml") || lower.endsWith(".svg")) {
-            SvgUtils.createBitmap(ByteArrayInputStream(bytes), 1200, 1200)
+            SvgUtils.createBitmap(ByteArrayInputStream(bytes), decodeSize.width, decodeSize.height)
         } else {
-            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+            decodeRasterBitmap(bytes, decodeSize)
+        }
+    }
+
+    private fun decodeRasterBitmap(bytes: ByteArray, decodeSize: LottieDecodeSize): android.graphics.Bitmap? {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        val target = LottieImageMemoryPolicy.fitSourceInto(bounds.outWidth, bounds.outHeight, decodeSize)
+            ?: return null
+        var sampleSize = 1
+        while (bounds.outWidth / (sampleSize * 2) >= target.width &&
+            bounds.outHeight / (sampleSize * 2) >= target.height
+        ) {
+            sampleSize *= 2
+        }
+        val decoded = BitmapFactory.decodeByteArray(
+            bytes,
+            0,
+            bytes.size,
+            BitmapFactory.Options().apply { inSampleSize = sampleSize }
+        ) ?: return null
+        if (decoded.width == target.width && decoded.height == target.height) return decoded
+        return android.graphics.Bitmap.createScaledBitmap(decoded, target.width, target.height, true).also {
+            if (it !== decoded) decoded.recycle()
         }
     }
 
@@ -961,6 +1013,5 @@ class PageView(context: Context) : FrameLayout(context) {
         const val ADVANCED_TITLE_SIZE_FACTOR = 1.25f
         const val ADVANCED_TITLE_WIDTH_FACTOR = 0.86f
         const val MAX_STYLED_LOTTIE_CACHE_SIZE = 6
-        const val MAX_LOTTIE_IMAGE_CACHE_SIZE = 4
     }
 }

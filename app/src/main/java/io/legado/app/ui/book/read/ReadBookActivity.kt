@@ -151,6 +151,7 @@ import io.legado.app.ui.book.read.config.TipConfigDialog.Companion.TIP_COLOR
 import io.legado.app.ui.book.read.config.TipConfigDialog.Companion.TIP_DIVIDER_COLOR
 import io.legado.app.ui.book.read.page.ContentTextView
 import io.legado.app.ui.book.read.page.ReadView
+import io.legado.app.ui.book.read.page.LottieImageBitmapCache
 import io.legado.app.ui.book.read.page.delegate.ScrollPageDelegate
 import io.legado.app.ui.book.read.page.entities.PageDirection
 import io.legado.app.ui.book.read.page.entities.TextPage
@@ -4966,8 +4967,14 @@ class ReadBookActivity : BaseReadBookActivity(),
         commentWebViewSession?.trimMemory(level)
         when {
             level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL ||
-                    level == ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN -> ImageProvider.clear()
-            level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW -> ImageProvider.trimMemory()
+                    level == ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN -> {
+                ImageProvider.clear()
+                LottieImageBitmapCache.clear()
+            }
+            level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW -> {
+                ImageProvider.trimMemory()
+                LottieImageBitmapCache.trimMemory()
+            }
         }
     }
 

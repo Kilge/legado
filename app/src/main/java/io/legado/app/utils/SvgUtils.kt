@@ -8,7 +8,6 @@ import android.util.Size
 import java.io.FileInputStream
 import java.io.InputStream
 import com.caverock.androidsvg.SVG
-import kotlin.math.max
 
 @Suppress("WeakerAccess", "MemberVisibilityCanBePrivate")
 object SvgUtils {
@@ -62,15 +61,9 @@ object SvgUtils {
     /////// private method
     private fun createBitmap(svg: SVG, width: Int? = null, height: Int? = null): Bitmap {
         val size = getSize(svg)
-        val wRatio = width?.let { size.width / it } ?: -1
-        val hRatio = height?.let { size.height / it } ?: -1
-        //如果超出指定大小，则缩小相应的比例
-        val ratio = when {
-            wRatio > 1 && hRatio > 1 -> max(wRatio, hRatio)
-            wRatio > 1 -> wRatio
-            hRatio > 1 -> hRatio
-            else -> 1
-        }
+        val bitmapSize = requireNotNull(
+            SvgBitmapSizePolicy.fitWithin(size.width, size.height, width, height)
+        ) { "invalid SVG dimensions" }
 
         val viewBox: RectF? = svg.documentViewBox
         if (viewBox == null && size.width > 0 && size.height > 0) {
@@ -80,9 +73,7 @@ object SvgUtils {
         svg.setDocumentWidth("100%")
         svg.setDocumentHeight("100%")
 
-        val bitmapWidth = size.width / ratio
-        val bitmapHeight = size.height / ratio
-        val bitmap = Bitmap.createBitmap(bitmapWidth, bitmapHeight, Bitmap.Config.ARGB_8888)
+        val bitmap = Bitmap.createBitmap(bitmapSize.width, bitmapSize.height, Bitmap.Config.ARGB_8888)
 
         svg.renderToCanvas(Canvas(bitmap))
         return bitmap
