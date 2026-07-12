@@ -4,7 +4,6 @@ import android.annotation.SuppressLint
 import io.legado.app.utils.DebugLog
 import io.legado.app.utils.compress.ZipUtils.zipFile
 import io.legado.app.utils.isSameOrSubFileOf
-import io.legado.app.utils.printOnDebug
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.withContext
 import java.io.BufferedInputStream
@@ -374,22 +373,6 @@ object ZipUtils {
         }
         zip.close()
         return comments
-    }
-
-    private fun createOrExistsDir(file: File?): Boolean {
-        return file != null && if (file.exists()) file.isDirectory else file.mkdirs()
-    }
-
-    private fun createOrExistsFile(file: File?): Boolean {
-        if (file == null) return false
-        if (file.exists()) return file.isFile
-        if (!createOrExistsDir(file.parentFile)) return false
-        return try {
-            file.createNewFile()
-        } catch (e: IOException) {
-            e.printOnDebug()
-            false
-        }
     }
 
     private fun getFileByPath(filePath: String): File? {

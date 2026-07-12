@@ -541,24 +541,6 @@ object AppearanceKitManager {
         }
     }
 
-    private suspend fun createKitFromImportedThemes(entries: List<ThemePackageManager.Entry>): StoredAppearanceKit? {
-        if (entries.isEmpty()) return null
-        val name = entries.first().packageInfo.name.ifBlank { "应用主题" }
-        val binding = KitBinding()
-        entries.forEach {
-            binding.setTheme(it.packageInfo.isNightTheme, ComponentRef(it.dirName, it.packageInfo.name))
-        }
-        return saveOrReplaceKit(
-            StoredAppearanceKit(
-                id = "theme_${name.normalizeFileName()}",
-                name = name,
-                binding = binding,
-                importedAt = System.currentTimeMillis(),
-                updatedAt = System.currentTimeMillis()
-            )
-        )
-    }
-
     private fun createKitFromImportResult(result: ThemePackageManager.ThemeImportResult): StoredAppearanceKit? {
         if (result.themes.isEmpty()) return null
         val name = result.sourceName.ifBlank {

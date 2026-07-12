@@ -223,7 +223,6 @@ class EpubReadView @JvmOverloads constructor(
     private var simulationTouchToCornerDis = 0f
     private var simulationIsRtOrLb = false
     private var simulationMaxLength = 1f
-    private var observedRenderStateVersion = renderer.renderStateVersion
     private var loadingMessage: String? = null
     private var boundaryLoadingAnchorKey: String? = null
     private var selectedText: String = ""
@@ -1853,7 +1852,6 @@ class EpubReadView @JvmOverloads constructor(
     }
 
     private fun invalidateSlotDisplayLists() {
-        observedRenderStateVersion = renderer.renderStateVersion
         prevSlot.invalidateDisplayList()
         currentSlot.invalidateDisplayList()
         nextSlot.invalidateDisplayList()
@@ -1863,16 +1861,6 @@ class EpubReadView @JvmOverloads constructor(
     fun invalidateRendererStyle() {
         invalidateSlotDisplayLists()
         invalidate()
-    }
-
-    private fun invalidateSlotsIfRenderStateChanged() {
-        val version = renderer.renderStateVersion
-        if (observedRenderStateVersion == version) return
-        observedRenderStateVersion = version
-        prevSlot.invalidateDisplayList()
-        currentSlot.invalidateDisplayList()
-        nextSlot.invalidateDisplayList()
-        nextPlusSlot.invalidateDisplayList()
     }
 
     private fun abortScrollerOnly() {

@@ -251,11 +251,6 @@ class PermissionActivity : AppCompatActivity() {
         val prefs = getSharedPreferences("permission_deny_count", MODE_PRIVATE)
         return prefs.getInt(permission, 0)
     }
-    private fun resetDenyCount(permission: String) {
-        val prefs = getSharedPreferences("permission_deny_count", MODE_PRIVATE)
-        prefs.edit { remove(permission) }
-    }
-
     companion object {
 
         const val KEY_RATIONALE = "KEY_RATIONALE"

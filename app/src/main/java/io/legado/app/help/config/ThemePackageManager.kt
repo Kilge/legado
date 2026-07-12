@@ -620,17 +620,6 @@ object ThemePackageManager {
         }
     }
 
-    private suspend fun importRed(file: File): List<Entry> {
-        return when (detectRedPackageFormat(file)) {
-            RedPackageFormat.RED04_ZIP -> importRedZip(file)
-            RedPackageFormat.RED_ASSET_ZIP -> importRedAssetZipDetailed(file).themes
-            RedPackageFormat.RED_GZIP_JSON,
-            RedPackageFormat.RAW_GZIP_JSON -> importRedGzip(file)
-            RedPackageFormat.RED10_PRIVATE -> throw IllegalArgumentException(appCtx.getString(R.string.theme_red_private_encrypted_unsupported))
-            null -> throw IllegalArgumentException(appCtx.getString(R.string.theme_red_invalid))
-        }
-    }
-
     private fun importRedGzip(file: File): List<Entry> {
         val redPackage = readRedThemePackage(file)
         if (redPackage.type != "theme" || redPackage.data.isEmpty()) {
@@ -693,10 +682,6 @@ object ThemePackageManager {
                 else -> null
             }
         }
-    }
-
-    private suspend fun importRedZip(file: File): List<Entry> {
-        return importRedZipDetailed(file).themes
     }
 
     private suspend fun importRedZipDetailed(file: File): ThemeImportResult {
