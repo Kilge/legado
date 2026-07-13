@@ -6,9 +6,11 @@ import androidx.activity.viewModels
 import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
+import io.legado.app.data.appDb
 import io.legado.app.databinding.ActivityTranslucenceBinding
 import io.legado.app.help.config.BubblePackageManager
 import io.legado.app.lib.dialogs.alert
+import io.legado.app.model.ReadBook
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.CancellationException
@@ -212,8 +214,12 @@ class OnLineImportActivity :
         alert(getString(R.string.online_import_confirm_title), message) {
             positiveButton(R.string.import_) {
                 accepted = true
-                if (pendingDownload === download) pendingDownload = null
-                importOnlinePackage(route, download)
+                if (route is OnlinePackageImportRoute.ParagraphRule) {
+                    prepareParagraphRuleImport(download)
+                } else {
+                    if (pendingDownload === download) pendingDownload = null
+                    importOnlinePackage(route, download)
+                }
             }
             cancelButton()
             onDismiss {
@@ -226,24 +232,115 @@ class OnLineImportActivity :
         }
     }
 
+    private fun prepareParagraphRuleImport(download: OnlineImportDownload) {
+        lifecycleScope.launch {
+            try {
+                val inspection = withContext(IO) {
+                    ParagraphRulePackageImporter(appDb).inspect(download.file)
+                }
+                if (isFinishing || isDestroyed) return@launch
+                if (inspection.conflictCount > 0) {
+                    showParagraphConflictStrategy(download, inspection)
+                } else {
+                    if (pendingDownload === download) pendingDownload = null
+                    importOnlinePackage(
+                        OnlinePackageImportRoute.ParagraphRule(download.sourceUrl),
+                        download,
+                        inspection,
+                        ParagraphRuleConflictStrategy.RENAME
+                    )
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                if (pendingDownload === download) pendingDownload = null
+                download.close()
+                finallyDialog(
+                    getString(R.string.error),
+                    error.localizedMessage ?: getString(R.string.unknown_error)
+                )
+            }
+        }
+    }
+
+    private fun showParagraphConflictStrategy(
+        download: OnlineImportDownload,
+        inspection: ParagraphRuleImportInspection
+    ) {
+        var selected = false
+        alert(
+            getString(R.string.paragraph_import_conflict_title),
+            getString(R.string.paragraph_import_conflict_message, inspection.conflictCount)
+        ) {
+            items(
+                listOf(
+                    getString(R.string.paragraph_import_conflict_rename),
+                    getString(R.string.paragraph_import_conflict_skip),
+                    getString(R.string.paragraph_import_conflict_overwrite)
+                )
+            ) { _, index ->
+                selected = true
+                if (pendingDownload === download) pendingDownload = null
+                val strategy = when (index) {
+                    1 -> ParagraphRuleConflictStrategy.SKIP
+                    2 -> ParagraphRuleConflictStrategy.OVERWRITE
+                    else -> ParagraphRuleConflictStrategy.RENAME
+                }
+                importOnlinePackage(
+                    OnlinePackageImportRoute.ParagraphRule(download.sourceUrl),
+                    download,
+                    inspection,
+                    strategy
+                )
+            }
+            cancelButton()
+            onDismiss {
+                if (!selected) {
+                    if (pendingDownload === download) pendingDownload = null
+                    download.close()
+                    finish()
+                }
+            }
+        }
+    }
+
     private fun importOnlinePackage(
         route: OnlinePackageImportRoute,
-        download: OnlineImportDownload
+        download: OnlineImportDownload,
+        paragraphInspection: ParagraphRuleImportInspection? = null,
+        paragraphStrategy: ParagraphRuleConflictStrategy = ParagraphRuleConflictStrategy.RENAME
     ) {
         lifecycleScope.launch(start = CoroutineStart.UNDISPATCHED) {
             try {
-                when (route) {
+                val resultMessage = when (route) {
                     is OnlinePackageImportRoute.Bubble -> withContext(IO) {
                         BubblePackageManager.importZip(download.file)
+                        getString(R.string.success)
                     }
 
-                    is OnlinePackageImportRoute.ParagraphRule -> error(
-                        getString(R.string.online_import_paragraph_not_ready)
-                    )
+                    is OnlinePackageImportRoute.ParagraphRule -> {
+                        val inspection = paragraphInspection
+                            ?: throw IllegalStateException("Paragraph rule package was not prepared")
+                        val result = withContext(IO) {
+                            ParagraphRulePackageImporter(appDb).import(inspection, paragraphStrategy)
+                        }
+                        runCatching {
+                            ReadBook.invalidateParagraphRuleLayout()
+                            ReadBook.callBack?.upContent(resetPageOffset = false)
+                            ReadBook.loadContent(resetPageOffset = false)
+                        }
+                        getString(
+                            R.string.paragraph_import_result,
+                            result.inserted,
+                            result.overwritten,
+                            result.skipped,
+                            result.renamed
+                        )
+                    }
 
                     else -> return@launch
                 }
-                finallyDialog(getString(R.string.success), getString(R.string.success))
+                finallyDialog(getString(R.string.success), resultMessage)
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Throwable) {
