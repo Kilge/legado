@@ -37,6 +37,7 @@ import io.legado.app.help.AppCloudStorage
 import io.legado.app.lib.cloud.S3Container
 import io.legado.app.lib.cloud.S3ContainerScope
 import io.legado.app.ui.widget.compose.AppManagementCard
+import io.legado.app.ui.widget.compose.AppListSpacing
 import io.legado.app.ui.widget.compose.AppManagementMenuAction
 import io.legado.app.ui.widget.compose.AppManagementMoreActionButton
 import io.legado.app.ui.widget.compose.AppManagementPalette
@@ -81,7 +82,7 @@ internal fun S3ContainerManageScreen(
                         .weight(1f)
                         .fillMaxWidth(),
                     contentPadding = PaddingValues(vertical = 10.dp),
-                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                    verticalArrangement = Arrangement.spacedBy(AppListSpacing.Normal)
                 ) {
                     items(containers, key = { it.id }) { container ->
                         S3ContainerCard(

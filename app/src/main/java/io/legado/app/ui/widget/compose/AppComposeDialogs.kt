@@ -333,8 +333,7 @@ private fun AppDialogTextField(
 
 class ComposeTextInputDialog : ComposeDialogFragment() {
 
-    override val widthFraction: Float? = 0.96f
-    override val maxWidthDp: Int? = 700
+    override val dialogSize: AppDialogSize = AppDialogSize.Form
 
     private var validateInput: ((String) -> Boolean)? = null
     private var onPositive: ((String) -> Unit)? = null
@@ -475,8 +474,7 @@ class ComposeTextInputDialog : ComposeDialogFragment() {
 
 class ComposeSuggestionTextInputDialog : ComposeDialogFragment() {
 
-    override val widthFraction: Float? = 0.96f
-    override val maxWidthDp: Int? = 700
+    override val dialogSize: AppDialogSize = AppDialogSize.Management
 
     private var validateInput: ((String) -> Boolean)? = null
     private var onPositive: ((String) -> Unit)? = null
@@ -689,8 +687,7 @@ private fun SuggestionInputRow(
 
 class ComposeTextFormDialog : ComposeDialogFragment() {
 
-    override val widthFraction: Float? = 0.98f
-    override val maxWidthDp: Int? = 760
+    override val dialogSize: AppDialogSize = AppDialogSize.Wide
 
     private var validateInput: ((List<String>) -> Boolean)? = null
     private var onPositive: ((List<String>) -> Unit)? = null
@@ -938,8 +935,7 @@ private fun List<Boolean>.updateCheckedAt(index: Int, value: Boolean, size: Int)
 
 class ComposeNumberPickerDialog : ComposeDialogFragment() {
 
-    override val widthFraction: Float? = 0.92f
-    override val maxWidthDp: Int? = 560
+    override val dialogSize: AppDialogSize = AppDialogSize.Confirm
 
     private var onPositive: ((Int) -> Unit)? = null
     private var onCustom: (() -> Unit)? = null
@@ -1229,8 +1225,7 @@ private fun parsePickerValue(value: String, decimalMode: Boolean): Int? {
 
 class ComposeMultiChoiceDialog : ComposeDialogFragment() {
 
-    override val widthFraction: Float? = 0.94f
-    override val maxWidthDp: Int? = 620
+    override val dialogSize: AppDialogSize = AppDialogSize.Form
 
     private var onPositive: ((BooleanArray) -> Unit)? = null
     private var onItemCheckedChange: ((Int, Boolean) -> Unit)? = null
@@ -1402,8 +1397,7 @@ private fun List<Boolean>.toggleAt(index: Int, size: Int): List<Boolean> {
 
 class ComposeConfirmDialog : ComposeDialogFragment() {
 
-    override val widthFraction: Float? = 0.92f
-    override val maxWidthDp: Int? = 620
+    override val dialogSize: AppDialogSize = AppDialogSize.Confirm
 
     private var onPositive: (() -> Unit)? = null
     private var onNegative: (() -> Unit)? = null
@@ -1562,8 +1556,7 @@ class ComposeConfirmDialog : ComposeDialogFragment() {
 
 class ComposeSingleChoiceDialog : ComposeDialogFragment() {
 
-    override val widthFraction: Float? = 0.94f
-    override val maxWidthDp: Int? = 620
+    override val dialogSize: AppDialogSize = AppDialogSize.Form
 
     private var onPositive: ((Int) -> Unit)? = null
 
@@ -1688,8 +1681,7 @@ class ComposeSingleChoiceDialog : ComposeDialogFragment() {
 
 class ComposeActionListDialog : ComposeDialogFragment() {
 
-    override val widthFraction: Float? = 0.94f
-    override val maxWidthDp: Int? = 620
+    override val dialogSize: AppDialogSize = AppDialogSize.Form
 
     private var onSelected: ((Int) -> Unit)? = null
 
@@ -2007,8 +1999,7 @@ fun AppDialogSliderGrid(
 
 class ComposeFetchedModelDialog : ComposeDialogFragment() {
 
-    override val widthFraction: Float? = 0.96f
-    override val maxWidthDp: Int? = 700
+    override val dialogSize: AppDialogSize = AppDialogSize.Management
 
     private var onAddSingle: ((String) -> Unit)? = null
     private var onAddSelected: ((List<String>) -> Unit)? = null

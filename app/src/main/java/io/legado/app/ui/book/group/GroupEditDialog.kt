@@ -49,6 +49,7 @@ import io.legado.app.data.entities.BookGroup
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.widget.compose.AppDialogFrame
+import io.legado.app.ui.widget.compose.AppDialogSize
 import io.legado.app.ui.widget.compose.AppDialogStyle
 import io.legado.app.ui.widget.compose.ComposeDialogFragment
 import io.legado.app.ui.widget.compose.LegadoComposeTheme
@@ -105,7 +106,7 @@ class GroupEditDialog() : ComposeDialogFragment() {
         }
     }
 
-    override val widthFraction: Float = 0.9f
+    override val dialogSize: AppDialogSize = AppDialogSize.Form
     override val dialogGravity: Int = Gravity.CENTER
     override val dialogWindowAnimations: Int = R.style.AnimDialogCenter
 

@@ -40,6 +40,7 @@ import io.legado.app.R
 import io.legado.app.help.config.CoverCollectionManager
 import io.legado.app.lib.theme.composeActionRadius
 import io.legado.app.ui.widget.compose.AppManagementCard
+import io.legado.app.ui.widget.compose.AppListSpacing
 import io.legado.app.ui.widget.compose.AppManagementMenuAction
 import io.legado.app.ui.widget.compose.AppManagementMoreActionButton
 import io.legado.app.ui.widget.compose.AppManagementPalette
@@ -77,7 +78,7 @@ internal fun CoverCollectionManageScreen(
                 .fillMaxWidth()
                 .weight(1f),
             contentPadding = PaddingValues(vertical = 4.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp)
+            verticalArrangement = Arrangement.spacedBy(AppListSpacing.Normal)
         ) {
             itemsIndexed(entries, key = { _, entry -> "${entry.collection.id}_${entry.source}" }) { _, entry ->
                 CoverCollectionItemRow(

@@ -35,6 +35,7 @@ import io.legado.app.R
 import io.legado.app.help.book.library.LibraryContainerConfig
 import io.legado.app.help.book.library.LibraryContainerManager
 import io.legado.app.ui.widget.compose.AppManagementCard
+import io.legado.app.ui.widget.compose.AppListSpacing
 import io.legado.app.ui.widget.compose.AppManagementMenuAction
 import io.legado.app.ui.widget.compose.AppManagementMoreActionButton
 import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
@@ -82,7 +83,7 @@ internal fun LibraryContainerManageScreen(
                         .weight(1f)
                         .fillMaxWidth(),
                     contentPadding = PaddingValues(vertical = 10.dp),
-                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                    verticalArrangement = Arrangement.spacedBy(AppListSpacing.Normal)
                 ) {
                     items(containers, key = { it.id }) { item ->
                         LibraryContainerCard(

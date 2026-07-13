@@ -24,7 +24,6 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -67,6 +66,9 @@ import io.legado.app.lib.theme.composePanelRadius
 import io.legado.app.lib.theme.primaryTextColor
 import io.legado.app.lib.theme.secondaryTextColor
 import io.legado.app.lib.theme.uiTypeface
+import io.legado.app.ui.widget.compose.LegadoMiuixSwitch
+import io.legado.app.ui.widget.compose.rememberAppDialogStyle
+import io.legado.app.ui.widget.compose.toMiuixPalette
 import io.legado.app.utils.ColorUtils
 import io.legado.app.utils.setLayout
 import io.legado.app.utils.toastOnUi
@@ -539,6 +541,7 @@ private fun SpeakerGroupCard(
     actions: SpeakerGroupManageActions
 ) {
     val invalidGroup = SpeechVoiceGroupRepository.isInvalidGroup(group)
+    val switchPalette = rememberAppDialogStyle().toMiuixPalette()
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = colors.card,
@@ -561,7 +564,11 @@ private fun SpeakerGroupCard(
                     )
                 }
                 if (!invalidGroup) {
-                    Switch(checked = group.enabled, onCheckedChange = { actions.toggleGroup(group) })
+                    LegadoMiuixSwitch(
+                        checked = group.enabled,
+                        onCheckedChange = { actions.toggleGroup(group) },
+                        palette = switchPalette
+                    )
                 }
             }
             if (items.isEmpty()) {
@@ -638,6 +645,7 @@ private fun GroupEditorDialog(
 ) {
     var name by remember(group?.id) { mutableStateOf(group?.name.orEmpty()) }
     var enabled by remember(group?.id) { mutableStateOf(group?.enabled ?: true) }
+    val switchPalette = rememberAppDialogStyle().toMiuixPalette()
     Dialog(onDismissRequest = onDismiss) {
         Surface(
             modifier = Modifier.fillMaxWidth().widthIn(max = 420.dp),
@@ -656,7 +664,11 @@ private fun GroupEditorDialog(
                 )
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("启用分组", color = colors.text, fontSize = 14.sp, modifier = Modifier.weight(1f))
-                    Switch(checked = enabled, onCheckedChange = { enabled = it })
+                    LegadoMiuixSwitch(
+                        checked = enabled,
+                        onCheckedChange = { enabled = it },
+                        palette = switchPalette
+                    )
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     SpeakerSubActionButton("取消", colors, Modifier.weight(1f), onClick = onDismiss)

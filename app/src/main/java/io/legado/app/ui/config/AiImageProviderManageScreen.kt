@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.sp
 import io.legado.app.R
 import io.legado.app.ui.main.ai.AiImageProviderConfig
 import io.legado.app.ui.widget.compose.AppManagementCard
+import io.legado.app.ui.widget.compose.AppListSpacing
 import io.legado.app.ui.widget.compose.AppManagementMenuAction
 import io.legado.app.ui.widget.compose.AppManagementMoreActionButton
 import io.legado.app.ui.widget.compose.AppManagementPalette
@@ -86,7 +87,7 @@ internal fun AiImageProviderManageScreen(
                         .weight(1f)
                         .fillMaxWidth(),
                     contentPadding = PaddingValues(vertical = 10.dp),
-                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                    verticalArrangement = Arrangement.spacedBy(AppListSpacing.Normal)
                 ) {
                     if (providers.isEmpty()) {
                         item {

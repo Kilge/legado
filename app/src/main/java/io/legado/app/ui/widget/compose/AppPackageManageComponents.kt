@@ -95,7 +95,7 @@ fun AppPackageManageScreen(
                         .weight(1f)
                         .fillMaxWidth(),
                     contentPadding = PaddingValues(vertical = 10.dp),
-                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                    verticalArrangement = Arrangement.spacedBy(AppListSpacing.Normal)
                 ) {
                     headerContent(palette)
                     listContent(palette)

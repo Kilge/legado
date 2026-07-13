@@ -46,6 +46,7 @@ import io.legado.app.help.config.BubblePackageManager
 import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.theme.composeActionRadius
 import io.legado.app.ui.widget.compose.AppManagementCard
+import io.legado.app.ui.widget.compose.AppListSpacing
 import io.legado.app.ui.widget.compose.AppManagementListRow
 import io.legado.app.ui.widget.compose.AppManagementMenuAction
 import io.legado.app.ui.widget.compose.AppManagementMoreActionButton
@@ -116,7 +117,7 @@ internal fun BubbleManageScreen(
                 .weight(1f)
                 .fillMaxWidth(),
             contentPadding = PaddingValues(vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp)
+            verticalArrangement = Arrangement.spacedBy(AppListSpacing.Normal)
         ) {
             itemsIndexed(
                 items = entries,

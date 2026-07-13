@@ -9,11 +9,12 @@ import androidx.fragment.app.activityViewModels
 import io.legado.app.data.appDb
 import io.legado.app.ui.widget.compose.ComposeDialogFragment
 import io.legado.app.ui.widget.compose.ComposeGroupManageDialogContent
+import io.legado.app.ui.widget.compose.AppDialogSize
 import kotlinx.coroutines.flow.conflate
 
 class GroupManageDialog : ComposeDialogFragment() {
 
-    override val widthFraction: Float = 0.9f
+    override val dialogSize: AppDialogSize = AppDialogSize.Management
     override val dialogHeight: Int = android.view.ViewGroup.LayoutParams.WRAP_CONTENT
     private val viewModel: ReplaceRuleViewModel by activityViewModels()
 

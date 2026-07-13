@@ -45,6 +45,8 @@ import io.legado.app.R
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.BookGroup
 import io.legado.app.ui.widget.compose.AppDialogFrame
+import io.legado.app.ui.widget.compose.AppDialogSize
+import io.legado.app.ui.widget.compose.AppListSpacing
 import io.legado.app.ui.widget.compose.ComposeDialogFragment
 import io.legado.app.ui.widget.compose.LegadoComposeTheme
 import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
@@ -67,8 +69,7 @@ class GroupSelectDialog() : ComposeDialogFragment() {
     private var requestCode: Int = -1
     private val callBack get() = (activity as? CallBack)
 
-    override val widthFraction: Float = 0.92f
-    override val maxWidthDp: Int = 500
+    override val dialogSize: AppDialogSize = AppDialogSize.Form
     override val dialogGravity: Int = Gravity.CENTER
     override val dialogWindowAnimations: Int = R.style.AnimDialogCenter
 
@@ -150,7 +151,8 @@ private fun GroupSelectContent(
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(max = 400.dp)
+                        .heightIn(max = 400.dp),
+                    verticalArrangement = Arrangement.spacedBy(AppListSpacing.Normal)
                 ) {
                     items(groups, key = { it.groupId }) { group ->
                         GroupSelectRow(
@@ -160,7 +162,6 @@ private fun GroupSelectContent(
                             onEdit = { onEditGroup(group) },
                             style = style
                         )
-                        Spacer(modifier = Modifier.height(1.dp))
                     }
                 }
             }

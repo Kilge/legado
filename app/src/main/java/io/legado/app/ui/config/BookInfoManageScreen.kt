@@ -32,6 +32,7 @@ import io.legado.app.R
 import io.legado.app.help.config.BookInfoComponentItem
 import io.legado.app.help.config.BookInfoPageStyle
 import io.legado.app.ui.widget.compose.AppManagementCard
+import io.legado.app.ui.widget.compose.AppListSpacing
 import io.legado.app.ui.widget.compose.AppManagementPalette
 import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
 import io.legado.app.ui.widget.compose.LegadoMiuixSwitch
@@ -86,7 +87,7 @@ internal fun BookInfoManageScreen(
                         .weight(1f)
                         .fillMaxWidth(),
                     contentPadding = PaddingValues(vertical = 4.dp),
-                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                    verticalArrangement = Arrangement.spacedBy(AppListSpacing.Normal)
                 ) {
                     itemsIndexed(
                         items = components,
