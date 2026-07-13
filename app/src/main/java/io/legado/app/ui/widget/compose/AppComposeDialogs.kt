@@ -1406,6 +1406,13 @@ class ComposeConfirmDialog : ComposeDialogFragment() {
     private var onPositive: (() -> Unit)? = null
     private var onNegative: (() -> Unit)? = null
     private var onNeutral: (() -> Unit)? = null
+    private var onDismissAction: (() -> Unit)? = null
+    private var handledAction = false
+
+    override fun onDismiss(dialog: DialogInterface) {
+        super.onDismiss(dialog)
+        if (!handledAction) onDismissAction?.invoke()
+    }
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -1448,6 +1455,7 @@ class ComposeConfirmDialog : ComposeDialogFragment() {
                                 text = neutralText,
                                 palette = palette,
                                 onClick = {
+                                    handledAction = true
                                     dismissAllowingStateLoss()
                                     neutralCallback.invoke()
                                 },
@@ -1464,6 +1472,7 @@ class ComposeConfirmDialog : ComposeDialogFragment() {
                                 text = negativeText,
                                 palette = palette,
                                 onClick = {
+                                    if (negativeCallback != null) handledAction = true
                                     dismissAllowingStateLoss()
                                     negativeCallback?.invoke()
                                 },
@@ -1480,6 +1489,7 @@ class ComposeConfirmDialog : ComposeDialogFragment() {
                                 text = positiveText,
                                 palette = palette,
                                 onClick = {
+                                    handledAction = true
                                     dismissAllowingStateLoss()
                                     positiveCallback?.invoke()
                                 },
@@ -1512,7 +1522,8 @@ class ComposeConfirmDialog : ComposeDialogFragment() {
             showNegative: Boolean = true,
             onPositive: () -> Unit,
             onNegative: (() -> Unit)? = null,
-            onNeutral: (() -> Unit)? = null
+            onNeutral: (() -> Unit)? = null,
+            onDismissAction: (() -> Unit)? = null
         ): ComposeConfirmDialog {
             return ComposeConfirmDialog().apply {
                 arguments = Bundle().apply {
@@ -1530,6 +1541,7 @@ class ComposeConfirmDialog : ComposeDialogFragment() {
                 this.onPositive = onPositive
                 this.onNegative = onNegative
                 this.onNeutral = onNeutral
+                this.onDismissAction = onDismissAction
             }
         }
 

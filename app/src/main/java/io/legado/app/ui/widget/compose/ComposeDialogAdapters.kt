@@ -18,7 +18,8 @@ fun Fragment.showComposeConfirmDialog(
     messageInContent: Boolean = false,
     onPositive: () -> Unit,
     onNegative: (() -> Unit)? = null,
-    onNeutral: (() -> Unit)? = null
+    onNeutral: (() -> Unit)? = null,
+    onDismissAction: (() -> Unit)? = null
 ) {
     showDialogFragment(
         ComposeConfirmDialog.create(
@@ -34,7 +35,8 @@ fun Fragment.showComposeConfirmDialog(
             showNegative = showNegative,
             onPositive = onPositive,
             onNegative = onNegative,
-            onNeutral = onNeutral
+            onNeutral = onNeutral,
+            onDismissAction = onDismissAction
         )
     )
 }
@@ -286,7 +288,8 @@ fun AppCompatActivity.showComposeConfirmDialog(
     messageInContent: Boolean = false,
     onPositive: () -> Unit,
     onNegative: (() -> Unit)? = null,
-    onNeutral: (() -> Unit)? = null
+    onNeutral: (() -> Unit)? = null,
+    onDismissAction: (() -> Unit)? = null
 ) {
     showDialogFragment(
         ComposeConfirmDialog.create(
@@ -302,7 +305,8 @@ fun AppCompatActivity.showComposeConfirmDialog(
             showNegative = showNegative,
             onPositive = onPositive,
             onNegative = onNegative,
-            onNeutral = onNeutral
+            onNeutral = onNeutral,
+            onDismissAction = onDismissAction
         )
     )
 }

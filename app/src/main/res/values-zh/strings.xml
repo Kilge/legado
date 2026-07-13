@@ -2240,10 +2240,14 @@ bookUrl：%7$s
     <string name="online_import_confirm_title">确认在线导入</string>
     <string name="online_import_preview_message">类型：%1$s\n原始来源：%2$s\n最终地址：%3$s\n大小：%4$s\n私有网络：%5$s</string>
     <string name="online_import_paragraph_script_warning">警告：段落规则可能包含 JavaScript 或登录脚本。请仅导入可信来源的规则。</string>
-    <string name="paragraph_import_conflict_title">段落规则冲突</string>
-    <string name="paragraph_import_conflict_message">有 %1$d 条导入规则与现有规则同名，请选择处理方式。</string>
-    <string name="paragraph_import_conflict_rename">两者都保留（重命名导入规则）</string>
+    <string name="paragraph_import_title">导入段落规则</string>
+    <string name="paragraph_import_summary">规则总数：%1$d\n新增名称：%2$d\n同名冲突：%3$d</string>
+    <string name="paragraph_import_conflict_message">有 %1$d 条导入规则与现有规则或包内其他规则同名，请选择处理方式。</string>
+    <string name="paragraph_import_conflict_rename">两者都保留并自动编号</string>
+    <string name="paragraph_import_conflict_rename_description">依次命名为“名称 (2)”“名称 (3)”等</string>
     <string name="paragraph_import_conflict_skip">跳过冲突规则</string>
+    <string name="paragraph_import_conflict_skip_description">只导入名称不冲突的规则</string>
     <string name="paragraph_import_conflict_overwrite">覆盖现有规则</string>
+    <string name="paragraph_import_conflict_overwrite_description">保留原 ID、排序和书籍绑定</string>
     <string name="paragraph_import_result">新增：%1$d\n覆盖：%2$d\n跳过：%3$d\n重命名：%4$d</string>
 </resources>

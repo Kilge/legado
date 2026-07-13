@@ -2377,10 +2377,14 @@ Selected text or question:
     <string name="online_import_confirm_title">Confirm online import</string>
     <string name="online_import_preview_message">Type: %1$s\nSource: %2$s\nFinal address: %3$s\nSize: %4$s\nPrivate network: %5$s</string>
     <string name="online_import_paragraph_script_warning">Warning: Paragraph rules may contain JavaScript or login scripts. Import only from a trusted source.</string>
-    <string name="paragraph_import_conflict_title">Paragraph rule conflicts</string>
-    <string name="paragraph_import_conflict_message">%1$d imported rule(s) have the same name as existing rules. Choose how to handle them.</string>
-    <string name="paragraph_import_conflict_rename">Keep both (rename imported rules)</string>
+    <string name="paragraph_import_title">Import paragraph rules</string>
+    <string name="paragraph_import_summary">Rules: %1$d\nNew names: %2$d\nSame-name conflicts: %3$d</string>
+    <string name="paragraph_import_conflict_message">%1$d imported rule(s) have the same name as an existing rule or another rule in this package. Choose how to handle them.</string>
+    <string name="paragraph_import_conflict_rename">Keep both and number automatically</string>
+    <string name="paragraph_import_conflict_rename_description">Import as Name (2), Name (3), and so on</string>
     <string name="paragraph_import_conflict_skip">Skip conflicting rules</string>
+    <string name="paragraph_import_conflict_skip_description">Import only rules whose names do not conflict</string>
     <string name="paragraph_import_conflict_overwrite">Overwrite existing rules</string>
+    <string name="paragraph_import_conflict_overwrite_description">Keep the existing ID, order, and book bindings</string>
     <string name="paragraph_import_result">Added: %1$d\nOverwritten: %2$d\nSkipped: %3$d\nRenamed: %4$d</string>
 </resources>
