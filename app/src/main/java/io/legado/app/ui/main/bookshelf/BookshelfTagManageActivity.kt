@@ -19,10 +19,8 @@ import io.legado.app.help.book.BookTagManagement
 import io.legado.app.help.book.BookTagHelper
 import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.dialogs.alert
-import io.legado.app.ui.widget.compose.ComposeTextInputDialog
 import io.legado.app.ui.widget.compose.LegadoComposeTheme
 import io.legado.app.utils.postEvent
-import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.launch
@@ -48,7 +46,7 @@ class BookshelfTagManageActivity : BaseActivity<ActivityBookshelfTagManageBindin
                     loading = loadingState,
                     assignment = assignmentState,
                     onBack = ::finish,
-                    onAddTags = ::showAddTagDialog,
+                    onAddTags = ::addTags,
                     onTagVisibilityChange = ::setTagVisible,
                     onManageBooks = { group, tag ->
                         assignmentState = BookTagAssignmentUi(
@@ -125,24 +123,14 @@ class BookshelfTagManageActivity : BaseActivity<ActivityBookshelfTagManageBindin
         }
     }
 
-    private fun showAddTagDialog(groupId: Long) {
-        showDialogFragment(
-            ComposeTextInputDialog.create(
-                title = getString(R.string.bookshelf_tag_edit),
-                hint = getString(R.string.bookshelf_tag_new_hint),
-                positiveText = getString(android.R.string.ok),
-                negativeText = getString(android.R.string.cancel),
-                validateInput = { BookTagHelper.parse(it).isNotEmpty() },
-                onPositive = { rawTags ->
-                    val newTags = BookTagHelper.parse(rawTags)
-                    val map = AppConfig.bookshelfGroupTags.toMutableMap()
-                    map[groupId] = BookTagManagement.mergeTags(map[groupId].orEmpty(), newTags)
-                    AppConfig.bookshelfGroupTags = map
-                    postEvent(EventBus.BOOKSHELF_REFRESH, "")
-                    loadTags()
-                }
-            )
-        )
+    private fun addTags(groupId: Long, tags: List<String>) {
+        val newTags = BookTagManagement.mergeTags(emptyList(), tags)
+        if (newTags.isEmpty()) return
+        val map = AppConfig.bookshelfGroupTags.toMutableMap()
+        map[groupId] = BookTagManagement.mergeTags(map[groupId].orEmpty(), newTags)
+        AppConfig.bookshelfGroupTags = map
+        postEvent(EventBus.BOOKSHELF_REFRESH, "")
+        loadTags()
     }
 
     private fun saveAssignment(assignment: BookTagAssignmentUi, selectedUrls: Set<String>) {

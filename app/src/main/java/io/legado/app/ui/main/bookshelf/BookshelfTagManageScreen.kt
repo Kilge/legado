@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -35,6 +36,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -46,6 +48,7 @@ import androidx.compose.ui.window.DialogProperties
 import io.legado.app.R
 import io.legado.app.data.dao.BookTagInfo
 import io.legado.app.help.book.BookTagHelper
+import io.legado.app.help.book.BookTagManagement
 import io.legado.app.ui.widget.compose.AppListSpacing
 import io.legado.app.ui.widget.compose.AppManagementAction
 import io.legado.app.ui.widget.compose.AppManagementCard
@@ -93,7 +96,7 @@ internal fun BookshelfTagManageScreen(
     loading: Boolean,
     assignment: BookTagAssignmentUi?,
     onBack: () -> Unit,
-    onAddTags: (Long) -> Unit,
+    onAddTags: (Long, List<String>) -> Unit,
     onTagVisibilityChange: (Long, String, Boolean) -> Unit,
     onManageBooks: (BookshelfTagGroupUi, String) -> Unit,
     onDeleteTag: (BookshelfTagGroupUi, String) -> Unit,
@@ -102,6 +105,7 @@ internal fun BookshelfTagManageScreen(
 ) {
     val palette = rememberAppManagementPalette()
     var selectedGroupId by rememberSaveable { mutableLongStateOf(focusGroupId) }
+    var addTagsGroupId by rememberSaveable { mutableStateOf<Long?>(null) }
     LaunchedEffect(groups, focusGroupId) {
         if (groups.none { it.groupId == selectedGroupId }) {
             selectedGroupId = groups.firstOrNull { it.groupId == focusGroupId }?.groupId
@@ -121,7 +125,7 @@ internal fun BookshelfTagManageScreen(
                 AppManagementAction(
                     text = stringResource(R.string.add),
                     iconRes = R.drawable.ic_add,
-                    onClick = { onAddTags(group.groupId) }
+                    onClick = { addTagsGroupId = group.groupId }
                 )
             )
         }.orEmpty()
@@ -148,7 +152,7 @@ internal fun BookshelfTagManageScreen(
                 else -> TagGroupContent(
                     group = selectedGroup,
                     palette = palette,
-                    onAddTags = { onAddTags(selectedGroup.groupId) },
+                    onAddTags = { addTagsGroupId = selectedGroup.groupId },
                     onTagVisibilityChange = { tag, visible ->
                         onTagVisibilityChange(selectedGroup.groupId, tag, visible)
                     },
@@ -164,6 +168,28 @@ internal fun BookshelfTagManageScreen(
             onDismiss = onDismissAssignment,
             onSave = { selected -> onSaveAssignment(it, selected) }
         )
+    }
+    addTagsGroupId?.let { groupId ->
+        groups.firstOrNull { it.groupId == groupId }?.let { group ->
+            val allTags = remember(groups) {
+                groups.flatMap { item -> item.tags.map { it.name } }
+            }
+            val reusableTags = remember(group.tags, allTags) {
+                BookTagManagement.reusableTags(
+                    current = group.tags.map { it.name },
+                    all = allTags
+                )
+            }
+            BookTagAddDialog(
+                group = group,
+                reusableTags = reusableTags,
+                onDismiss = { addTagsGroupId = null },
+                onAdd = { tags ->
+                    addTagsGroupId = null
+                    onAddTags(group.groupId, tags)
+                }
+            )
+        }
     }
 }
 
@@ -355,6 +381,195 @@ private fun LoadingContent(palette: AppManagementPalette) {
 private fun EmptyContent(text: String, palette: AppManagementPalette) {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Text(text = text, color = palette.settings.secondaryText, fontSize = 14.sp)
+    }
+}
+
+@Composable
+private fun BookTagAddDialog(
+    group: BookshelfTagGroupUi,
+    reusableTags: List<String>,
+    onDismiss: () -> Unit,
+    onAdd: (List<String>) -> Unit
+) {
+    val style = rememberAppDialogStyle()
+    val palette = style.toMiuixPalette()
+    var query by rememberSaveable(group.groupId) { mutableStateOf("") }
+    var newTagInput by rememberSaveable(group.groupId) { mutableStateOf("") }
+    var selectedTags by remember(group.groupId, reusableTags) {
+        mutableStateOf(emptySet<String>())
+    }
+    val visibleTags = remember(reusableTags, query) {
+        val normalizedQuery = query.trim()
+        reusableTags.filter {
+            normalizedQuery.isEmpty() || it.contains(normalizedQuery, ignoreCase = true)
+        }
+    }
+    val newTags = remember(newTagInput) { BookTagHelper.parse(newTagInput) }
+    val tagsToAdd = remember(reusableTags, selectedTags, newTags) {
+        BookTagManagement.mergeTags(
+            configured = reusableTags.filter { it in selectedTags },
+            existing = newTags
+        )
+    }
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        LegadoMiuixCard(
+            modifier = Modifier
+                .fillMaxWidth(0.94f)
+                .fillMaxHeight(0.82f)
+                .widthIn(max = 620.dp)
+                .navigationBarsPadding(),
+            color = style.surface,
+            contentColor = style.primaryText,
+            cornerRadius = style.panelRadius,
+            insidePadding = PaddingValues(16.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.bookshelf_tag_add_title),
+                color = style.primaryText,
+                fontSize = 19.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(modifier = Modifier.height(3.dp))
+            Text(
+                text = stringResource(R.string.bookshelf_tag_add_group, group.groupName),
+                color = style.secondaryText,
+                fontSize = 13.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            OutlinedTextField(
+                value = newTagInput,
+                onValueChange = { newTagInput = it },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                label = { Text(stringResource(R.string.bookshelf_tag_new_label)) },
+                placeholder = { Text(stringResource(R.string.bookshelf_tag_new_hint)) },
+                shape = RoundedCornerShape(style.actionRadius),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = style.primaryText,
+                    unfocusedTextColor = style.primaryText,
+                    focusedContainerColor = style.fieldSurface,
+                    unfocusedContainerColor = style.fieldSurface,
+                    focusedBorderColor = style.accent,
+                    unfocusedBorderColor = style.stroke,
+                    cursorColor = style.accent,
+                    focusedLabelColor = style.accent,
+                    unfocusedLabelColor = style.secondaryText,
+                    focusedPlaceholderColor = style.secondaryText,
+                    unfocusedPlaceholderColor = style.secondaryText
+                )
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = stringResource(
+                    R.string.bookshelf_tag_reusable_summary,
+                    reusableTags.size,
+                    selectedTags.size
+                ),
+                color = style.secondaryText,
+                fontSize = 12.sp
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            if (reusableTags.isNotEmpty()) {
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    placeholder = { Text(stringResource(R.string.bookshelf_tag_search_existing)) },
+                    shape = RoundedCornerShape(style.actionRadius),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = style.primaryText,
+                        unfocusedTextColor = style.primaryText,
+                        focusedContainerColor = style.fieldSurface,
+                        unfocusedContainerColor = style.fieldSurface,
+                        focusedBorderColor = style.accent,
+                        unfocusedBorderColor = style.stroke,
+                        cursorColor = style.accent,
+                        focusedPlaceholderColor = style.secondaryText,
+                        unfocusedPlaceholderColor = style.secondaryText
+                    )
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+            when {
+                reusableTags.isEmpty() -> {
+                    Box(
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = stringResource(R.string.bookshelf_tag_no_reusable),
+                            color = style.secondaryText,
+                            fontSize = 14.sp
+                        )
+                    }
+                }
+                visibleTags.isEmpty() -> {
+                    Box(
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = stringResource(R.string.bookshelf_tag_no_matching_existing),
+                            color = style.secondaryText,
+                            fontSize = 14.sp
+                        )
+                    }
+                }
+                else -> {
+                    LazyColumn(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .heightIn(min = 120.dp),
+                        verticalArrangement = Arrangement.spacedBy(AppListSpacing.Compact)
+                    ) {
+                        items(visibleTags, key = { it.lowercase() }) { tag ->
+                            val selected = tag in selectedTags
+                            LegadoMiuixChoiceRow(
+                                text = tag,
+                                selected = selected,
+                                palette = palette,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Start,
+                                onClick = {
+                                    selectedTags = if (selected) {
+                                        selectedTags - tag
+                                    } else {
+                                        selectedTags + tag
+                                    }
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                LegadoMiuixActionButton(
+                    text = stringResource(R.string.cancel),
+                    palette = palette,
+                    onClick = onDismiss,
+                    modifier = Modifier.weight(1f)
+                )
+                LegadoMiuixActionButton(
+                    text = stringResource(R.string.add),
+                    palette = palette,
+                    onClick = { if (tagsToAdd.isNotEmpty()) onAdd(tagsToAdd) },
+                    modifier = Modifier
+                        .weight(1f)
+                        .alpha(if (tagsToAdd.isNotEmpty()) 1f else 0.45f),
+                    primary = true
+                )
+            }
+        }
     }
 }
 

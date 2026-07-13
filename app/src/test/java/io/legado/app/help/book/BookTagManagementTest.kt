@@ -29,6 +29,17 @@ class BookTagManagementTest {
     }
 
     @Test
+    fun reusableTagsExcludesCurrentTagsIgnoringCase() {
+        assertEquals(
+            listOf("History", "Fantasy"),
+            BookTagManagement.reusableTags(
+                current = listOf(" SciFi ", "Finished"),
+                all = listOf("scifi", "History", "FINISHED", "Fantasy", "history")
+            )
+        )
+    }
+
+    @Test
     fun updateTagOnlyChangesWhenSelectionDiffers() {
         assertNull(BookTagManagement.updateTag("科幻 完结", "科幻", selected = true))
         assertEquals("科幻,完结,收藏", BookTagManagement.updateTag("科幻 完结", "收藏", true))

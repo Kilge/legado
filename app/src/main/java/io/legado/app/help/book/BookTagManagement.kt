@@ -15,6 +15,16 @@ object BookTagManagement {
         return merged.values.toList()
     }
 
+    fun reusableTags(current: List<String>, all: List<String>): List<String> {
+        val currentKeys = current.asSequence()
+            .map { it.trim().lowercase(Locale.ROOT) }
+            .filter { it.isNotEmpty() }
+            .toSet()
+        return mergeTags(emptyList(), all).filterNot {
+            it.lowercase(Locale.ROOT) in currentKeys
+        }
+    }
+
     /** Returns null when the stored value does not need an update. */
     fun updateTag(customTag: String?, tag: String, selected: Boolean): String? {
         val tags = BookTagHelper.parse(customTag).toMutableList()
