@@ -185,6 +185,11 @@ class ReplaceRuleActivity : VMBaseActivity<ActivityReplaceRuleBinding, ReplaceRu
                         rules = rulesState,
                         selected = selectedIds.value,
                         isSelectMode = selectedIds.value.isNotEmpty(),
+                        reorderEnabled = searchQueryState.value.isBlank(),
+                        onReorder = { reordered ->
+                            setResult(RESULT_OK)
+                            viewModel.upOrder(reordered)
+                        },
                         onSelectToggle = ::onSelectToggle,
                         onToggleEnabled = ::onToggleEnabled,
                         onEdit = ::edit,

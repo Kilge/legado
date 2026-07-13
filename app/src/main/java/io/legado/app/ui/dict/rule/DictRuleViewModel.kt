@@ -31,13 +31,13 @@ class DictRuleViewModel(application: Application) : BaseViewModel(application) {
         }
     }
 
-    fun upSortNumber() {
+    fun upSortNumber(rules: List<DictRule>) {
+        if (rules.isEmpty()) return
+        val normalized = rules.mapIndexed { index, rule ->
+            rule.copy(sortNumber = index + 1)
+        }
         execute {
-            val rules = appDb.dictRuleDao.all
-            for ((index, rule) in rules.withIndex()) {
-                rule.sortNumber = index + 1
-            }
-            appDb.dictRuleDao.insert(*rules.toTypedArray())
+            appDb.dictRuleDao.update(*normalized.toTypedArray())
         }
     }
 

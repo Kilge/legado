@@ -52,13 +52,13 @@ class TxtTocRuleViewModel(app: Application) : BaseViewModel(app) {
         }
     }
 
-    fun upOrder() {
+    fun upOrder(rules: List<TxtTocRule>) {
+        if (rules.isEmpty()) return
+        val normalized = rules.mapIndexed { index, rule ->
+            rule.copy(serialNumber = index + 1)
+        }
         execute {
-            val sources = appDb.txtTocRuleDao.all
-            for ((index: Int, source: TxtTocRule) in sources.withIndex()) {
-                source.serialNumber = index + 1
-            }
-            appDb.txtTocRuleDao.update(*sources.toTypedArray())
+            appDb.txtTocRuleDao.update(*normalized.toTypedArray())
         }
     }
 

@@ -146,6 +146,7 @@ class TxtTocRuleActivity : VMBaseActivity<ActivityTxtTocRuleBinding, TxtTocRuleV
                         rules = rulesState,
                         selectedIds = selectedIds.value,
                         isSelectMode = selectedIds.value.isNotEmpty(),
+                        onReorder = viewModel::upOrder,
                         onToggleSelect = ::onToggleSelect,
                         onToggleEnable = ::onToggleEnable,
                         onEdit = ::onEdit,
