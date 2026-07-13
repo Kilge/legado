@@ -329,7 +329,7 @@ interface BookDao {
     @get:Query("SELECT bookUrl FROM books")
     val allBookUrls: List<String>
 
-    @get:Query("SELECT bookUrl, name, customTag, type, `group` FROM books")
+    @get:Query("SELECT bookUrl, name, author, customTag, type, `group` FROM books")
     val allTagInfos: List<BookTagInfo>
 
     @get:Query("SELECT COUNT(*) FROM books")
@@ -427,6 +427,7 @@ data class BookShelfIdentity(
 data class BookTagInfo(
     val bookUrl: String,
     val name: String,
+    val author: String,
     val customTag: String?,
     val type: Int,
     val group: Long
