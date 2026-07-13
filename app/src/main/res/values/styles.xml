@@ -82,6 +82,11 @@
         <item name="android:windowExitAnimation">@anim/dialog_center_exit</item>
     </style>
 
+    <style name="AnimDialogFade">
+        <item name="android:windowEnterAnimation">@anim/dialog_fade_enter</item>
+        <item name="android:windowExitAnimation">@anim/dialog_fade_exit</item>
+    </style>
+
     <style name="AnimDialogBottom">
         <item name="android:windowEnterAnimation">@anim/dialog_bottom_enter</item>
         <item name="android:windowExitAnimation">@anim/dialog_bottom_exit</item>

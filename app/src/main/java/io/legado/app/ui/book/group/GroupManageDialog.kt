@@ -65,6 +65,7 @@ class GroupManageDialog : ComposeDialogFragment() {
     private val viewModel: GroupViewModel by viewModels()
 
     override val dialogSize: AppDialogSize = AppDialogSize.Management
+    override val dialogWindowAnimations: Int = R.style.AnimDialogFade
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -151,7 +152,7 @@ private fun GroupManageContent(
                     state = lazyListState,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(max = 400.dp),
+                        .heightIn(min = 240.dp, max = 400.dp),
                     verticalArrangement = Arrangement.spacedBy(AppListSpacing.Normal)
                 ) {
                     items(orderedGroups, key = { it.groupId }) { group ->

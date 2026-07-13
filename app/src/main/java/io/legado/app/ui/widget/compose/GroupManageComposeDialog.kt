@@ -123,7 +123,7 @@ fun ComposeGroupManageDialogContent(
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(max = 420.dp),
+                        .heightIn(min = 240.dp, max = 420.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     items(
