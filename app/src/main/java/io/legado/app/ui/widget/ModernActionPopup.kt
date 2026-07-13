@@ -469,8 +469,6 @@ object ModernActionPopup {
                             transformOrigin = panelTransformOrigin
                             scaleX = 0.96f + 0.04f * progress
                             scaleY = 0.96f + 0.04f * progress
-                            translationY = (if (panelOffset.y >= snapshot.anchorBottom) -6f else 6f) *
-                                (1f - progress)
                         }
                         // 边框放在 graphicsLayer 之后，随弹出动画一起淡入，不再先于动画整条显示。
                         .then(

@@ -588,7 +588,6 @@ fun LegadoMiuixFloatingPanel(
                 alpha = progress
                 scaleX = 0.96f + 0.04f * progress
                 scaleY = 0.96f + 0.04f * progress
-                translationY = (1f - progress) * 12f
             },
         shape = RoundedCornerShape(resolvedCornerRadius),
         color = palette.surface,
