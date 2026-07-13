@@ -14,9 +14,13 @@ import io.legado.app.utils.getPrefString
 import io.legado.app.utils.normalizeFileName
 import io.legado.app.utils.putPrefString
 import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import splitties.init.appCtx
 import java.io.File
+import java.io.IOException
+import java.util.UUID
 
 object BubblePackageManager {
 
@@ -33,6 +37,7 @@ object BubblePackageManager {
     private var cachedEntry: Entry? = null
     @Volatile
     private var cachedDirName: String? = null
+    private val importMutex = Mutex()
 
     val rootDir: File
         get() = appCtx.externalFiles.getFile("bubblePackages")
@@ -217,33 +222,94 @@ object BubblePackageManager {
         importZipInternal(zipFile, overwrite = false, remoteUpdatedAt = 0L)
     }
 
-    private fun importZipInternal(zipFile: File, overwrite: Boolean, remoteUpdatedAt: Long): Entry {
-        val unzipDir = tempDir.getFile("import_${System.currentTimeMillis()}").apply {
-            if (exists()) FileUtils.delete(this, deleteRootDir = true)
-            mkdirs()
-        }
-        return try {
-            ZipUtils.unZipToPath(zipFile, unzipDir)
-            val packageFile = unzipDir.walkTopDown().firstOrNull { it.isFile && it.name == packageFileName }
-                ?: throw IllegalArgumentException("气泡配置不存在")
-            val raw = GSON.fromJsonObject<Config>(packageFile.readText()).getOrThrow()
-            val config = normalizeConfig(raw)
-            val baseDirName = config.dirName.ifBlank { config.name.normalizeFileName() }
-                .ifBlank { "bubble_${System.currentTimeMillis()}" }
+    private suspend fun importZipInternal(
+        zipFile: File,
+        overwrite: Boolean,
+        remoteUpdatedAt: Long
+    ): Entry = importMutex.withLock {
+        val unzipDir = tempDir.getFile("import_${UUID.randomUUID()}")
+        try {
+            val extracted = BubblePackageArchive.extract(zipFile, unzipDir)
+            val packageFile = extracted.manifestFile
+            val config = readImportedConfig(packageFile)
+            val baseDirName = safeImportedDirName(config)
             val dirName = if (overwrite) baseDirName else uniqueDirName(baseDirName)
-            val targetDir = localDir(dirName)
-            if (targetDir.exists()) FileUtils.delete(targetDir, deleteRootDir = true)
-            targetDir.mkdirs()
-            packageFile.parentFile?.copyRecursively(targetDir, overwrite = true)
-            val next = config.copy(
-                dirName = dirName,
-                updatedAt = if (remoteUpdatedAt > 0L) config.updatedAt else System.currentTimeMillis()
-            )
-            File(targetDir, packageFileName).writeText(GSON.toJson(next))
-            invalidateCurrentEntry()
-            Entry(next, Source.LOCAL, dirName, localDir = targetDir, remoteUpdatedAt = remoteUpdatedAt)
+            val parentDir = rootDir.apply { mkdirs() }.canonicalFile
+            val targetDir = File(parentDir, dirName).canonicalFile
+            require(targetDir.parentFile == parentDir) { "bubble directory escapes package root" }
+            require(overwrite || !targetDir.exists()) { "bubble package target already exists" }
+            val stagingDir = File(parentDir, ".$dirName.staging-${UUID.randomUUID()}")
+            val backupDir = File(parentDir, ".$dirName.backup-${UUID.randomUUID()}")
+            try {
+                val sourceDir = requireNotNull(packageFile.parentFile)
+                check(sourceDir.copyRecursively(stagingDir, overwrite = false)) {
+                    "failed to stage imported bubble package"
+                }
+                val next = config.copy(
+                    dirName = dirName,
+                    updatedAt = if (remoteUpdatedAt > 0L) config.updatedAt else System.currentTimeMillis()
+                )
+                File(stagingDir, packageFileName).writeText(GSON.toJson(next))
+                val verified = readImportedConfig(File(stagingDir, packageFileName))
+                require(verified.dirName == dirName) { "staged bubble package identity mismatch" }
+
+                val installed = BubbleDirectoryTransaction().install(
+                    targetDir,
+                    stagingDir,
+                    backupDir
+                ) { installedDir ->
+                    val installedConfig = readImportedConfig(File(installedDir, packageFileName))
+                    require(installedConfig.dirName == dirName) { "installed bubble package identity mismatch" }
+                    Entry(
+                        installedConfig,
+                        Source.LOCAL,
+                        dirName,
+                        localDir = installedDir,
+                        remoteUpdatedAt = remoteUpdatedAt
+                    )
+                }
+                invalidateCurrentEntry()
+                installed
+            } finally {
+                deletePathBestEffort(stagingDir)
+            }
         } finally {
-            FileUtils.delete(unzipDir, deleteRootDir = true)
+            deletePathBestEffort(unzipDir)
+        }
+    }
+
+    private fun readImportedConfig(file: File): Config {
+        require(file.isFile) { "bubble package manifest is missing" }
+        require(file.length() in 1..512L * 1024L) { "bubble package manifest is empty or too large" }
+        val raw = GSON.fromJsonObject<Config>(file.readText()).getOrThrow()
+        return validateImportedConfig(raw)
+    }
+
+    private fun validateImportedConfig(config: Config): Config {
+        val normalized = normalizeConfig(config)
+        require(normalized.name.length <= 200) { "bubble package name is too long" }
+        require(normalized.svgTemplate.length <= 512 * 1024) { "bubble SVG template is too large" }
+        BubbleSvgPolicy.validate(normalized.svgTemplate)
+        return normalized
+    }
+
+    private fun safeImportedDirName(config: Config): String {
+        val requested = config.dirName.trim()
+        if (requested.isNotEmpty()) {
+            require(requested != "." && requested != "..") { "invalid bubble directory" }
+            require(!File(requested).isAbsolute && '/' !in requested && '\\' !in requested) {
+                "bubble directory must be a single path segment"
+            }
+        }
+        return requested.ifBlank { config.name.normalizeFileName() }
+            .ifBlank { "bubble_${System.currentTimeMillis()}" }
+    }
+
+    private fun deletePathBestEffort(file: File) {
+        runCatching {
+            if (file.exists() && !file.deleteRecursively()) {
+                throw IOException("failed to delete ${file.absolutePath}")
+            }
         }
     }
 
