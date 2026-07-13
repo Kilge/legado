@@ -38,7 +38,6 @@ import io.legado.app.ui.widget.compose.ComposeConfirmDialog
 import io.legado.app.ui.widget.compose.ComposeNumberPickerDialog
 import io.legado.app.ui.widget.compose.ComposeSingleChoiceDialog
 import io.legado.app.ui.widget.compose.ComposeTextInputDialog
-import io.legado.app.utils.SvgUtils
 import io.legado.app.utils.externalFiles
 import io.legado.app.utils.getFile
 import io.legado.app.utils.postEvent
@@ -53,7 +52,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.ByteArrayInputStream
 import java.io.FileOutputStream
 import java.util.Locale
 
@@ -73,6 +71,7 @@ class BubbleManageActivity : BaseActivity<ActivityThemeManageBinding>(),
     private var svgCursorPosition: Int = 0
     private var loadVersion = 0
     private var loadJob: Job? = null
+    private val previewCache = BubblePreviewCache()
     private val handledWebDavTasks = mutableSetOf<String>()
     private val importFromNet by lazy { "网络导入" }
     private val importPackage = registerForActivityResult(HandleFileContract()) {
@@ -148,7 +147,7 @@ class BubbleManageActivity : BaseActivity<ActivityThemeManageBinding>(),
                     summary = summaryState.value,
                     activeDirName = activeDirNameState.value,
                     forceSoftwareBubble = forceSoftwareBubbleState.value,
-                    previewBitmapProvider = ::previewBitmap,
+                    previewBitmapProvider = previewCache::load,
                     onForceSoftwareBubbleChange = ::setForceSoftwareBubble,
                     onApply = ::applyEntry,
                     onEdit = { entry -> showEditDialog(entry) },
@@ -601,19 +600,6 @@ class BubbleManageActivity : BaseActivity<ActivityThemeManageBinding>(),
         notifyBubbleChanged()
     }
 
-    private fun previewBitmap(config: BubblePackageManager.Config) = runCatching {
-        val color = when {
-            AppConfig.isNightTheme -> config.nightNormalColor
-            else -> config.dayNormalColor
-        }?.takeIf { it.isNotBlank() } ?: BubblePackageManager.DEFAULT_NORMAL_COLOR
-        val svg = config.svgTemplate
-            .replace("\${color}", color)
-            .replace("\${num}", "12")
-        val density = resources.displayMetrics.density
-        val sidePx = (BUBBLE_PREVIEW_BITMAP_DP * density).toInt()
-        SvgUtils.createBitmap(ByteArrayInputStream(svg.toByteArray()), sidePx, sidePx)
-    }.getOrNull()
-
     private fun applyEntry(entry: BubblePackageManager.Entry) {
         runAction(refreshPackages = entry.source == BubblePackageManager.Source.REMOTE) {
             val localEntry = if (entry.source == BubblePackageManager.Source.REMOTE) {
@@ -686,6 +672,5 @@ class BubbleManageActivity : BaseActivity<ActivityThemeManageBinding>(),
         private const val CLOUD_SCOPE = "bubble"
         private const val MENU_CONTAINER = 0x6801
         private const val MENU_HELP = 0x6802
-        private const val BUBBLE_PREVIEW_BITMAP_DP = 64
     }
 }

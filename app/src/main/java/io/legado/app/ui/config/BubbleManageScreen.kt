@@ -29,6 +29,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -41,6 +43,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.legado.app.help.config.BubblePackageManager
+import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.theme.composeActionRadius
 import io.legado.app.ui.widget.compose.AppManagementCard
 import io.legado.app.ui.widget.compose.AppManagementListRow
@@ -67,7 +70,7 @@ internal fun BubbleManageScreen(
     summary: String,
     activeDirName: String,
     forceSoftwareBubble: Boolean,
-    previewBitmapProvider: (BubblePackageManager.Config) -> Bitmap?,
+    previewBitmapProvider: suspend (BubblePackageManager.Entry, Int, Boolean) -> Bitmap?,
     onForceSoftwareBubbleChange: (Boolean) -> Unit,
     onApply: (BubblePackageManager.Entry) -> Unit,
     onEdit: (BubblePackageManager.Entry) -> Unit,
@@ -152,7 +155,7 @@ private fun BubbleItemRow(
     entry: BubblePackageManager.Entry,
     active: Boolean,
     palette: AppManagementPalette,
-    previewBitmapProvider: (BubblePackageManager.Config) -> Bitmap?,
+    previewBitmapProvider: suspend (BubblePackageManager.Entry, Int, Boolean) -> Bitmap?,
     onApply: () -> Unit,
     onEdit: () -> Unit,
     moreActions: List<AppManagementMenuAction>
@@ -177,10 +180,31 @@ private fun BubbleItemRow(
                 tonalElevation = 0.dp,
                 shadowElevation = 0.dp
             ) {
-                val bitmap = previewBitmapProvider(entry.config)
-                if (bitmap != null) {
+                val density = LocalDensity.current
+                val sidePx = with(density) { BUBBLE_PREVIEW_BOX.roundToPx() }
+                val isNightTheme = AppConfig.isNightTheme
+                val previewColor = if (isNightTheme) {
+                    entry.config.nightNormalColor
+                } else {
+                    entry.config.dayNormalColor
+                }
+                val bitmap by produceState<Bitmap?>(
+                    initialValue = null,
+                    entry.dirName,
+                    entry.config.updatedAt,
+                    entry.remoteUpdatedAt,
+                    entry.config.svgTemplate.hashCode(),
+                    entry.config.svgTemplate.length,
+                    previewColor,
+                    sidePx,
+                    isNightTheme
+                ) {
+                    value = previewBitmapProvider(entry, sidePx, isNightTheme)
+                }
+                val currentBitmap = bitmap
+                if (currentBitmap != null) {
                     Image(
-                        bitmap = bitmap.asImageBitmap(),
+                        bitmap = currentBitmap.asImageBitmap(),
                         contentDescription = null,
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Fit
