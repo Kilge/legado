@@ -112,6 +112,7 @@ fun AppDialogStyle.toMiuixPalette(): LegadoMiuixPalette {
         primaryText = primaryText,
         secondaryText = secondaryText,
         danger = danger,
+        onAccent = onAccent,
         panelRadius = panelRadius,
         actionRadius = actionRadius
     )

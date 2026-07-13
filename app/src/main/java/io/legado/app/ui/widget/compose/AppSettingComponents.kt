@@ -18,6 +18,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
@@ -220,6 +221,7 @@ fun AppManagementLazyColumn(
         androidx.compose.foundation.lazy.rememberLazyListState(),
     contentPadding: androidx.compose.foundation.layout.PaddingValues =
         androidx.compose.foundation.layout.PaddingValues(bottom = 24.dp),
+    verticalArrangement: Arrangement.Vertical = Arrangement.spacedBy(AppListSpacing.Normal),
     showFastScroller: Boolean = true,
     content: LazyListScope.() -> Unit
 ) {
@@ -232,6 +234,7 @@ fun AppManagementLazyColumn(
             state = state,
             modifier = Modifier.fillMaxSize(),
             contentPadding = contentPadding,
+            verticalArrangement = verticalArrangement,
             content = content
         )
         ComposeLazyListFastScroller(

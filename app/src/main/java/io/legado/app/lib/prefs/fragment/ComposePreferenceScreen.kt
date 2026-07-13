@@ -69,7 +69,9 @@ import io.legado.app.ui.widget.compose.LegadoMiuixPalette
 import io.legado.app.ui.widget.compose.LegadoMiuixSwitch
 import io.legado.app.ui.widget.compose.appSettingPanelBackground
 import io.legado.app.ui.widget.compose.appSettingRowDecoration
+import io.legado.app.ui.widget.compose.rememberAppDialogStyle
 import io.legado.app.ui.widget.compose.rememberAppSettingPalette
+import io.legado.app.ui.widget.compose.toMiuixPalette
 
 private val PanelHorizontalPadding = 12.dp
 
@@ -93,6 +95,7 @@ internal fun ComposePreferenceScreen(
     onScrollTargetConsumed: () -> Unit
 ) {
     val colors = rememberAppSettingPalette()
+    val switchPalette = rememberAppDialogStyle().toMiuixPalette()
     val panelRadiusPx = colors.panelRadiusPx
     val sections = remember(root, refreshTick) {
         root?.toComposeSections().orEmpty()
@@ -131,6 +134,7 @@ internal fun ComposePreferenceScreen(
                 PreferenceSectionPanel(
                     section = section,
                     colors = colors,
+                    switchPalette = switchPalette,
                     panelRadiusPx = panelRadiusPx,
                     onPreferenceClick = onPreferenceClick,
                     onSwitchChange = onSwitchChange,
@@ -147,6 +151,7 @@ internal fun ComposePreferenceScreen(
 private fun PreferenceSectionPanel(
     section: ComposePreferenceSection,
     colors: AppSettingPalette,
+    switchPalette: LegadoMiuixPalette,
     panelRadiusPx: Float,
     onPreferenceClick: (Preference) -> Unit,
     onSwitchChange: (SwitchPreferenceCompat, Boolean) -> Unit,
@@ -174,6 +179,7 @@ private fun PreferenceSectionPanel(
             PreferenceRow(
                 preference = preference,
                 colors = colors,
+                switchPalette = switchPalette,
                 panelRadiusPx = panelRadiusPx,
                 isLast = index == section.rows.lastIndex,
                 showDivider = index != section.rows.lastIndex,
@@ -192,6 +198,7 @@ private fun PreferenceSectionPanel(
 private fun PreferenceRow(
     preference: Preference,
     colors: AppSettingPalette,
+    switchPalette: LegadoMiuixPalette,
     panelRadiusPx: Float,
     isLast: Boolean,
     showDivider: Boolean,
@@ -255,6 +262,7 @@ private fun PreferenceRow(
         PreferenceWidget(
             preference = preference,
             colors = colors,
+            switchPalette = switchPalette,
             enabled = enabled,
             onSwitchChange = onSwitchChange
         )
@@ -315,6 +323,7 @@ private fun PreferenceText(
 private fun PreferenceWidget(
     preference: Preference,
     colors: AppSettingPalette,
+    switchPalette: LegadoMiuixPalette,
     enabled: Boolean,
     onSwitchChange: (SwitchPreferenceCompat, Boolean) -> Unit
 ) {
@@ -326,15 +335,7 @@ private fun PreferenceWidget(
                 checked = preference.isChecked,
                 enabled = enabled,
                 onCheckedChange = { onSwitchChange(preference, it) },
-                palette = LegadoMiuixPalette(
-                    accent = colors.accent,
-                    surface = colors.page,
-                    surfaceVariant = Color(colors.row),
-                    primaryText = colors.primaryText,
-                    secondaryText = colors.secondaryText,
-                    danger = colors.danger,
-                    onAccent = colors.onAccent
-                )
+                palette = switchPalette
             )
         }
 

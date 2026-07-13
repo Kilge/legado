@@ -20,8 +20,6 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -44,10 +42,13 @@ import io.legado.app.R
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.BookGroup
 import io.legado.app.ui.widget.compose.AppDialogFrame
+import io.legado.app.ui.widget.compose.AppDialogSize
+import io.legado.app.ui.widget.compose.AppListSpacing
 import io.legado.app.ui.widget.compose.ComposeDialogFragment
 import io.legado.app.ui.widget.compose.LegadoComposeTheme
 import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
 import io.legado.app.ui.widget.compose.LegadoMiuixCard
+import io.legado.app.ui.widget.compose.LegadoMiuixSwitch
 import io.legado.app.ui.widget.compose.rememberAppDialogStyle
 import io.legado.app.ui.widget.compose.toMiuixPalette
 import io.legado.app.utils.showDialogFragment
@@ -63,8 +64,7 @@ class GroupManageDialog : ComposeDialogFragment() {
 
     private val viewModel: GroupViewModel by viewModels()
 
-    override val widthFraction: Float = 0.92f
-    override val maxWidthDp: Int = 500
+    override val dialogSize: AppDialogSize = AppDialogSize.Management
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -151,7 +151,8 @@ private fun GroupManageContent(
                     state = lazyListState,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(max = 400.dp)
+                        .heightIn(max = 400.dp),
+                    verticalArrangement = Arrangement.spacedBy(AppListSpacing.Normal)
                 ) {
                     items(orderedGroups, key = { it.groupId }) { group ->
                         ReorderableItem(reorderState, key = group.groupId) {
@@ -175,7 +176,6 @@ private fun GroupManageContent(
                                     )
                                 }
                             )
-                            Spacer(modifier = Modifier.height(1.dp))
                         }
                     }
                 }
@@ -225,15 +225,10 @@ private fun GroupManageRow(
                 modifier = Modifier.weight(1f)
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Switch(
+                LegadoMiuixSwitch(
                     checked = group.show,
                     onCheckedChange = { onToggleShow() },
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = style.surface,
-                        checkedTrackColor = style.accent,
-                        uncheckedThumbColor = style.secondaryText,
-                        uncheckedTrackColor = style.stroke
-                    )
+                    palette = style.toMiuixPalette()
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 IconButton(onClick = onEdit) {

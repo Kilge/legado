@@ -23,8 +23,9 @@ abstract class ComposeDialogFragment : DialogFragment() {
     protected open val dialogTheme: Int = R.style.Theme_Legado_ComposeDialog_Center
     protected open val dialogWidth: Int = ViewGroup.LayoutParams.MATCH_PARENT
     protected open val dialogHeight: Int = ViewGroup.LayoutParams.WRAP_CONTENT
-    protected open val widthFraction: Float? = null
-    protected open val maxWidthDp: Int? = null
+    protected open val dialogSize: AppDialogSize? = null
+    protected open val widthFraction: Float? get() = dialogSize?.widthFraction
+    protected open val maxWidthDp: Int? get() = dialogSize?.maxWidthDp
     protected open val dialogGravity: Int = Gravity.CENTER
     protected open val dialogWindowAnimations: Int = R.style.AnimDialogCenter
 
