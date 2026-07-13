@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.sp
 import io.legado.app.R
 import io.legado.app.ui.widget.compose.AppDialogFrame
 import io.legado.app.ui.widget.compose.ComposeDialogFragment
+import io.legado.app.ui.widget.compose.AppDialogSize
 import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
 import io.legado.app.ui.widget.compose.LegadoMiuixChoiceRow
 import io.legado.app.ui.widget.compose.rememberAppDialogStyle
@@ -38,8 +39,7 @@ class ParagraphRuleOnlineImportDialog : ComposeDialogFragment() {
         fun onParagraphRuleImportCancelled()
     }
 
-    override val widthFraction: Float = 0.96f
-    override val maxWidthDp: Int = 700
+    override val dialogSize: AppDialogSize = AppDialogSize.Management
 
     private var confirmed = false
 

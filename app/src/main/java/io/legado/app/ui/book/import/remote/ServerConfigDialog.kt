@@ -33,6 +33,7 @@ import io.legado.app.data.entities.Server
 import io.legado.app.ui.widget.compose.AppDialogFrame
 import io.legado.app.ui.widget.compose.AppDialogStyle
 import io.legado.app.ui.widget.compose.ComposeDialogFragment
+import io.legado.app.ui.widget.compose.AppDialogSize
 import io.legado.app.ui.widget.compose.LegadoComposeTheme
 import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
 import io.legado.app.ui.widget.compose.rememberAppDialogStyle
@@ -49,7 +50,7 @@ class ServerConfigDialog() : ComposeDialogFragment() {
 
     private val viewModel by viewModels<ServerConfigViewModel>()
 
-    override val widthFraction: Float = 0.92f
+    override val dialogSize: AppDialogSize = AppDialogSize.Form
 
     override fun onCreateView(
         inflater: LayoutInflater,

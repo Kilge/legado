@@ -43,6 +43,7 @@ import io.legado.app.ui.book.read.ContentSelectConfig
 import io.legado.app.ui.widget.compose.AppDialogFrame
 import io.legado.app.ui.widget.compose.AppDialogStyle
 import io.legado.app.ui.widget.compose.ComposeDialogFragment
+import io.legado.app.ui.widget.compose.AppDialogSize
 import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
 import io.legado.app.ui.widget.compose.rememberAppDialogStyle
 import io.legado.app.ui.widget.compose.toMiuixPalette
@@ -53,8 +54,7 @@ import io.legado.app.utils.putPrefStringSet
 
 class ContentSelectMenuConfigDialog : ComposeDialogFragment() {
 
-    override val widthFraction: Float = 0.9f
-    override val maxWidthDp: Int = 520
+    override val dialogSize: AppDialogSize = AppDialogSize.Form
 
     private data class ActionItem(
         val id: String,

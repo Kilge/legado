@@ -37,6 +37,7 @@ import io.legado.app.model.CheckSource
 import io.legado.app.ui.widget.compose.AppDialogFrame
 import io.legado.app.ui.widget.compose.AppDialogStyle
 import io.legado.app.ui.widget.compose.ComposeDialogFragment
+import io.legado.app.ui.widget.compose.AppDialogSize
 import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
 import io.legado.app.ui.widget.compose.LegadoMiuixChoiceRow
 import io.legado.app.ui.widget.compose.rememberAppDialogStyle
@@ -48,7 +49,7 @@ class CheckSourceConfig : ComposeDialogFragment() {
 
     private val minTimeout = 0L
 
-    override val widthFraction: Float = 0.9f
+    override val dialogSize: AppDialogSize = AppDialogSize.Form
 
     override fun onCreateView(
         inflater: LayoutInflater,

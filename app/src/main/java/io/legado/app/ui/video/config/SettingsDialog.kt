@@ -33,6 +33,7 @@ import io.legado.app.model.VideoPlay
 import io.legado.app.ui.widget.compose.AppDialogStyle
 import io.legado.app.ui.widget.compose.AppDialogSwitchRow
 import io.legado.app.ui.widget.compose.ComposeDialogFragment
+import io.legado.app.ui.widget.compose.AppDialogSize
 import io.legado.app.ui.widget.compose.LegadoMiuixActionRow
 import io.legado.app.ui.widget.compose.LegadoMiuixCard
 import io.legado.app.ui.widget.compose.rememberAppDialogStyle
@@ -42,8 +43,7 @@ import io.legado.app.ui.widget.number.NumberPickerDialog
 class SettingsDialog(private val context: Context, private val callBack: CallBack? = null) :
     ComposeDialogFragment() {
 
-    override val widthFraction: Float = 0.9f
-    override val maxWidthDp: Int = 520
+    override val dialogSize: AppDialogSize = AppDialogSize.Form
 
     override fun onCreateView(
         inflater: LayoutInflater,

@@ -33,6 +33,7 @@ import io.legado.app.help.update.AppUpdateConfig
 import io.legado.app.ui.widget.compose.AppDialogFrame
 import io.legado.app.ui.widget.compose.AppDialogOptionGroup
 import io.legado.app.ui.widget.compose.ComposeDialogFragment
+import io.legado.app.ui.widget.compose.AppDialogSize
 import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
 import io.legado.app.ui.widget.compose.LegadoMiuixChoiceRow
 import io.legado.app.ui.widget.compose.rememberAppDialogStyle
@@ -106,8 +107,7 @@ object UpdateAcceleratorDialog {
 
 class UpdateAcceleratorComposeDialog : ComposeDialogFragment() {
 
-    override val widthFraction: Float = 0.96f
-    override val maxWidthDp: Int = 620
+    override val dialogSize: AppDialogSize = AppDialogSize.Form
 
     private var onStrategyChanged: ((Int) -> Unit)? = null
     private var onProxySelected: ((Int) -> Unit)? = null

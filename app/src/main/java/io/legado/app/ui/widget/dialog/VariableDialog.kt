@@ -30,6 +30,7 @@ import io.legado.app.R
 import io.legado.app.base.BaseViewModel
 import io.legado.app.ui.widget.compose.AppDialogFrame
 import io.legado.app.ui.widget.compose.ComposeDialogFragment
+import io.legado.app.ui.widget.compose.AppDialogSize
 import io.legado.app.ui.widget.compose.LegadoComposeTheme
 import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
 import io.legado.app.ui.widget.compose.rememberAppDialogStyle
@@ -46,7 +47,7 @@ class VariableDialog() : ComposeDialogFragment() {
         }
     }
 
-    override val widthFraction: Float = 0.92f
+    override val dialogSize: AppDialogSize = AppDialogSize.Form
 
     val callback get() = (parentFragment as? Callback) ?: (activity as? Callback)
 

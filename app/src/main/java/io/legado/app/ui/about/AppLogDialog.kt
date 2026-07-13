@@ -31,6 +31,7 @@ import io.legado.app.constant.AppLog
 import io.legado.app.ui.widget.compose.AppDialogFrame
 import io.legado.app.ui.widget.compose.AppDialogStyle
 import io.legado.app.ui.widget.compose.ComposeDialogFragment
+import io.legado.app.ui.widget.compose.AppDialogSize
 import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
 import io.legado.app.ui.widget.compose.LegadoMiuixCard
 import io.legado.app.ui.widget.compose.rememberAppDialogStyle
@@ -42,8 +43,7 @@ import java.util.Date
 
 class AppLogDialog : ComposeDialogFragment() {
 
-    override val widthFraction: Float = 0.9f
-    override val maxWidthDp: Int = 720
+    override val dialogSize: AppDialogSize = AppDialogSize.Wide
 
     override fun onCreateView(
         inflater: LayoutInflater,

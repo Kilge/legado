@@ -42,6 +42,7 @@ import io.legado.app.data.entities.RuleSub
 import io.legado.app.ui.widget.compose.AppDialogFrame
 import io.legado.app.ui.widget.compose.AppDialogStyle
 import io.legado.app.ui.widget.compose.ComposeDialogFragment
+import io.legado.app.ui.widget.compose.AppDialogSize
 import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
 import io.legado.app.ui.widget.compose.LegadoMiuixCard
 import io.legado.app.ui.widget.compose.LegadoMiuixSwitch
@@ -51,8 +52,7 @@ import io.legado.app.utils.toastOnUi
 
 class RuleSubEditComposeDialog : ComposeDialogFragment() {
 
-    override val widthFraction: Float = 0.96f
-    override val maxWidthDp: Int = 620
+    override val dialogSize: AppDialogSize = AppDialogSize.Management
 
     private val callback: Callback?
         get() = (parentFragment as? Callback) ?: activity as? Callback

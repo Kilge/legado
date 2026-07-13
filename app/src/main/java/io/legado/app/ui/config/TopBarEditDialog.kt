@@ -43,6 +43,7 @@ import io.legado.app.help.config.TopBarConfig
 import io.legado.app.ui.widget.compose.AppDialogFrame
 import io.legado.app.ui.widget.compose.AppDialogStyle
 import io.legado.app.ui.widget.compose.ComposeDialogFragment
+import io.legado.app.ui.widget.compose.AppDialogSize
 import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
 import io.legado.app.ui.widget.compose.LegadoMiuixCard
 import io.legado.app.ui.widget.compose.LegadoMiuixPalette
@@ -52,8 +53,7 @@ import java.util.Locale
 
 class TopBarEditDialog : ComposeDialogFragment() {
 
-    override val widthFraction: Float? = 0.96f
-    override val maxWidthDp: Int? = 700
+    override val dialogSize: AppDialogSize = AppDialogSize.Management
 
     private var onNameChanged: ((String) -> Unit)? = null
     private var onStyleChanged: ((String) -> Unit)? = null

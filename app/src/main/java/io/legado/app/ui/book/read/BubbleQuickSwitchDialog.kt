@@ -50,6 +50,7 @@ import io.legado.app.ui.widget.compose.AppDialogFrame
 import io.legado.app.ui.widget.compose.AppManagementCard
 import io.legado.app.ui.widget.compose.AppManagementListRow
 import io.legado.app.ui.widget.compose.ComposeDialogFragment
+import io.legado.app.ui.widget.compose.AppDialogSize
 import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
 import io.legado.app.ui.widget.compose.rememberAppManagementPalette
 import io.legado.app.utils.SvgUtils
@@ -59,8 +60,7 @@ import java.io.ByteArrayInputStream
 
 class BubbleQuickSwitchDialog : ComposeDialogFragment() {
 
-    override val widthFraction: Float? = 0.94f
-    override val maxWidthDp: Int? = 620
+    override val dialogSize: AppDialogSize = AppDialogSize.Form
 
     private var onSelected: ((BubblePackageManager.Entry) -> Unit)? = null
     private var onManage: (() -> Unit)? = null

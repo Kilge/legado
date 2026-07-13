@@ -43,6 +43,8 @@ import io.legado.app.data.appDb
 import io.legado.app.data.entities.ReplaceRule
 import io.legado.app.ui.widget.compose.AppDialogFrame
 import io.legado.app.ui.widget.compose.ComposeDialogFragment
+import io.legado.app.ui.widget.compose.AppDialogSize
+import io.legado.app.ui.widget.compose.AppListSpacing
 import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
 import io.legado.app.ui.widget.compose.rememberAppDialogStyle
 import io.legado.app.ui.widget.compose.showComposeActionListDialog
@@ -68,8 +70,7 @@ class ImportReplaceRuleDialog() : ComposeDialogFragment(),
         }
     }
 
-    override val widthFraction: Float = 0.96f
-    override val maxWidthDp: Int = 700
+    override val dialogSize: AppDialogSize = AppDialogSize.Management
 
     private val viewModel by viewModels<ImportReplaceRuleViewModel>()
 
@@ -247,7 +248,7 @@ class ImportReplaceRuleDialog() : ComposeDialogFragment(),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .heightIn(max = 420.dp),
-                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                            verticalArrangement = Arrangement.spacedBy(AppListSpacing.Normal)
                         ) {
                             itemsIndexed(
                                 allRules,

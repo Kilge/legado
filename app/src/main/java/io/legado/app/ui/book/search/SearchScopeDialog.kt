@@ -50,6 +50,7 @@ import io.legado.app.data.entities.BookSourcePart
 import io.legado.app.ui.widget.compose.AppDialogFrame
 import io.legado.app.ui.widget.compose.AppDialogStyle
 import io.legado.app.ui.widget.compose.ComposeDialogFragment
+import io.legado.app.ui.widget.compose.AppDialogSize
 import io.legado.app.ui.widget.compose.LegadoComposeTheme
 import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
 import io.legado.app.ui.widget.compose.rememberAppDialogStyle
@@ -65,8 +66,7 @@ class SearchScopeDialog : ComposeDialogFragment() {
 
     val callback: Callback get() = parentFragment as? Callback ?: activity as Callback
 
-    override val widthFraction: Float = 0.92f
-    override val maxWidthDp: Int = 540
+    override val dialogSize: AppDialogSize = AppDialogSize.Form
 
     override fun onCreateView(
         inflater: LayoutInflater,

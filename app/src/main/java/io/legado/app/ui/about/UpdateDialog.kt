@@ -20,6 +20,7 @@ import io.legado.app.lib.theme.uiTypeface
 import io.legado.app.model.Download
 import io.legado.app.ui.widget.compose.AppDialogFrame
 import io.legado.app.ui.widget.compose.ComposeDialogFragment
+import io.legado.app.ui.widget.compose.AppDialogSize
 import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
 import io.legado.app.ui.widget.compose.rememberAppDialogStyle
 import io.legado.app.ui.widget.compose.toMiuixPalette
@@ -31,7 +32,7 @@ import io.noties.markwon.image.glide.GlideImagesPlugin
 
 class UpdateDialog() : ComposeDialogFragment() {
 
-    override val widthFraction: Float = 0.9f
+    override val dialogSize: AppDialogSize = AppDialogSize.Confirm
 
     constructor(updateInfo: AppUpdate.UpdateInfo) : this() {
         arguments = Bundle().apply {

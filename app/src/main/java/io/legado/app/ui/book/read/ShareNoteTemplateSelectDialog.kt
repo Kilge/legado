@@ -37,6 +37,7 @@ import io.legado.app.ui.config.ShareNoteTemplatePreview
 import io.legado.app.ui.widget.compose.AppDialogFrame
 import io.legado.app.ui.widget.compose.AppManagementCard
 import io.legado.app.ui.widget.compose.ComposeDialogFragment
+import io.legado.app.ui.widget.compose.AppDialogSize
 import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
 import io.legado.app.ui.widget.compose.rememberAppManagementPalette
 import kotlinx.coroutines.CancellationException
@@ -46,8 +47,7 @@ import java.io.File
 
 class ShareNoteTemplateSelectDialog : ComposeDialogFragment() {
 
-    override val widthFraction: Float? = 0.94f
-    override val maxWidthDp: Int? = 640
+    override val dialogSize: AppDialogSize = AppDialogSize.Form
 
     private var onSelected: ((ShareNoteTemplateManager.Entry) -> Unit)? = null
     private var onManage: (() -> Unit)? = null

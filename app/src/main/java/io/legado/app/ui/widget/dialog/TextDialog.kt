@@ -46,6 +46,7 @@ import io.legado.app.ui.code.CodeEditActivity
 import io.legado.app.ui.widget.compose.AppDialogFrame
 import io.legado.app.ui.widget.compose.AppDialogStyle
 import io.legado.app.ui.widget.compose.ComposeDialogFragment
+import io.legado.app.ui.widget.compose.AppDialogSize
 import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
 import io.legado.app.ui.widget.compose.rememberAppDialogStyle
 import io.legado.app.ui.widget.compose.toMiuixPalette
@@ -80,8 +81,7 @@ class TextDialog() : ComposeDialogFragment() {
         this.autoClose = autoClose
     }
 
-    override val widthFraction: Float = 0.96f
-    override val maxWidthDp: Int = 720
+    override val dialogSize: AppDialogSize = AppDialogSize.Wide
     override val dialogHeight: Int = ViewGroup.LayoutParams.WRAP_CONTENT
 
     private var time = 0L

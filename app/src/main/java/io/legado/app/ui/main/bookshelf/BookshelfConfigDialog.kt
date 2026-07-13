@@ -62,6 +62,7 @@ import androidx.compose.ui.window.PopupProperties
 import io.legado.app.R
 import io.legado.app.ui.widget.compose.AppDialogStyle
 import io.legado.app.ui.widget.compose.ComposeDialogFragment
+import io.legado.app.ui.widget.compose.AppDialogSize
 import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
 import io.legado.app.ui.widget.compose.LegadoMiuixCard
 import io.legado.app.ui.widget.compose.LegadoMiuixSlider
@@ -151,8 +152,7 @@ private data class BookshelfSwitchItem(
 
 class BookshelfConfigDialog : ComposeDialogFragment() {
 
-    override val widthFraction: Float = 0.94f
-    override val maxWidthDp: Int = 640
+    override val dialogSize: AppDialogSize = AppDialogSize.Form
     override val dialogGravity: Int = Gravity.CENTER
     override val dialogWindowAnimations: Int = R.style.AnimDialogCenter
 

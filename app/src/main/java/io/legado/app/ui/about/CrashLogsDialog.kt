@@ -34,6 +34,7 @@ import io.legado.app.R
 import io.legado.app.help.config.AppConfig
 import io.legado.app.ui.widget.compose.AppDialogFrame
 import io.legado.app.ui.widget.compose.ComposeDialogFragment
+import io.legado.app.ui.widget.compose.AppDialogSize
 import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
 import io.legado.app.ui.widget.compose.LegadoMiuixCard
 import io.legado.app.ui.widget.compose.rememberAppDialogStyle
@@ -57,8 +58,7 @@ import java.io.FileFilter
 
 class CrashLogsDialog : ComposeDialogFragment() {
 
-    override val widthFraction: Float = 0.9f
-    override val maxWidthDp: Int = 600
+    override val dialogSize: AppDialogSize = AppDialogSize.Management
 
     private val viewModel by viewModels<CrashViewModel>()
 

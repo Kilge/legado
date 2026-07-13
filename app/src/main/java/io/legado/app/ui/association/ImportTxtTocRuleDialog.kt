@@ -41,6 +41,8 @@ import androidx.lifecycle.Observer
 import io.legado.app.R
 import io.legado.app.ui.widget.compose.AppDialogFrame
 import io.legado.app.ui.widget.compose.ComposeDialogFragment
+import io.legado.app.ui.widget.compose.AppDialogSize
+import io.legado.app.ui.widget.compose.AppListSpacing
 import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
 import io.legado.app.ui.widget.compose.rememberAppDialogStyle
 import io.legado.app.ui.widget.compose.toMiuixPalette
@@ -58,8 +60,7 @@ class ImportTxtTocRuleDialog() : ComposeDialogFragment() {
         }
     }
 
-    override val widthFraction: Float = 0.96f
-    override val maxWidthDp: Int = 700
+    override val dialogSize: AppDialogSize = AppDialogSize.Management
 
     private val viewModel by viewModels<ImportTxtTocRuleViewModel>()
 
@@ -179,7 +180,7 @@ class ImportTxtTocRuleDialog() : ComposeDialogFragment() {
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .heightIn(max = 420.dp),
-                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                            verticalArrangement = Arrangement.spacedBy(AppListSpacing.Normal)
                         ) {
                             itemsIndexed(
                                 allSources,

@@ -68,6 +68,7 @@ import io.legado.app.ui.widget.compose.AppManagementMenuAction
 import io.legado.app.ui.widget.compose.AppManagementScaffold
 import io.legado.app.ui.widget.compose.AppDialogFrame
 import io.legado.app.ui.widget.compose.ComposeDialogFragment
+import io.legado.app.ui.widget.compose.AppDialogSize
 import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
 import io.legado.app.ui.widget.compose.LegadoMiuixActionRow
 import io.legado.app.ui.widget.compose.rememberAppDialogStyle
@@ -1219,8 +1220,7 @@ private const val GROUP_ACTION_LIST_LIMIT = 48
 
 private class SourceGroupFilterDialog : ComposeDialogFragment() {
 
-    override val widthFraction: Float? = 0.94f
-    override val maxWidthDp: Int? = 620
+    override val dialogSize: AppDialogSize = AppDialogSize.Form
 
     private var groups: List<String> = emptyList()
     private var onGroupSelected: ((String) -> Unit)? = null

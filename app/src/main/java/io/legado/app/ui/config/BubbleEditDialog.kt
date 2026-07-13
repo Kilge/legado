@@ -40,6 +40,7 @@ import io.legado.app.help.config.BubblePackageManager
 import io.legado.app.ui.widget.compose.AppDialogFrame
 import io.legado.app.ui.widget.compose.AppDialogStyle
 import io.legado.app.ui.widget.compose.ComposeDialogFragment
+import io.legado.app.ui.widget.compose.AppDialogSize
 import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
 import io.legado.app.ui.widget.compose.LegadoMiuixCard
 import io.legado.app.ui.widget.compose.rememberAppDialogStyle
@@ -58,8 +59,7 @@ import java.util.Locale
  */
 class BubbleEditDialog : ComposeDialogFragment() {
 
-    override val widthFraction: Float = 0.96f
-    override val maxWidthDp: Int = 620
+    override val dialogSize: AppDialogSize = AppDialogSize.Management
 
     /** Called when the user confirms the edit. Receives the name and current editing config. */
     private var onSaved: ((name: String, config: BubblePackageManager.Config) -> Unit)? = null

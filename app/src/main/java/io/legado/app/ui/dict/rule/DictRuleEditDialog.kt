@@ -34,6 +34,7 @@ import io.legado.app.ui.widget.compose.AppRuleFieldSpacer
 import io.legado.app.ui.widget.compose.AppRuleTextField
 import io.legado.app.ui.widget.compose.ComposeConfirmDialog
 import io.legado.app.ui.widget.compose.ComposeDialogFragment
+import io.legado.app.ui.widget.compose.AppDialogSize
 import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
 import io.legado.app.ui.widget.compose.rememberAppDialogStyle
 import io.legado.app.ui.widget.compose.toMiuixPalette
@@ -42,8 +43,7 @@ import io.legado.app.utils.*
 class DictRuleEditDialog() : ComposeDialogFragment() {
 
     val viewModel by viewModels<DictRuleEditViewModel>()
-    override val widthFraction: Float = 0.96f
-    override val maxWidthDp: Int = 680
+    override val dialogSize: AppDialogSize = AppDialogSize.Management
 
     enum class EditField {
         Name, UrlRule, ShowRule

@@ -25,6 +25,7 @@ import io.legado.app.help.config.AppearanceKitManager
 import io.legado.app.help.config.ImportResult
 import io.legado.app.ui.widget.compose.AppDialogFrame
 import io.legado.app.ui.widget.compose.ComposeDialogFragment
+import io.legado.app.ui.widget.compose.AppDialogSize
 import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
 import io.legado.app.ui.widget.compose.rememberAppDialogStyle
 import io.legado.app.ui.widget.compose.toMiuixPalette
@@ -43,8 +44,7 @@ class ImportRedThemeDialog() : ComposeDialogFragment() {
         }
     }
 
-    override val widthFraction: Float = 0.92f
-    override val maxWidthDp: Int = 520
+    override val dialogSize: AppDialogSize = AppDialogSize.Form
 
     override fun onDismiss(dialog: android.content.DialogInterface) {
         super.onDismiss(dialog)
