@@ -689,6 +689,7 @@ private fun BookshelfChoicePopupPanel(
                 alpha = progress
                 scaleX = 0.96f + 0.04f * progress
                 scaleY = 0.96f + 0.04f * progress
+                translationY = (1f - progress) * 12f
             },
         shape = RoundedCornerShape(style.panelRadius),
         color = style.surface,
@@ -925,6 +926,7 @@ private fun BookshelfDisplayPopupPanel(
                 alpha = progress
                 scaleX = 0.96f + 0.04f * progress
                 scaleY = 0.96f + 0.04f * progress
+                translationY = (1f - progress) * 12f
             },
         shape = RoundedCornerShape(style.panelRadius),
         color = style.surface,
