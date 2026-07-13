@@ -11,8 +11,10 @@ import io.legado.app.utils.fromJsonArray
 import io.legado.app.utils.fromJsonObject
 import io.legado.app.utils.getFile
 import io.legado.app.utils.getPrefString
+import io.legado.app.utils.NetworkUtils
 import io.legado.app.utils.normalizeFileName
 import io.legado.app.utils.putPrefString
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -76,6 +78,14 @@ object BubblePackageManager {
         val remoteUpdatedAt: Long = 0L
     )
 
+    internal data class EntryLoadSnapshot(
+        val localEntries: List<Entry>,
+        val cachedRemoteEntries: List<Entry>
+    ) {
+        val mergedEntries: List<Entry>
+            get() = BubblePackageManager.mergeEntries(localEntries, cachedRemoteEntries)
+    }
+
     enum class Source { BUILTIN, LOCAL, REMOTE, BOTH }
 
     fun builtinConfig(): Config {
@@ -129,9 +139,30 @@ object BubblePackageManager {
         cachedDirName = null
     }
 
-    suspend fun loadEntries(containerId: String? = null, scope: String? = null): List<Entry> = withContext(IO) {
-        val local = loadLocal().associateBy { it.dirName }
-        val remote = loadRemoteOrCache(containerId, scope).associateBy { it.dirName }
+    suspend fun loadEntries(containerId: String? = null, scope: String? = null): List<Entry> {
+        val snapshot = loadEntrySnapshot(containerId)
+        return refreshEntries(snapshot, containerId, scope)
+    }
+
+    internal suspend fun loadEntrySnapshot(containerId: String? = null): EntryLoadSnapshot =
+        withContext(IO) {
+            EntryLoadSnapshot(
+                localEntries = loadLocal(),
+                cachedRemoteEntries = readRemoteCache(containerId)
+            )
+        }
+
+    internal suspend fun refreshEntries(
+        snapshot: EntryLoadSnapshot,
+        containerId: String? = null,
+        scope: String? = null
+    ): List<Entry> = withContext(IO) {
+        mergeEntries(snapshot.localEntries, loadRemoteOrCache(containerId, scope))
+    }
+
+    internal fun mergeEntries(localEntries: List<Entry>, remoteEntries: List<Entry>): List<Entry> {
+        val local = localEntries.associateBy { it.dirName }
+        val remote = remoteEntries.associateBy { it.dirName }
         val merged = (local.keys + remote.keys).mapNotNull { key ->
             val localEntry = local[key]
             val remoteEntry = remote[key]
@@ -145,7 +176,7 @@ object BubblePackageManager {
                 else -> null
             }
         }
-        listOf(builtinEntry()) + merged.sortedWith(
+        return listOf(builtinEntry()) + merged.sortedWith(
             compareByDescending<Entry> { it.config.updatedAt }
                 .thenByDescending { it.remoteUpdatedAt }
                 .thenBy { it.config.name }
@@ -323,8 +354,9 @@ object BubblePackageManager {
 
     private suspend fun loadRemoteOrCache(containerId: String? = null, scope: String? = null): List<Entry> {
         val cached = readRemoteCache(containerId)
-        return runCatching {
-            AppCloudStorage.listBubblePackages(containerId, scope).map { remoteFile ->
+        if (!NetworkUtils.isAvailable()) return cached
+        return try {
+            val remote = AppCloudStorage.listBubblePackages(containerId, scope).map { remoteFile ->
                 val dirName = remoteFile.displayName.trimEnd('/').removeSuffix(".zip")
                 Entry(
                     config = Config(
@@ -338,11 +370,13 @@ object BubblePackageManager {
                     remoteUpdatedAt = remoteFile.lastModify
                 )
             }
-        }.onSuccess { remote ->
             if (remote.isNotEmpty() || cached.isEmpty()) {
                 writeRemoteCache(remote, containerId)
             }
-        }.getOrElse {
+            remote
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Throwable) {
             cached
         }
     }
@@ -350,19 +384,21 @@ object BubblePackageManager {
     private fun readRemoteCache(containerId: String? = null): List<Entry> {
         val file = remoteCacheFile(containerId)
         if (!file.exists()) return emptyList()
-        return GSON.fromJsonArray<RemoteCache>(file.readText()).getOrDefault(emptyList()).map {
-            Entry(
-                config = Config(
-                    name = it.name,
+        return runCatching {
+            GSON.fromJsonArray<RemoteCache>(file.readText()).getOrThrow().map {
+                Entry(
+                    config = Config(
+                        name = it.name,
+                        dirName = it.dirName,
+                        updatedAt = it.updatedAt,
+                        svgTemplate = defaultSvgTemplate()
+                    ),
+                    source = Source.REMOTE,
                     dirName = it.dirName,
-                    updatedAt = it.updatedAt,
-                    svgTemplate = defaultSvgTemplate()
-                ),
-                source = Source.REMOTE,
-                dirName = it.dirName,
-                remoteUpdatedAt = it.updatedAt
-            )
-        }
+                    remoteUpdatedAt = it.updatedAt
+                )
+            }
+        }.getOrDefault(emptyList())
     }
 
     private fun writeRemoteCache(entries: List<Entry>, containerId: String? = null) {

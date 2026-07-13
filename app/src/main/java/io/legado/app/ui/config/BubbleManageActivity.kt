@@ -48,6 +48,8 @@ import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -69,6 +71,8 @@ class BubbleManageActivity : BaseActivity<ActivityThemeManageBinding>(),
     private var editingConfig: BubblePackageManager.Config? = null
     private var editingEntry: BubblePackageManager.Entry? = null
     private var svgCursorPosition: Int = 0
+    private var loadVersion = 0
+    private var loadJob: Job? = null
     private val handledWebDavTasks = mutableSetOf<String>()
     private val importFromNet by lazy { "网络导入" }
     private val importPackage = registerForActivityResult(HandleFileContract()) {
@@ -115,6 +119,7 @@ class BubbleManageActivity : BaseActivity<ActivityThemeManageBinding>(),
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         initComposeContent()
+        updateContainerMenu()
         loadPackages()
         observeWebDavTasks()
     }
@@ -122,7 +127,6 @@ class BubbleManageActivity : BaseActivity<ActivityThemeManageBinding>(),
     override fun onResume() {
         super.onResume()
         invalidateOptionsMenu()
-        loadPackages()
     }
 
     private fun initComposeContent() {
@@ -184,15 +188,16 @@ class BubbleManageActivity : BaseActivity<ActivityThemeManageBinding>(),
     }
 
     private fun updateContainerMenu() {
-        val item = containerMenuItem ?: return
         val containers = AppCloudStorage.listContainers().filter { it.enabled }
         if (AppCloudStorage.type != CloudStorageType.S3) {
             cloudContainerId = containers.firstOrNull()?.id
+            val item = containerMenuItem ?: return
             item.isVisible = false
             return
         }
         cloudContainerId =
             AppCloudStorage.selectedContainer(CLOUD_SCOPE)?.id ?: containers.firstOrNull()?.id
+        val item = containerMenuItem ?: return
         item.isVisible = true
         item.title = containers.firstOrNull { it.id == cloudContainerId }
             ?.let(AppCloudStorage::containerDisplayLabel)
@@ -233,15 +238,31 @@ class BubbleManageActivity : BaseActivity<ActivityThemeManageBinding>(),
     }
 
     private fun loadPackages() {
-        lifecycleScope.launch {
-            kotlin.runCatching {
-                BubblePackageManager.loadEntries(cloudContainerId, CLOUD_SCOPE)
-            }.onSuccess {
-                entriesState.value = it
+        val version = ++loadVersion
+        val containerId = cloudContainerId
+        loadJob?.cancel()
+        loadJob = lifecycleScope.launch {
+            try {
+                val snapshot = BubblePackageManager.loadEntrySnapshot(containerId)
+                if (version != loadVersion || isFinishing || isDestroyed) return@launch
+                entriesState.value = snapshot.mergedEntries
                 activeDirNameState.value = BubblePackageManager.activeDirName()
                 summaryState.value = getString(R.string.bubble_manage_summary)
-            }.onFailure {
-                summaryState.value = it.localizedMessage ?: ""
+
+                val refreshed = BubblePackageManager.refreshEntries(
+                    snapshot,
+                    containerId,
+                    CLOUD_SCOPE
+                )
+                if (version != loadVersion || isFinishing || isDestroyed) return@launch
+                entriesState.value = refreshed
+                activeDirNameState.value = BubblePackageManager.activeDirName()
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                if (version == loadVersion && !isFinishing && !isDestroyed) {
+                    summaryState.value = error.localizedMessage ?: ""
+                }
             }
         }
     }
@@ -552,7 +573,11 @@ class BubbleManageActivity : BaseActivity<ActivityThemeManageBinding>(),
         )
     }
 
-    private fun runAction(refreshReading: Boolean = true, block: suspend () -> Unit) {
+    private fun runAction(
+        refreshReading: Boolean = true,
+        refreshPackages: Boolean = true,
+        block: suspend () -> Unit
+    ) {
         lifecycleScope.launch {
             kotlin.runCatching { withContext(Dispatchers.IO) { block() } }
                 .onSuccess {
@@ -561,7 +586,7 @@ class BubbleManageActivity : BaseActivity<ActivityThemeManageBinding>(),
                     if (refreshReading) notifyBubbleChanged()
                 }
                 .onFailure { toastOnUi(it.localizedMessage) }
-            loadPackages()
+            if (refreshPackages) loadPackages()
         }
     }
 
@@ -590,7 +615,7 @@ class BubbleManageActivity : BaseActivity<ActivityThemeManageBinding>(),
     }.getOrNull()
 
     private fun applyEntry(entry: BubblePackageManager.Entry) {
-        runAction {
+        runAction(refreshPackages = entry.source == BubblePackageManager.Source.REMOTE) {
             val localEntry = if (entry.source == BubblePackageManager.Source.REMOTE) {
                 BubblePackageManager.download(entry, cloudContainerId, CLOUD_SCOPE)
             } else {
