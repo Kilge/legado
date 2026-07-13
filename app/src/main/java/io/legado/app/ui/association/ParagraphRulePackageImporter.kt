@@ -5,7 +5,6 @@ import io.legado.app.data.AppDatabase
 import io.legado.app.data.entities.ParagraphRule
 import io.legado.app.data.entities.ParagraphRuleVar
 import java.io.File
-import java.util.Locale
 
 class ParagraphRulePackageImporter(
     private val database: AppDatabase
@@ -14,11 +13,11 @@ class ParagraphRulePackageImporter(
         val packageData = ParagraphRulePackageParser.parse(file)
         val existingNames = HashSet<String>()
         for (rule in database.paragraphRuleDao.all()) {
-            existingNames.add(rule.name.trim().lowercase(Locale.ROOT))
+            existingNames.add(rule.name)
         }
         var conflicts = 0
         for (entry in packageData.entries) {
-            if (entry.rule.name.lowercase(Locale.ROOT) in existingNames) conflicts++
+            if (entry.rule.name in existingNames) conflicts++
         }
         return ParagraphRuleImportInspection(packageData, conflicts)
     }
@@ -38,8 +37,8 @@ class ParagraphRulePackageImporter(
         val existingByName = HashMap<String, ParagraphRule>()
         val usedNames = HashSet<String>()
         for (rule in dao.all()) {
-            val key = rule.name.trim().lowercase(Locale.ROOT)
-            existingByName[key] = rule
+            val key = rule.name
+            existingByName.putIfAbsent(key, rule)
             usedNames.add(key)
         }
         var nextOrder = (dao.maxOrder() ?: -1) + 1
@@ -50,7 +49,7 @@ class ParagraphRulePackageImporter(
 
         for (entry in inspection.packageData.entries) {
             val imported = entry.rule
-            val key = imported.name.lowercase(Locale.ROOT)
+            val key = imported.name
             val conflict = existingByName[key]
             if (conflict == null) {
                 val order = nextOrder++
@@ -73,7 +72,7 @@ class ParagraphRulePackageImporter(
                 overwritten++
             } else {
                 val renamedValue = uniqueImportedName(imported.name, usedNames)
-                val renamedKey = renamedValue.lowercase(Locale.ROOT)
+                val renamedKey = renamedValue
                 val order = nextOrder++
                 val id = insertNew(entry, renamedValue, order)
                 existingByName[renamedKey] = imported.copy(id = id, name = renamedValue, order = order)
@@ -112,7 +111,7 @@ class ParagraphRulePackageImporter(
             val suffix = if (index == 1) " (imported)" else " (imported $index)"
             val prefix = baseName.take((200 - suffix.length).coerceAtLeast(1)).trimEnd()
             val candidate = prefix + suffix
-            if (candidate.lowercase(Locale.ROOT) !in usedNames) return candidate
+            if (candidate !in usedNames) return candidate
             index++
         }
     }

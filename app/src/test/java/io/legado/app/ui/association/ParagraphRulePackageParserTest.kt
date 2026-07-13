@@ -55,11 +55,46 @@ class ParagraphRulePackageParserTest {
         )
     }
 
-    @Test(expected = java.io.IOException::class)
-    fun rejectsDuplicateNamesIgnoringCase() {
-        ParagraphRulePackageParser.parse(
+    @Test
+    fun keepsDuplicateNamesForConflictResolution() {
+        val parsed = ParagraphRulePackageParser.parse(
             "[${ruleJson("Duplicate")},${ruleJson("duplicate")}]"
         )
+
+        assertEquals(listOf("Duplicate", "duplicate"), parsed.entries.map { it.rule.name })
+    }
+
+    @Test
+    fun acceptsMultilineLoginScript() {
+        val parsed = ParagraphRulePackageParser.parse(
+            """{"name":"Login","script":"return content","loginUrl":"@js:\nlet token = 'a b';\nreturn token;","timeoutMillisecond":3000}"""
+        )
+
+        assertEquals("@js:\nlet token = 'a b';\nreturn token;", parsed.entries.single().rule.loginUrl)
+    }
+
+    @Test
+    fun preservesNonPositiveTimeoutUsedAsDefault() {
+        val parsed = ParagraphRulePackageParser.parse(
+            """{"name":"Default timeout","script":"return content","timeoutMillisecond":0}"""
+        )
+
+        assertEquals(0L, parsed.entries.single().rule.timeoutMillisecond)
+    }
+
+    @Test
+    fun acceptsWhitespaceVariableNamesUsedByRuntimeApi() {
+        val parsed = ParagraphRulePackageParser.parse(
+            """
+            {
+              "format": "legado.paragraph-rules",
+              "schemaVersion": 1,
+              "rules": [{"rule": ${ruleJson("Vars")}, "vars": {"display name": "value"}}]
+            }
+            """.trimIndent()
+        )
+
+        assertEquals("value", parsed.entries.single().vars["display name"])
     }
 
     @Test(expected = java.io.IOException::class)

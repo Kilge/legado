@@ -7,20 +7,16 @@ import io.legado.app.data.entities.ParagraphRule
 import io.legado.app.utils.GSON
 import java.io.File
 import java.io.IOException
-import java.util.Locale
 
 object ParagraphRulePackageParser {
     const val FORMAT = "legado.paragraph-rules"
     const val SCHEMA_VERSION = 1
     private const val MAX_RULES = 256
     private const val MAX_NAME_CHARS = 200
-    private const val MAX_URL_CHARS = 8_192
     private const val MAX_SCRIPT_CHARS = 1_048_576
-    private const val MAX_LOGIN_UI_CHARS = 262_144
     private const val MAX_VARS_PER_RULE = 256
     private const val MAX_VAR_NAME_CHARS = 200
     private const val MAX_VAR_VALUE_CHARS = 65_536
-    private const val MAX_TIMEOUT_MILLIS = 600_000L
 
     fun parse(file: File): ParagraphRuleImportPackage {
         val root = file.bufferedReader(Charsets.UTF_8).use { reader ->
@@ -109,30 +105,22 @@ object ParagraphRulePackageParser {
     private fun validateEntries(entries: List<ParagraphRuleImportEntry>) {
         if (entries.isEmpty()) throw IOException("Paragraph rule package is empty")
         if (entries.size > MAX_RULES) throw IOException("Paragraph rule package contains too many rules")
-        val names = HashSet<String>()
         for (entry in entries) {
-            validateRule(entry, names)
+            validateRule(entry)
         }
     }
 
-    private fun validateRule(entry: ParagraphRuleImportEntry, names: MutableSet<String>) {
+    private fun validateRule(entry: ParagraphRuleImportEntry) {
         val rule = entry.rule
         rule.name = rule.name.trim()
         if (rule.name.isEmpty()) throw IOException("Paragraph rule name must not be empty")
         if (rule.name.length > MAX_NAME_CHARS) throw IOException("Paragraph rule name is too long")
-        if (!names.add(rule.name.lowercase(Locale.ROOT))) {
-            throw IOException("Paragraph rule package contains duplicate names: ${rule.name}")
-        }
         validateText("script", rule.script, MAX_SCRIPT_CHARS, true)
         validateText("jsLib", rule.jsLib, MAX_SCRIPT_CHARS, false)
-        validateText("loginUi", rule.loginUi, MAX_LOGIN_UI_CHARS, false)
-        validateText("loginUrl", rule.loginUrl, MAX_URL_CHARS, false)
-        if (rule.loginUrl.any { it.isISOControl() || it.isWhitespace() }) {
-            throw IOException("Paragraph rule loginUrl contains whitespace or control characters")
-        }
-        if (rule.timeoutMillisecond !in 1L..MAX_TIMEOUT_MILLIS) {
-            throw IOException("Paragraph rule timeout is outside the allowed range")
-        }
+        validateText("loginUi", rule.loginUi, MAX_SCRIPT_CHARS, false)
+        // BaseSource.getLoginJs() evaluates loginUrl as JavaScript. It may legitimately contain
+        // spaces, tabs and line breaks, so validate it as a script rather than as a network URL.
+        validateText("loginUrl", rule.loginUrl, MAX_SCRIPT_CHARS, false)
         if (entry.vars.size > MAX_VARS_PER_RULE) {
             throw IOException("Paragraph rule contains too many variables")
         }
@@ -141,7 +129,7 @@ object ParagraphRulePackageParser {
             throw IOException("Paragraph rule exportId is invalid")
         }
         for ((name, value) in entry.vars) {
-            if (name.isBlank() || name.length > MAX_VAR_NAME_CHARS || name.any { it.isISOControl() }) {
+            if (name.length > MAX_VAR_NAME_CHARS || name.any { it == '\u0000' }) {
                 throw IOException("Paragraph rule variable name is invalid")
             }
             if (value.length > MAX_VAR_VALUE_CHARS || value.any { it == '\u0000' }) {
