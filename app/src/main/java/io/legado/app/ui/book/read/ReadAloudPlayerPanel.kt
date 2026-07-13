@@ -40,6 +40,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -673,11 +675,12 @@ class ReadAloudPlayerPanel @JvmOverloads constructor(
         val shouldContinueReadAloud = BaseReadAloudService.isRun
         val shouldPlay = !BaseReadAloudService.pause
         prepareChapterNavigation(targetIndex)
+        if (shouldContinueReadAloud) {
+            ReadAloud.selectChapter(context, targetIndex, continuePlayback = shouldPlay)
+            return
+        }
         ReadBook.openChapter(targetIndex, upContent = true) {
             onChapterContentChanged()
-            if (shouldContinueReadAloud) {
-                ReadBook.readAloud(play = shouldPlay)
-            }
         }
     }
 
@@ -687,14 +690,23 @@ class ReadAloudPlayerPanel @JvmOverloads constructor(
         val targetIndex = (ReadBook.durChapterIndex + delta).coerceIn(0, chapterCount - 1)
         if (targetIndex == ReadBook.durChapterIndex) return
         prepareChapterNavigation(targetIndex)
+        if (BaseReadAloudService.isRun) {
+            val continuePlayback = BaseReadAloudService.isPlay()
+            if (delta < 0) {
+                ReadAloud.prevChapter(context, continuePlayback)
+            } else {
+                ReadAloud.nextChapter(context, continuePlayback)
+            }
+            return
+        }
         val moved = if (delta < 0) {
             ReadBook.moveToPrevChapter(
                 upContent = true,
                 toLast = false,
-                fromReadAloud = BaseReadAloudService.isRun
+                fromReadAloud = false
             )
         } else {
-            ReadBook.moveToNextChapter(true, fromReadAloud = BaseReadAloudService.isRun)
+            ReadBook.moveToNextChapter(true, fromReadAloud = false)
         }
         if (!moved) {
             refresh()
@@ -4393,7 +4405,7 @@ private fun LyricCueBody(
         listOf(
             ReadAloudPlayerPanel.TextCueUi(
                 index = state.paragraphIndex.coerceAtLeast(1),
-                text = state.paragraphText.ifBlank { "鏆傛棤褰撳墠娈佃惤" },
+                text = state.paragraphText.ifBlank { "暂无当前段落" },
                 current = true,
                 key = state.paragraphKey.ifBlank { state.paragraphIndex.toString() },
                 sequence = state.paragraphSequence,
@@ -4406,7 +4418,6 @@ private fun LyricCueBody(
     var programmaticScroll by remember(state.chapterKey) { mutableStateOf(false) }
     var lastCenteredTarget by remember(state.chapterKey) { mutableStateOf<Int?>(null) }
     val currentIndex = state.currentCueIndex.coerceIn(0, cues.lastIndex)
-    val density = LocalDensity.current
     BoxWithConstraints(
         modifier = modifier
             .fillMaxHeight()
@@ -4418,15 +4429,26 @@ private fun LyricCueBody(
         suspend fun centerCue(index: Int, animated: Boolean) {
             if (cues.isEmpty()) return
             val targetIndex = index.coerceIn(0, cues.lastIndex)
-            val targetOffset = with(density) {
-                val centerOffset = ((maxHeight / 2) - if (compact) 18.dp else 22.dp)
-                    .coerceAtLeast(0.dp)
-                -centerOffset.roundToPx()
+            var targetItem = listState.layoutInfo.visibleItemsInfo
+                .firstOrNull { it.index == targetIndex }
+            if (targetItem == null) {
+                listState.scrollToItem(targetIndex, scrollOffset = 0)
+                targetItem = listState.layoutInfo.visibleItemsInfo
+                    .firstOrNull { it.index == targetIndex }
             }
-            if (animated) {
-                listState.animateScrollToItem(targetIndex, scrollOffset = targetOffset)
-            } else {
-                listState.scrollToItem(targetIndex, scrollOffset = targetOffset)
+            targetItem?.let { item ->
+                val scrollDelta = ReadAloudPanelLayout.centeredScrollDelta(
+                    viewportHeight = listState.layoutInfo.viewportSize.height,
+                    itemOffset = item.offset,
+                    itemSize = item.size
+                )
+                if (kotlin.math.abs(scrollDelta) >= 1f) {
+                    if (animated) {
+                        listState.animateScrollBy(scrollDelta)
+                    } else {
+                        listState.scrollBy(scrollDelta)
+                    }
+                }
             }
         }
 

@@ -410,8 +410,16 @@ abstract class BaseReadAloudService : BaseService(),
                 chapterPosition = intent.getIntExtra("chapterPosition", -1),
                 play = intent.getBooleanExtra("play", isPlay())
             )
-            IntentAction.prev -> prevChapter()
-            IntentAction.next -> nextChapter()
+            IntentAction.prev -> prevChapter(
+                continuePlayback = intent.getBooleanExtra("continuePlayback", true)
+            )
+            IntentAction.next -> nextChapter(
+                continuePlayback = intent.getBooleanExtra("continuePlayback", true)
+            )
+            IntentAction.selectChapter -> selectChapter(
+                chapterIndex = intent.getIntExtra("chapterIndex", -1),
+                continuePlayback = intent.getBooleanExtra("continuePlayback", true)
+            )
             IntentAction.addTimer -> addTimer()
             IntentAction.setTimer -> setTimer(intent.getIntExtra("minute", 0))
             IntentAction.stop -> {
@@ -577,7 +585,7 @@ abstract class BaseReadAloudService : BaseService(),
         postEvent(EventBus.ALOUD_STATE, Status.PAUSE)
     }
 
-    private fun prepareChapterTransition() {
+    private fun prepareChapterTransition(continuePlayback: Boolean = true) {
         playStop()
         rolePlaybackBlocked = false
         nowSpeak = 0
@@ -589,12 +597,18 @@ abstract class BaseReadAloudService : BaseService(),
         speechItems = emptyList()
         contentList = emptyList()
         readAloudPlanKey = ""
-        pause = false
+        pause = !continuePlayback
         needResumeOnAudioFocusGain = false
         needResumeOnCallStateIdle = false
         upReadAloudNotification()
-        upMediaSessionPlaybackState(PlaybackStateCompat.STATE_PLAYING)
-        postEvent(EventBus.ALOUD_STATE, Status.PLAY)
+        upMediaSessionPlaybackState(
+            if (continuePlayback) PlaybackStateCompat.STATE_PLAYING
+            else PlaybackStateCompat.STATE_PAUSED
+        )
+        postEvent(
+            EventBus.ALOUD_STATE,
+            if (continuePlayback) Status.PLAY else Status.PAUSE
+        )
     }
 
     private fun queueNextChapterRoleCache() {
@@ -1148,18 +1162,26 @@ abstract class BaseReadAloudService : BaseService(),
 
     abstract fun aloudServicePendingIntent(actionStr: String): PendingIntent?
 
-    open fun prevChapter() {
+    open fun prevChapter(continuePlayback: Boolean = true) {
         toLast = false
-        prepareChapterTransition()
+        prepareChapterTransition(continuePlayback)
         ReadBook.moveToPrevChapter(true, toLast = false, fromReadAloud = true)
     }
 
-    open fun nextChapter() {
+    open fun nextChapter(continuePlayback: Boolean = true) {
         ReadBook.upReadTime()
         AppLog.putDebug("${ReadBook.curTextChapter?.chapter?.title} 朗读结束跳转下一章并朗读")
-        prepareChapterTransition()
+        prepareChapterTransition(continuePlayback)
         if (!ReadBook.moveToNextChapter(true, fromReadAloud = true)) {
             stopSelf()
+        }
+    }
+
+    open fun selectChapter(chapterIndex: Int, continuePlayback: Boolean = true) {
+        if (chapterIndex !in 0 until ReadBook.chapterSize) return
+        prepareChapterTransition(continuePlayback)
+        ReadBook.openChapter(chapterIndex, durChapterPos = 0, upContent = true) {
+            ReadBook.readAloud(play = continuePlayback, startPos = 0)
         }
     }
 

@@ -20,6 +20,7 @@ object IntentAction {
     const val setSpeed = "setSpeed"
     const val prev = "prev"
     const val next = "next"
+    const val selectChapter = "selectChapter"
     const val moveTo = "moveTo"
     const val init = "init"
     const val remove = "remove"
