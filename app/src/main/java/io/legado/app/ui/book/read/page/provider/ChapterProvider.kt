@@ -15,6 +15,7 @@ import io.legado.app.help.book.BookContent
 import io.legado.app.help.book.isEpub
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ReadBookConfig
+import io.legado.app.help.config.ReaderFontWeight
 import io.legado.app.model.ReadBook
 import io.legado.app.ui.book.read.page.entities.TextChapter
 import io.legado.app.utils.RealPathUtil
@@ -238,22 +239,18 @@ object ChapterProvider {
         // 字体统一处理
         val bold = Typeface.create(typeface, Typeface.BOLD)
         val normal = Typeface.create(typeface, Typeface.NORMAL)
-        val (titleFont, textFont) = when (ReadBookConfig.textBold) {
-            1 -> {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P)
-                    Pair(Typeface.create(typeface, 900, false), bold)
-                else
-                    Pair(bold, bold)
-            }
-
-            2 -> {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P)
-                    Pair(normal, Typeface.create(typeface, 300, false))
-                else
-                    Pair(normal, normal)
-            }
-
-            else -> Pair(bold, normal)
+        val textWeight = ReadBookConfig.textWeight
+        val titleWeight = ReaderFontWeight.titleWeight(textWeight)
+        val (titleFont, textFont) = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            Pair(
+                Typeface.create(typeface, titleWeight, false),
+                Typeface.create(typeface, textWeight, false)
+            )
+        } else {
+            Pair(
+                if (titleWeight >= 600) bold else normal,
+                if (textWeight >= 600) bold else normal
+            )
         }
 
         //标题

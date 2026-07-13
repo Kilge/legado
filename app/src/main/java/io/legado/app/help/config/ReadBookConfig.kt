@@ -275,6 +275,12 @@ object ReadBookConfig {
             config.textBold = value
         }
 
+    var textWeight: Int
+        get() = ReaderFontWeight.normalize(config.textBold)
+        set(value) {
+            config.textBold = ReaderFontWeight.normalize(value)
+        }
+
     var textSize: Int
         get() = config.textSize
         set(value) {
@@ -571,7 +577,7 @@ object ReadBookConfig {
         private var pageAnim: Int = 0,//翻页动画
         private var pageAnimEInk: Int = 4,
         var textFont: String = "",//字体
-        var textBold: Int = 0,//是否粗体字 0:正常, 1:粗体, 2:细体
+        var textBold: Int = 0,//字体字重 100-900; 兼容旧值 0:正常, 1:粗体, 2:细体
         var textSize: Int = 20,//文字大小
         var letterSpacing: Float = 0.1f,//字间距
         var lineSpacingExtra: Int = 12,//行间距

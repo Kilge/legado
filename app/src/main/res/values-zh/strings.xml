@@ -780,6 +780,7 @@
     <string name="information">信息</string>
     <string name="switchLayout">切换布局</string>
     <string name="text_font_weight_converter">文章字重切换</string>
+    <string name="text_font_weight">字体粗细</string>
     <string name="full_screen_gestures_support">全面屏手势优化</string>
     <string name="disable_return_key">禁用返回键</string>
 

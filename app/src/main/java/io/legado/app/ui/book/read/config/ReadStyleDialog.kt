@@ -56,6 +56,7 @@ import io.legado.app.constant.EventBus
 import io.legado.app.constant.PageAnim
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ReadBookConfig
+import io.legado.app.help.config.ReaderFontWeight
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.uiTypeface
 import io.legado.app.model.ReadBook
@@ -63,6 +64,7 @@ import io.legado.app.ui.book.read.ReadBookActivity
 import io.legado.app.ui.font.FontSelectDialog
 import io.legado.app.ui.widget.compose.AppDialogStyle
 import io.legado.app.ui.widget.compose.AppThemedStepperSlider
+import io.legado.app.ui.widget.compose.LegadoMiuixSlider
 import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
 import io.legado.app.ui.widget.compose.toMiuixPalette
 import io.legado.app.ui.widget.image.CircleImageView
@@ -70,6 +72,7 @@ import io.legado.app.utils.ChineseUtils
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.postEvent
 import io.legado.app.utils.showDialogFragment
+import kotlin.math.roundToInt
 
 class ReadStyleDialog : ReaderBottomSheetComposeDialogFragment(),
     FontSelectDialog.CallBack {
@@ -102,7 +105,8 @@ class ReadStyleDialog : ReaderBottomSheetComposeDialogFragment(),
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(max = 460.dp),
+                    .heightIn(max = 460.dp)
+                    .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 TextMetricSection(style = style)
@@ -116,9 +120,8 @@ class ReadStyleDialog : ReaderBottomSheetComposeDialogFragment(),
     private fun AnimAndToolsSection(style: AppDialogStyle) {
         var selectedAnim by rememberSaveable { mutableIntStateOf(ReadBook.pageAnim()) }
         var shareLayout by rememberSaveable { mutableIntStateOf(if (ReadBookConfig.shareLayout) 1 else 0) }
-        var textBold by rememberSaveable { mutableIntStateOf(ReadBookConfig.textBold) }
+        var textWeight by rememberSaveable { mutableIntStateOf(ReadBookConfig.textWeight) }
         var chineseMode by rememberSaveable { mutableIntStateOf(AppConfig.chineseConverterType) }
-        val weightLabels = stringArrayResource(R.array.text_font_weight)
         val chineseLabels = stringArrayResource(R.array.chinese_mode)
         ReaderSectionCard(style = style, title = null) {
             ReaderSegmentedOptions(
@@ -137,20 +140,21 @@ class ReadStyleDialog : ReaderBottomSheetComposeDialogFragment(),
                     ReadBook.loadContent(false)
                 }
             }
+            FontWeightSlider(
+                value = textWeight,
+                style = style,
+                onValueChange = { value ->
+                    textWeight = value
+                    ReadBookConfig.textWeight = value
+                },
+                onValueChangeFinished = {
+                    postEvent(EventBus.UP_CONFIG, arrayListOf(8, 9, 6))
+                }
+            )
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(5.dp)
             ) {
-                ReaderTextAction(
-                    text = weightLabels.getOrElse(textBold) { "" },
-                    style = style,
-                    modifier = Modifier.weight(1f),
-                    onClick = {
-                        textBold = (textBold + 1) % weightLabels.size
-                        ReadBookConfig.textBold = textBold
-                        postEvent(EventBus.UP_CONFIG, arrayListOf(8, 9, 6))
-                    }
-                )
                 ReaderTextAction(
                     text = stringResource(R.string.text_font),
                     style = style,
@@ -200,6 +204,60 @@ class ReadStyleDialog : ReaderBottomSheetComposeDialogFragment(),
                 shareLayout = if (checked) 1 else 0
                 ReadBookConfig.shareLayout = checked
                 postEvent(EventBus.UP_CONFIG, arrayListOf(1, 2, 5))
+            }
+        }
+    }
+
+    @Composable
+    private fun FontWeightSlider(
+        value: Int,
+        style: AppDialogStyle,
+        onValueChange: (Int) -> Unit,
+        onValueChangeFinished: () -> Unit
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 66.dp),
+            shape = RoundedCornerShape(style.actionRadius),
+            color = style.fieldSurface,
+            contentColor = style.primaryText,
+            tonalElevation = 0.dp,
+            shadowElevation = 0.dp
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = stringResource(R.string.text_font_weight),
+                        modifier = Modifier.weight(1f),
+                        color = style.primaryText,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight(value)
+                    )
+                    Text(
+                        text = value.toString(),
+                        color = style.accent,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+                LegadoMiuixSlider(
+                    value = value.toFloat(),
+                    onValueChange = {
+                        onValueChange(
+                            it.roundToInt().coerceIn(ReaderFontWeight.MIN, ReaderFontWeight.MAX)
+                        )
+                    },
+                    onValueChangeFinished = onValueChangeFinished,
+                    palette = style.toMiuixPalette(),
+                    valueRange = ReaderFontWeight.MIN.toFloat()..ReaderFontWeight.MAX.toFloat()
+                )
             }
         }
     }

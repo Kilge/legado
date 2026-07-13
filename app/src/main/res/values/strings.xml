@@ -1010,6 +1010,7 @@
     <string name="information">Information</string>
     <string name="switchLayout">Switch Layout</string>
     <string name="text_font_weight_converter">Text font weight switching</string>
+    <string name="text_font_weight">Font weight</string>
     <string name="full_screen_gestures_support">Full screen gestures support</string>
     <string name="disable_return_key">Disable return key</string>
 
