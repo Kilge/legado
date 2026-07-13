@@ -2,6 +2,8 @@ package io.legado.app.ui.association
 
 import io.legado.app.data.entities.ParagraphRule
 
+internal const val MAX_PARAGRAPH_RULE_NAME_CHARS = 200
+
 enum class ParagraphRuleConflictStrategy {
     RENAME,
     SKIP,

@@ -12,7 +12,6 @@ object ParagraphRulePackageParser {
     const val FORMAT = "legado.paragraph-rules"
     const val SCHEMA_VERSION = 1
     private const val MAX_RULES = 256
-    private const val MAX_NAME_CHARS = 200
     private const val MAX_SCRIPT_CHARS = 1_048_576
     private const val MAX_VARS_PER_RULE = 256
     private const val MAX_VAR_NAME_CHARS = 200
@@ -114,7 +113,9 @@ object ParagraphRulePackageParser {
         val rule = entry.rule
         rule.name = rule.name.trim()
         if (rule.name.isEmpty()) throw IOException("Paragraph rule name must not be empty")
-        if (rule.name.length > MAX_NAME_CHARS) throw IOException("Paragraph rule name is too long")
+        if (rule.name.length > MAX_PARAGRAPH_RULE_NAME_CHARS) {
+            throw IOException("Paragraph rule name is too long")
+        }
         validateText("script", rule.script, MAX_SCRIPT_CHARS, true)
         validateText("jsLib", rule.jsLib, MAX_SCRIPT_CHARS, false)
         validateText("loginUi", rule.loginUi, MAX_SCRIPT_CHARS, false)
@@ -125,7 +126,9 @@ object ParagraphRulePackageParser {
             throw IOException("Paragraph rule contains too many variables")
         }
         val exportId = entry.exportId
-        if (exportId != null && (exportId.length > MAX_NAME_CHARS || exportId.any { it.isISOControl() })) {
+        if (exportId != null &&
+            (exportId.length > MAX_PARAGRAPH_RULE_NAME_CHARS || exportId.any { it.isISOControl() })
+        ) {
             throw IOException("Paragraph rule exportId is invalid")
         }
         for ((name, value) in entry.vars) {

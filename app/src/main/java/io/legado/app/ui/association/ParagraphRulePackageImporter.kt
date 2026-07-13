@@ -15,10 +15,10 @@ class ParagraphRulePackageImporter(
         for (rule in database.paragraphRuleDao.all()) {
             existingNames.add(rule.name)
         }
-        var conflicts = 0
-        for (entry in packageData.entries) {
-            if (entry.rule.name in existingNames) conflicts++
-        }
+        val conflicts = countParagraphRuleNameConflicts(
+            importedNames = packageData.entries.map { it.rule.name },
+            existingNames = existingNames
+        )
         return ParagraphRuleImportInspection(packageData, conflicts)
     }
 
@@ -71,7 +71,7 @@ class ParagraphRulePackageImporter(
                 existingByName[key] = updated
                 overwritten++
             } else {
-                val renamedValue = uniqueImportedName(imported.name, usedNames)
+                val renamedValue = numberedImportedName(imported.name, usedNames)
                 val renamedKey = renamedValue
                 val order = nextOrder++
                 val id = insertNew(entry, renamedValue, order)
@@ -105,14 +105,29 @@ class ParagraphRulePackageImporter(
         }
     }
 
-    private fun uniqueImportedName(baseName: String, usedNames: Set<String>): String {
-        var index = 1
-        while (true) {
-            val suffix = if (index == 1) " (imported)" else " (imported $index)"
-            val prefix = baseName.take((200 - suffix.length).coerceAtLeast(1)).trimEnd()
-            val candidate = prefix + suffix
-            if (candidate !in usedNames) return candidate
-            index++
-        }
+}
+
+internal fun countParagraphRuleNameConflicts(
+    importedNames: List<String>,
+    existingNames: Set<String>
+): Int {
+    val usedNames = HashSet(existingNames)
+    var conflictCount = 0
+    for (name in importedNames) {
+        if (!usedNames.add(name)) conflictCount++
+    }
+    return conflictCount
+}
+
+internal fun numberedImportedName(baseName: String, usedNames: Set<String>): String {
+    var index = 2
+    while (true) {
+        val suffix = " ($index)"
+        val prefix = baseName
+            .take((MAX_PARAGRAPH_RULE_NAME_CHARS - suffix.length).coerceAtLeast(1))
+            .trimEnd()
+        val candidate = prefix + suffix
+        if (candidate !in usedNames) return candidate
+        index++
     }
 }
