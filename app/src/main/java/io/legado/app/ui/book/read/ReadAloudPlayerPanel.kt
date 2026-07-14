@@ -2441,14 +2441,87 @@ internal fun ReadAloudCapsuleSurface(
     onExpand: () -> Unit,
     onCoverLongPress: (() -> Unit)? = null,
     onClose: () -> Unit,
+    coverOnEnd: Boolean = false,
     modifier: Modifier = Modifier,
     coverRotation: Float = 0f,
+    horizontalPadding: Dp = 6.dp,
     shadowElevation: Dp = 12.dp
 ) {
-    val capsuleHorizontalPadding = 6.dp
     val coverButtonSize = 42.dp
     val playButtonSize = 38.dp
     val closeButtonSize = 34.dp
+    val coverButton: @Composable () -> Unit = {
+        Box(
+            modifier = Modifier
+                .size(coverButtonSize)
+                .graphicsLayer { rotationZ = coverRotation % 360f }
+                .clip(CircleShape)
+                .background(colors.panel)
+                .pointerInput(onExpand, onCoverLongPress) {
+                    detectTapGestures(
+                        onTap = { onExpand() },
+                        onLongPress = { onCoverLongPress?.invoke() }
+                    )
+                }
+        ) {
+            BookCoverImage(
+                path = state.coverUrl,
+                name = state.bookName,
+                author = state.author,
+                sourceOrigin = state.sourceOrigin,
+                modifier = Modifier.fillMaxSize(),
+                style = CoverImageView.CoverStyle.FLAT,
+                loadOnlyWifi = false,
+                preferThumb = true,
+                forcePath = state.coverForcePath,
+                allowNameOverlay = state.coverAllowNameOverlay,
+                fillBounds = true
+            )
+        }
+    }
+    val playButton: @Composable () -> Unit = {
+        Surface(
+            onClick = onPlayPause,
+            modifier = Modifier.size(playButtonSize),
+            shape = CircleShape,
+            color = Color.White.copy(alpha = 0.92f)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                if (state.playbackBusy) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                        color = Color.Black.copy(alpha = 0.72f),
+                        trackColor = Color.Black.copy(alpha = 0.12f)
+                    )
+                } else {
+                    Icon(
+                        painter = painterResource(if (state.playing) R.drawable.ic_pause_24dp else R.drawable.ic_play_24dp),
+                        contentDescription = null,
+                        tint = Color.Black.copy(alpha = 0.86f),
+                        modifier = Modifier.size(21.dp)
+                    )
+                }
+            }
+        }
+    }
+    val closeButton: @Composable () -> Unit = {
+        Surface(
+            onClick = onClose,
+            modifier = Modifier.size(closeButtonSize),
+            shape = CircleShape,
+            color = Color.White.copy(alpha = 0.12f),
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_close_x),
+                    contentDescription = null,
+                    tint = colors.primaryText,
+                    modifier = Modifier.size(17.dp)
+                )
+            }
+        }
+    }
     Surface(
         modifier = modifier,
         shape = CircleShape,
@@ -2459,75 +2532,18 @@ internal fun ReadAloudCapsuleSurface(
         Row(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = capsuleHorizontalPadding),
+                .padding(horizontal = horizontalPadding),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Box(
-                modifier = Modifier
-                    .size(coverButtonSize)
-                    .graphicsLayer { rotationZ = coverRotation % 360f }
-                    .clip(CircleShape)
-                    .background(colors.panel)
-                    .pointerInput(onExpand, onCoverLongPress) {
-                        detectTapGestures(
-                            onTap = { onExpand() },
-                            onLongPress = { onCoverLongPress?.invoke() }
-                        )
-                    }
-            ) {
-                BookCoverImage(
-                    path = state.coverUrl,
-                    name = state.bookName,
-                    author = state.author,
-                    sourceOrigin = state.sourceOrigin,
-                    modifier = Modifier.fillMaxSize(),
-                    style = CoverImageView.CoverStyle.FLAT,
-                    loadOnlyWifi = false,
-                    preferThumb = true,
-                    forcePath = state.coverForcePath,
-                    allowNameOverlay = state.coverAllowNameOverlay,
-                    fillBounds = true
-                )
-            }
-            Surface(
-                onClick = onPlayPause,
-                modifier = Modifier.size(playButtonSize),
-                shape = CircleShape,
-                color = Color.White.copy(alpha = 0.92f)
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    if (state.playbackBusy) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(18.dp),
-                            strokeWidth = 2.dp,
-                            color = Color.Black.copy(alpha = 0.72f),
-                            trackColor = Color.Black.copy(alpha = 0.12f)
-                        )
-                    } else {
-                        Icon(
-                            painter = painterResource(if (state.playing) R.drawable.ic_pause_24dp else R.drawable.ic_play_24dp),
-                            contentDescription = null,
-                            tint = Color.Black.copy(alpha = 0.86f),
-                            modifier = Modifier.size(21.dp)
-                        )
-                    }
-                }
-            }
-            Surface(
-                onClick = onClose,
-                modifier = Modifier.size(closeButtonSize),
-                shape = CircleShape,
-                color = Color.White.copy(alpha = 0.12f),
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_close_x),
-                        contentDescription = null,
-                        tint = colors.primaryText,
-                        modifier = Modifier.size(17.dp)
-                    )
-                }
+            if (coverOnEnd) {
+                closeButton()
+                playButton()
+                coverButton()
+            } else {
+                coverButton()
+                playButton()
+                closeButton()
             }
         }
     }

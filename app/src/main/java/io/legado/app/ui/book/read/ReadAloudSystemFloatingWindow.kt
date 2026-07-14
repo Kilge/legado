@@ -1,6 +1,8 @@
 package io.legado.app.ui.book.read
 
 import android.animation.ValueAnimator
+import android.animation.Animator
+import android.animation.AnimatorListenerAdapter
 import android.content.Context
 import android.graphics.PixelFormat
 import android.os.Build
@@ -11,14 +13,10 @@ import android.view.Gravity
 import android.view.WindowInsets
 import android.view.WindowManager
 import android.view.animation.DecelerateInterpolator
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -78,7 +76,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
@@ -109,13 +106,12 @@ import kotlin.math.roundToInt
 
 private const val EDGE_WINDOW_SIZE_DP = 60
 private const val EDGE_BALL_SIZE_DP = 56
-private const val EDGE_BALL_PADDING_DP = 2
 
 internal class ReadAloudSystemFloatingWindow(
     private val context: Context,
     lifecycleOwner: LifecycleOwner,
     private val onPlayPause: () -> Unit,
-    private val onCueSelect: (Int, Int) -> Unit,
+    private val onCueSelect: (Int, Int, Int) -> Unit,
     private val onChapterSelect: (Int) -> Unit,
     private val onExpand: () -> Unit,
     private val onClose: () -> Unit
@@ -123,6 +119,7 @@ internal class ReadAloudSystemFloatingWindow(
 
     internal enum class WindowMode {
         EdgeBall,
+        FullBall,
         Controls,
         Reader
     }
@@ -148,7 +145,7 @@ internal class ReadAloudSystemFloatingWindow(
     private val handler = Handler(Looper.getMainLooper())
     private var uiState by mutableStateOf(ReadAloudPlayerPanel.PlayerUiState())
     private var themeRevision by mutableIntStateOf(0)
-    private var mode by mutableStateOf(WindowMode.Controls)
+    private var mode by mutableStateOf(WindowMode.EdgeBall)
     private var side by mutableIntStateOf(
         context.getPrefInt(PreferKey.readAloudFloatingBallSide, 1).coerceIn(0, 1)
     )
@@ -160,10 +157,11 @@ internal class ReadAloudSystemFloatingWindow(
     private var suppressed = false
     private var attached = false
     private var dragging = false
+    private var transitioning = false
     private var layoutAnimator: ValueAnimator? = null
 
     private val idleRunnable = Runnable {
-        if (attached && mode == WindowMode.Controls && !dragging) {
+        if (attached && (mode == WindowMode.FullBall || mode == WindowMode.Controls) && !dragging) {
             changeMode(WindowMode.EdgeBall, animate = true)
         }
     }
@@ -199,6 +197,7 @@ internal class ReadAloudSystemFloatingWindow(
             val colors = rememberPlayerColors(palette)
             FloatingWindowContent(
                 mode = mode,
+                side = side,
                 state = uiState,
                 colors = colors,
                 fontSize = floatingFontSize,
@@ -206,8 +205,11 @@ internal class ReadAloudSystemFloatingWindow(
                 heightPercent = floatingHeightPercent,
                 settingsVisible = settingsVisible,
                 chapterPickerVisible = chapterPickerVisible,
-                onBallTap = {
-                    onExpand()
+                onEdgeBallTap = {
+                    changeMode(WindowMode.FullBall, animate = true)
+                },
+                onFullBallTap = {
+                    expandFullBallToControls()
                 },
                 onCoverTap = onExpand,
                 onCoverLongPress = {
@@ -295,6 +297,7 @@ internal class ReadAloudSystemFloatingWindow(
     fun onConfigurationChanged() {
         if (!attached) return
         layoutAnimator?.cancel()
+        transitioning = false
         applyFrame(targetFrame(mode))
         refreshTheme()
     }
@@ -303,6 +306,7 @@ internal class ReadAloudSystemFloatingWindow(
         handler.removeCallbacks(idleRunnable)
         layoutAnimator?.cancel()
         layoutAnimator = null
+        transitioning = false
         if (!attached) return
         runCatching { windowManager.removeViewImmediate(composeView) }
             .onFailure { LogUtils.d(TAG, "remove floating window failed: ${it.localizedMessage}") }
@@ -331,12 +335,13 @@ internal class ReadAloudSystemFloatingWindow(
 
     private fun noteInteraction() {
         handler.removeCallbacks(idleRunnable)
-        if (mode == WindowMode.Controls) {
+        if (mode == WindowMode.FullBall || mode == WindowMode.Controls) {
             handler.postDelayed(idleRunnable, IDLE_COLLAPSE_MILLIS)
         }
     }
 
     private fun changeMode(next: WindowMode, animate: Boolean) {
+        if (transitioning) return
         if (mode == next && !dragging) {
             noteInteraction()
             return
@@ -347,15 +352,38 @@ internal class ReadAloudSystemFloatingWindow(
         val target = targetFrame(next)
         if (!attached || !animate || AppConfig.isEInkMode) {
             applyFrame(target)
+            scheduleIdleCollapse(next)
         } else {
-            animateToFrame(target)
+            animateToFrame(target) {
+                scheduleIdleCollapse(next)
+            }
         }
-        if (next == WindowMode.Controls) {
+    }
+
+    private fun expandFullBallToControls() {
+        if (transitioning || dragging || mode != WindowMode.FullBall) return
+        handler.removeCallbacks(idleRunnable)
+        val target = targetFrame(WindowMode.Controls)
+        if (!attached || AppConfig.isEInkMode) {
+            applyFrame(target)
+            mode = WindowMode.Controls
+            scheduleIdleCollapse(WindowMode.Controls)
+            return
+        }
+        animateToFrame(target) {
+            mode = WindowMode.Controls
+            scheduleIdleCollapse(WindowMode.Controls)
+        }
+    }
+
+    private fun scheduleIdleCollapse(targetMode: WindowMode) {
+        if (targetMode == WindowMode.FullBall || targetMode == WindowMode.Controls) {
+            handler.removeCallbacks(idleRunnable)
             handler.postDelayed(idleRunnable, IDLE_COLLAPSE_MILLIS)
         }
     }
 
-    private fun animateToFrame(target: WindowFrame) {
+    private fun animateToFrame(target: WindowFrame, onComplete: () -> Unit = {}) {
         layoutAnimator?.cancel()
         val start = WindowFrame(
             x = layoutParams.x,
@@ -363,7 +391,9 @@ internal class ReadAloudSystemFloatingWindow(
             width = layoutParams.width,
             height = layoutParams.height
         )
+        transitioning = true
         layoutAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
+            var canceled = false
             duration = MODE_ANIMATION_MILLIS
             interpolator = DecelerateInterpolator()
             addUpdateListener { animator ->
@@ -377,35 +407,44 @@ internal class ReadAloudSystemFloatingWindow(
                     )
                 )
             }
+            addListener(object : AnimatorListenerAdapter() {
+                override fun onAnimationCancel(animation: Animator) {
+                    canceled = true
+                    transitioning = false
+                }
+
+                override fun onAnimationEnd(animation: Animator) {
+                    transitioning = false
+                    if (layoutAnimator === animation) {
+                        layoutAnimator = null
+                    }
+                    if (!canceled) onComplete()
+                }
+            })
             start()
         }
     }
 
     private fun startDrag() {
-        if (!attached || mode == WindowMode.Reader) return
+        if (!attached || transitioning || mode == WindowMode.Reader) return
         handler.removeCallbacks(idleRunnable)
         layoutAnimator?.cancel()
         dragging = true
         if (mode == WindowMode.EdgeBall) {
-            val space = resolveScreenSpace()
-            val currentCenterY = layoutParams.y + layoutParams.height / 2
-            mode = WindowMode.Controls
-            val controlsFrame = targetFrame(WindowMode.Controls)
-            val minY = space.insetTop
-            val maxY = (space.height - space.insetBottom - controlsFrame.height).coerceAtLeast(minY)
-            applyFrame(
-                controlsFrame.copy(
-                    y = (currentCenterY - controlsFrame.height / 2).coerceIn(minY, maxY)
-                )
-            )
+            mode = WindowMode.FullBall
         }
     }
 
     private fun dragBy(dx: Int, dy: Int) {
         if (!attached || !dragging || mode == WindowMode.Reader) return
         val space = resolveScreenSpace()
-        val minX = space.insetLeft
-        val maxX = (space.width - space.insetRight - layoutParams.width).coerceAtLeast(minX)
+        val (minX, maxX) = if (mode == WindowMode.FullBall) {
+            val halfWidth = layoutParams.width / 2
+            -halfWidth to (space.width - halfWidth)
+        } else {
+            val safeMinX = space.insetLeft
+            safeMinX to (space.width - space.insetRight - layoutParams.width).coerceAtLeast(safeMinX)
+        }
         val minY = space.insetTop
         val maxY = (space.height - space.insetBottom - layoutParams.height).coerceAtLeast(minY)
         layoutParams.x = (layoutParams.x + dx).coerceIn(minX, maxX)
@@ -435,8 +474,15 @@ internal class ReadAloudSystemFloatingWindow(
             PreferKey.readAloudFloatingBallYPercent,
             ReadAloudFloatingWindowLayout.percentForY(layoutParams.y, verticalBounds)
         )
-        animateToFrame(targetFrame(mode))
-        noteInteraction()
+        val target = targetFrame(mode)
+        if (AppConfig.isEInkMode) {
+            applyFrame(target)
+            noteInteraction()
+        } else {
+            animateToFrame(target) {
+                noteInteraction()
+            }
+        }
     }
 
     private fun targetFrame(targetMode: WindowMode): WindowFrame {
@@ -465,6 +511,29 @@ internal class ReadAloudSystemFloatingWindow(
                         screenWidth = space.width,
                         windowSize = width
                     ),
+                    y = ReadAloudFloatingWindowLayout.yForPercent(yPercent, bounds),
+                    width = width,
+                    height = height
+                )
+            }
+
+            WindowMode.FullBall -> {
+                val width = EDGE_WINDOW_SIZE_DP.dpToPx()
+                val height = EDGE_WINDOW_SIZE_DP.dpToPx()
+                val bounds = ReadAloudFloatingWindowLayout.bounds(
+                    screenWidth = space.width,
+                    screenHeight = space.height,
+                    insetLeft = space.insetLeft,
+                    insetTop = space.insetTop,
+                    insetRight = space.insetRight,
+                    insetBottom = space.insetBottom,
+                    windowWidth = width,
+                    windowHeight = height,
+                    sideMargin = COMPACT_SIDE_MARGIN_DP.dpToPx(),
+                    bottomMargin = COMPACT_BOTTOM_MARGIN_DP.dpToPx()
+                )
+                WindowFrame(
+                    x = ReadAloudFloatingWindowLayout.xForSide(side, bounds),
                     y = ReadAloudFloatingWindowLayout.yForPercent(yPercent, bounds),
                     width = width,
                     height = height
@@ -573,7 +642,7 @@ internal class ReadAloudSystemFloatingWindow(
     private companion object {
         const val TAG = "ReadAloudFloating"
         const val CONTROLS_WIDTH_DP = READ_ALOUD_CAPSULE_WIDTH_DP
-        const val CONTROLS_HEIGHT_DP = READ_ALOUD_CAPSULE_HEIGHT_DP
+        const val CONTROLS_HEIGHT_DP = EDGE_WINDOW_SIZE_DP
         const val COMPACT_SIDE_MARGIN_DP = 10
         const val COMPACT_BOTTOM_MARGIN_DP = 20
         const val READER_SIDE_MARGIN_DP = 8
@@ -619,6 +688,7 @@ internal class ReadAloudSystemFloatingWindow(
 @Composable
 private fun FloatingWindowContent(
     mode: ReadAloudSystemFloatingWindow.WindowMode,
+    side: Int,
     state: ReadAloudPlayerPanel.PlayerUiState,
     colors: PlayerColors,
     fontSize: Int,
@@ -626,7 +696,8 @@ private fun FloatingWindowContent(
     heightPercent: Int,
     settingsVisible: Boolean,
     chapterPickerVisible: Boolean,
-    onBallTap: () -> Unit,
+    onEdgeBallTap: () -> Unit,
+    onFullBallTap: () -> Unit,
     onCoverTap: () -> Unit,
     onCoverLongPress: () -> Unit,
     onPlayPause: () -> Unit,
@@ -639,7 +710,7 @@ private fun FloatingWindowContent(
     onSettings: () -> Unit,
     onChapterPicker: () -> Unit,
     onChapterSelect: (Int) -> Unit,
-    onCueSelect: (Int, Int) -> Unit,
+    onCueSelect: (Int, Int, Int) -> Unit,
     onFontSizeChange: (Int) -> Unit,
     onFontSizeChangeFinished: () -> Unit,
     onBackgroundAlphaChange: (Int) -> Unit,
@@ -647,6 +718,11 @@ private fun FloatingWindowContent(
     onHeightPercentChange: (Int) -> Unit,
     onHeightPercentChangeFinished: () -> Unit
 ) {
+    val visualMode = if (mode == ReadAloudSystemFloatingWindow.WindowMode.FullBall) {
+        ReadAloudSystemFloatingWindow.WindowMode.EdgeBall
+    } else {
+        mode
+    }
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -658,26 +734,29 @@ private fun FloatingWindowContent(
                 }
             )
     ) {
-        AnimatedContent(
-            targetState = mode,
+        Crossfade(
+            targetState = visualMode,
             modifier = Modifier.fillMaxSize(),
-            transitionSpec = {
-                (fadeIn(tween(150)) togetherWith fadeOut(tween(120)))
-                    .using(SizeTransform(clip = true))
-            },
+            animationSpec = tween(120),
             label = "floatingReadAloudMode"
         ) { targetMode ->
             when (targetMode) {
                 ReadAloudSystemFloatingWindow.WindowMode.EdgeBall -> FloatingEdgeBall(
+                    side = side,
                     state = state,
                     colors = colors,
-                    onTap = onBallTap,
+                    onTap = if (mode == ReadAloudSystemFloatingWindow.WindowMode.FullBall) {
+                        onFullBallTap
+                    } else {
+                        onEdgeBallTap
+                    },
                     onLongPress = onCoverLongPress
                 )
 
                 ReadAloudSystemFloatingWindow.WindowMode.Controls -> FloatingControls(
                     state = state,
                     colors = colors,
+                    coverOnEnd = side == 1,
                     onCoverTap = onCoverTap,
                     onCoverLongPress = onCoverLongPress,
                     onPlayPause = onPlayPause,
@@ -705,6 +784,8 @@ private fun FloatingWindowContent(
                     onHeightPercentChange = onHeightPercentChange,
                     onHeightPercentChangeFinished = onHeightPercentChangeFinished
                 )
+
+                ReadAloudSystemFloatingWindow.WindowMode.FullBall -> Unit
             }
         }
     }
@@ -712,6 +793,7 @@ private fun FloatingWindowContent(
 
 @Composable
 private fun FloatingEdgeBall(
+    side: Int,
     state: ReadAloudPlayerPanel.PlayerUiState,
     colors: PlayerColors,
     onTap: () -> Unit,
@@ -720,20 +802,15 @@ private fun FloatingEdgeBall(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .clipToBounds()
+            .clipToBounds(),
+        contentAlignment = if (side == 0) Alignment.CenterStart else Alignment.CenterEnd
     ) {
         FloatingCoverBall(
             state = state,
             colors = colors,
             size = EDGE_BALL_SIZE_DP,
             onTap = onTap,
-            onLongPress = onLongPress,
-            modifier = Modifier.offset {
-                IntOffset(
-                    x = EDGE_BALL_PADDING_DP.dpToPx(),
-                    y = EDGE_BALL_PADDING_DP.dpToPx()
-                )
-            }
+            onLongPress = onLongPress
         )
     }
 }
@@ -742,6 +819,7 @@ private fun FloatingEdgeBall(
 private fun FloatingControls(
     state: ReadAloudPlayerPanel.PlayerUiState,
     colors: PlayerColors,
+    coverOnEnd: Boolean,
     onCoverTap: () -> Unit,
     onCoverLongPress: () -> Unit,
     onPlayPause: () -> Unit,
@@ -754,7 +832,9 @@ private fun FloatingControls(
         onExpand = onCoverTap,
         onCoverLongPress = onCoverLongPress,
         onClose = onStop,
+        coverOnEnd = coverOnEnd,
         modifier = Modifier.fillMaxSize(),
+        horizontalPadding = 9.dp,
         shadowElevation = 0.dp
     )
 }
@@ -785,7 +865,7 @@ private fun FloatingCoverBall(
         modifier = modifier
             .requiredSize(size.dp)
             .graphicsLayer { rotationZ = rotation.value % 360f }
-            .pointerInput(Unit) {
+            .pointerInput(onTap, onLongPress) {
                 detectTapGestures(onTap = { onTap() }, onLongPress = { onLongPress() })
             },
         shape = CircleShape,
@@ -823,7 +903,7 @@ private fun FloatingReaderWindow(
     onSettings: () -> Unit,
     onChapterPicker: () -> Unit,
     onChapterSelect: (Int) -> Unit,
-    onCueSelect: (Int, Int) -> Unit,
+    onCueSelect: (Int, Int, Int) -> Unit,
     onFontSizeChange: (Int) -> Unit,
     onFontSizeChangeFinished: () -> Unit,
     onBackgroundAlphaChange: (Int) -> Unit,
@@ -956,7 +1036,7 @@ private fun ColumnScope.FloatingOriginalText(
     state: ReadAloudPlayerPanel.PlayerUiState,
     colors: PlayerColors,
     fontSize: Int,
-    onCueSelect: (Int, Int) -> Unit
+    onCueSelect: (Int, Int, Int) -> Unit
 ) {
     val cues = state.textCues.ifEmpty {
         listOf(
@@ -1022,7 +1102,7 @@ private fun ColumnScope.FloatingOriginalText(
                     textAlign = TextAlign.Center,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { onCueSelect(index, cue.chapterPosition) }
+                        .clickable { onCueSelect(index, cue.chapterPosition, state.chapterIndex) }
                         .padding(vertical = 4.dp)
                 )
             }
