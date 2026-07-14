@@ -69,4 +69,8 @@ internal object ReadAloudFloatingWindowLayout {
             screenWidth.coerceAtLeast(halfWindow) - halfWindow
         }
     }
+
+    fun shouldSuppress(panelVisible: Boolean, appForeground: Boolean): Boolean {
+        return panelVisible && appForeground
+    }
 }

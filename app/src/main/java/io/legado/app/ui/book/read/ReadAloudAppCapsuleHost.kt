@@ -16,17 +16,13 @@ object ReadAloudAppCapsuleHost {
 
     private var pendingPanelOpenRequest: PendingPanelOpenRequest? = null
     private var readBookPanelVisible = false
-    private var readBookForeground = false
 
     fun updateReadBookPanelActive(active: Boolean) {
         readBookPanelVisible = active
-        publishPanelSuppression()
+        postEvent(EventBus.READ_ALOUD_PANEL_ACTIVE, active)
     }
 
-    fun updateReadBookForegroundActive(active: Boolean) {
-        readBookForeground = active
-        publishPanelSuppression()
-    }
+    fun isReadBookPanelVisible(): Boolean = readBookPanelVisible
 
     fun requestReadAloudPanelOpen(bookUrl: String) {
         if (bookUrl.isBlank()) return
@@ -41,13 +37,6 @@ object ReadAloudAppCapsuleHost {
         if (bookUrl.isNullOrBlank() || request.bookUrl != bookUrl) return false
         pendingPanelOpenRequest = null
         return System.currentTimeMillis() - request.requestedAt <= REQUEST_TIMEOUT_MILLIS
-    }
-
-    private fun publishPanelSuppression() {
-        postEvent(
-            EventBus.READ_ALOUD_PANEL_ACTIVE,
-            readBookForeground && readBookPanelVisible
-        )
     }
 
     private const val REQUEST_TIMEOUT_MILLIS = 30_000L

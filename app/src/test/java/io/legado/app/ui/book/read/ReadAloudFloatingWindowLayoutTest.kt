@@ -69,4 +69,11 @@ class ReadAloudFloatingWindowLayoutTest {
         assertEquals(-30, ReadAloudFloatingWindowLayout.edgeBallX(0, 1080, 60))
         assertEquals(1050, ReadAloudFloatingWindowLayout.edgeBallX(1, 1080, 60))
     }
+
+    @Test
+    fun `full reader panel suppresses overlay only while app is foreground`() {
+        assertEquals(true, ReadAloudFloatingWindowLayout.shouldSuppress(true, true))
+        assertEquals(false, ReadAloudFloatingWindowLayout.shouldSuppress(true, false))
+        assertEquals(false, ReadAloudFloatingWindowLayout.shouldSuppress(false, true))
+    }
 }

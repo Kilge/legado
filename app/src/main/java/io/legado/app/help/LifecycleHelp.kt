@@ -3,8 +3,12 @@ package io.legado.app.help
 import android.app.Activity
 import android.app.Application
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import io.legado.app.base.BaseService
+import io.legado.app.constant.EventBus
 import io.legado.app.utils.LogUtils
+import io.legado.app.utils.postEvent
 import java.lang.ref.WeakReference
 
 /**
@@ -18,10 +22,23 @@ object LifecycleHelp : Application.ActivityLifecycleCallbacks {
     private val activities: MutableList<WeakReference<Activity>> = arrayListOf()
     private val services: MutableList<WeakReference<BaseService>> = arrayListOf()
     private var appFinishedListener: (() -> Unit)? = null
+    private val foregroundHandler = Handler(Looper.getMainLooper())
+    private var startedActivityCount = 0
+
+    @Volatile
+    private var appForeground = false
+
+    private val backgroundRunnable = Runnable {
+        if (startedActivityCount == 0) {
+            dispatchAppForeground(false)
+        }
+    }
 
     fun activitySize(): Int {
         return activities.size
     }
+
+    fun isAppForeground(): Boolean = appForeground
 
     /**
      * 判断指定Activity是否存在
@@ -67,6 +84,9 @@ object LifecycleHelp : Application.ActivityLifecycleCallbacks {
 
     override fun onActivityStarted(activity: Activity) {
         LogUtils.d(TAG, "${activity::class.simpleName} onStart")
+        startedActivityCount++
+        foregroundHandler.removeCallbacks(backgroundRunnable)
+        dispatchAppForeground(true)
     }
 
     override fun onActivityDestroyed(activity: Activity) {
@@ -88,6 +108,11 @@ object LifecycleHelp : Application.ActivityLifecycleCallbacks {
 
     override fun onActivityStopped(activity: Activity) {
         LogUtils.d(TAG, "${activity::class.simpleName} onStop")
+        startedActivityCount = (startedActivityCount - 1).coerceAtLeast(0)
+        if (startedActivityCount == 0) {
+            foregroundHandler.removeCallbacks(backgroundRunnable)
+            foregroundHandler.postDelayed(backgroundRunnable, BACKGROUND_DEBOUNCE_MILLIS)
+        }
     }
 
     override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {
@@ -118,4 +143,12 @@ object LifecycleHelp : Application.ActivityLifecycleCallbacks {
     private fun onAppFinished() {
         appFinishedListener?.invoke()
     }
+
+    private fun dispatchAppForeground(foreground: Boolean) {
+        if (appForeground == foreground) return
+        appForeground = foreground
+        postEvent(EventBus.APP_FOREGROUND_CHANGED, foreground)
+    }
+
+    private const val BACKGROUND_DEBOUNCE_MILLIS = 250L
 }

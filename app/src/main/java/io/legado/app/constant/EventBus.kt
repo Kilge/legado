@@ -13,6 +13,7 @@ object EventBus {
     const val READ_ALOUD_DS = "readAloudDs"
     const val READ_ALOUD_PLAYBACK_STATE = "readAloudPlaybackState"
     const val READ_ALOUD_PANEL_ACTIVE = "readAloudPanelActive"
+    const val APP_FOREGROUND_CHANGED = "appForegroundChanged"
     const val BATTERY_CHANGED = "batteryChanged"
     const val TIME_CHANGED = "timeChanged"
     const val UP_CONFIG = "upConfig"

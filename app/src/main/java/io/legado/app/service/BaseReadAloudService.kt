@@ -40,6 +40,7 @@ import io.legado.app.constant.Status
 import io.legado.app.data.appDb
 import io.legado.app.help.MediaHelp
 import io.legado.app.help.CoverDisplayResolver
+import io.legado.app.help.LifecycleHelp
 import io.legado.app.help.ai.AiReadAloudBgmService
 import io.legado.app.help.ai.AiReadAloudRoleService
 import io.legado.app.help.ai.AiReadAloudRoleState
@@ -61,6 +62,7 @@ import io.legado.app.model.ReadBook
 import io.legado.app.receiver.MediaButtonReceiver
 import io.legado.app.ui.book.read.ReadBookActivity
 import io.legado.app.ui.book.read.ReadAloudAppCapsuleHost
+import io.legado.app.ui.book.read.ReadAloudFloatingWindowLayout
 import io.legado.app.ui.book.read.ReadAloudPlayerPanel
 import io.legado.app.ui.book.read.ReadAloudSystemFloatingWindow
 import io.legado.app.ui.book.read.page.entities.ReadAloudCue
@@ -275,6 +277,7 @@ abstract class BaseReadAloudService : BaseService(),
         super.onCreate()
         isRun = true
         pause = false
+        readAloudPanelActive = ReadAloudAppCapsuleHost.isReadBookPanelVisible()
         observeLiveBus()
         initMediaSession()
         initBroadcastReceiver()
@@ -336,7 +339,10 @@ abstract class BaseReadAloudService : BaseService(),
         }
         observeEvent<Boolean>(EventBus.READ_ALOUD_PANEL_ACTIVE) { active ->
             readAloudPanelActive = active
-            floatingWindow?.setSuppressed(active)
+            updateFloatingWindowSuppression()
+        }
+        observeEvent<Boolean>(EventBus.APP_FOREGROUND_CHANGED) {
+            updateFloatingWindowSuppression()
         }
         observeEvent<String>(EventBus.RECREATE) {
             floatingWindow?.refreshTheme()
@@ -897,7 +903,7 @@ abstract class BaseReadAloudService : BaseService(),
         val chapterKey = "${book?.bookUrl.orEmpty()}:$chapterIndex"
         val textCues = buildFloatingTextCues(chapterKey, chapterIndex)
         val currentCue = readAloudCues.getOrNull(currentCueIndex)
-        window.setSuppressed(readAloudPanelActive)
+        window.setSuppressed(shouldSuppressFloatingWindow())
         window.showOrUpdate(
             ReadAloudPlayerPanel.PlayerUiState(
                 bookName = book?.name.orEmpty(),
@@ -930,6 +936,17 @@ abstract class BaseReadAloudService : BaseService(),
                 expanded = false,
                 readMenuVisible = false
             )
+        )
+    }
+
+    private fun updateFloatingWindowSuppression() {
+        floatingWindow?.setSuppressed(shouldSuppressFloatingWindow())
+    }
+
+    private fun shouldSuppressFloatingWindow(): Boolean {
+        return ReadAloudFloatingWindowLayout.shouldSuppress(
+            panelVisible = readAloudPanelActive,
+            appForeground = LifecycleHelp.isAppForeground()
         )
     }
 
