@@ -52,4 +52,12 @@ internal object ReadAloudFloatingWindowLayout {
             .roundToInt()
             .coerceIn(0, 100)
     }
+
+    fun readerHeight(availableHeight: Int, minHeight: Int, heightPercent: Int): Int {
+        if (availableHeight <= 0) return 0
+        val safeMinHeight = minHeight.coerceIn(0, availableHeight)
+        return (availableHeight * heightPercent.coerceIn(0, 100) / 100f)
+            .roundToInt()
+            .coerceIn(safeMinHeight, availableHeight)
+    }
 }

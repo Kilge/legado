@@ -55,4 +55,11 @@ class ReadAloudFloatingWindowLayoutTest {
         assertEquals(ReadAloudFloatingWindowBounds(50, 50, 60, 60), bounds)
         assertEquals(0, ReadAloudFloatingWindowLayout.percentForY(1000, bounds))
     }
+
+    @Test
+    fun `reader height follows preference within available bounds`() {
+        assertEquals(1160, ReadAloudFloatingWindowLayout.readerHeight(2000, 720, 58))
+        assertEquals(720, ReadAloudFloatingWindowLayout.readerHeight(2000, 720, 20))
+        assertEquals(600, ReadAloudFloatingWindowLayout.readerHeight(600, 720, 90))
+    }
 }

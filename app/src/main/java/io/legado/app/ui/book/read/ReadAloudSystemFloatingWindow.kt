@@ -26,6 +26,8 @@ import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -151,6 +153,7 @@ internal class ReadAloudSystemFloatingWindow(
     private var chapterPickerVisible by mutableStateOf(false)
     private var floatingFontSize by mutableIntStateOf(AppConfig.readAloudFloatingFontSize)
     private var floatingBackgroundAlpha by mutableIntStateOf(AppConfig.readAloudFloatingBackgroundAlpha)
+    private var floatingHeightPercent by mutableIntStateOf(AppConfig.readAloudFloatingHeightPercent)
     private var suppressed = false
     private var attached = false
     private var dragging = false
@@ -197,6 +200,7 @@ internal class ReadAloudSystemFloatingWindow(
                 colors = colors,
                 fontSize = floatingFontSize,
                 backgroundAlpha = floatingBackgroundAlpha,
+                heightPercent = floatingHeightPercent,
                 settingsVisible = settingsVisible,
                 chapterPickerVisible = chapterPickerVisible,
                 onBallTap = {
@@ -245,10 +249,19 @@ internal class ReadAloudSystemFloatingWindow(
                     AppConfig.readAloudFloatingFontSize = floatingFontSize
                 },
                 onBackgroundAlphaChange = {
-                    floatingBackgroundAlpha = it.coerceIn(20, 100)
+                    floatingBackgroundAlpha = it.coerceIn(0, 100)
                 },
                 onBackgroundAlphaChangeFinished = {
                     AppConfig.readAloudFloatingBackgroundAlpha = floatingBackgroundAlpha
+                },
+                onHeightPercentChange = {
+                    floatingHeightPercent = it.coerceIn(35, 90)
+                    if (mode == WindowMode.Reader) {
+                        applyFrame(targetFrame(WindowMode.Reader))
+                    }
+                },
+                onHeightPercentChangeFinished = {
+                    AppConfig.readAloudFloatingHeightPercent = floatingHeightPercent
                 }
             )
         }
@@ -471,10 +484,10 @@ internal class ReadAloudSystemFloatingWindow(
                 val availableHeight = (
                         space.height - space.insetTop - space.insetBottom - verticalMargin * 2
                         ).coerceAtLeast(1)
-                val preferredHeight = (availableHeight * 0.58f).roundToInt()
-                val height = preferredHeight.coerceIn(
-                    READER_MIN_HEIGHT_DP.dpToPx().coerceAtMost(availableHeight),
-                    READER_MAX_HEIGHT_DP.dpToPx().coerceAtMost(availableHeight)
+                val height = ReadAloudFloatingWindowLayout.readerHeight(
+                    availableHeight = availableHeight,
+                    minHeight = READER_MIN_HEIGHT_DP.dpToPx(),
+                    heightPercent = floatingHeightPercent
                 )
                 WindowFrame(
                     x = space.insetLeft + margin,
@@ -549,7 +562,6 @@ internal class ReadAloudSystemFloatingWindow(
         const val READER_SIDE_MARGIN_DP = 8
         const val READER_TOP_MARGIN_DP = 8
         const val READER_MIN_HEIGHT_DP = 360
-        const val READER_MAX_HEIGHT_DP = 620
         const val IDLE_COLLAPSE_MILLIS = 5_000L
         const val MODE_ANIMATION_MILLIS = 260L
     }
@@ -595,6 +607,7 @@ private fun FloatingWindowContent(
     colors: PlayerColors,
     fontSize: Int,
     backgroundAlpha: Int,
+    heightPercent: Int,
     settingsVisible: Boolean,
     chapterPickerVisible: Boolean,
     onBallTap: () -> Unit,
@@ -614,7 +627,9 @@ private fun FloatingWindowContent(
     onFontSizeChange: (Int) -> Unit,
     onFontSizeChangeFinished: () -> Unit,
     onBackgroundAlphaChange: (Int) -> Unit,
-    onBackgroundAlphaChangeFinished: () -> Unit
+    onBackgroundAlphaChangeFinished: () -> Unit,
+    onHeightPercentChange: (Int) -> Unit,
+    onHeightPercentChangeFinished: () -> Unit
 ) {
     AnimatedContent(
         targetState = mode,
@@ -653,6 +668,7 @@ private fun FloatingWindowContent(
                 colors = colors,
                 fontSize = fontSize,
                 backgroundAlpha = backgroundAlpha,
+                heightPercent = heightPercent,
                 settingsVisible = settingsVisible,
                 chapterPickerVisible = chapterPickerVisible,
                 onFullscreen = onFullscreen,
@@ -664,7 +680,9 @@ private fun FloatingWindowContent(
                 onFontSizeChange = onFontSizeChange,
                 onFontSizeChangeFinished = onFontSizeChangeFinished,
                 onBackgroundAlphaChange = onBackgroundAlphaChange,
-                onBackgroundAlphaChangeFinished = onBackgroundAlphaChangeFinished
+                onBackgroundAlphaChangeFinished = onBackgroundAlphaChangeFinished,
+                onHeightPercentChange = onHeightPercentChange,
+                onHeightPercentChangeFinished = onHeightPercentChangeFinished
             )
         }
     }
@@ -832,6 +850,7 @@ private fun FloatingReaderWindow(
     colors: PlayerColors,
     fontSize: Int,
     backgroundAlpha: Int,
+    heightPercent: Int,
     settingsVisible: Boolean,
     chapterPickerVisible: Boolean,
     onFullscreen: () -> Unit,
@@ -843,7 +862,9 @@ private fun FloatingReaderWindow(
     onFontSizeChange: (Int) -> Unit,
     onFontSizeChangeFinished: () -> Unit,
     onBackgroundAlphaChange: (Int) -> Unit,
-    onBackgroundAlphaChangeFinished: () -> Unit
+    onBackgroundAlphaChangeFinished: () -> Unit,
+    onHeightPercentChange: (Int) -> Unit,
+    onHeightPercentChangeFinished: () -> Unit
 ) {
     val panelShape = LocalContext.current.composePanelShape()
     Surface(
@@ -867,10 +888,13 @@ private fun FloatingReaderWindow(
                     colors = colors,
                     fontSize = fontSize,
                     backgroundAlpha = backgroundAlpha,
+                    heightPercent = heightPercent,
                     onFontSizeChange = onFontSizeChange,
                     onFontSizeChangeFinished = onFontSizeChangeFinished,
                     onBackgroundAlphaChange = onBackgroundAlphaChange,
-                    onBackgroundAlphaChangeFinished = onBackgroundAlphaChangeFinished
+                    onBackgroundAlphaChangeFinished = onBackgroundAlphaChangeFinished,
+                    onHeightPercentChange = onHeightPercentChange,
+                    onHeightPercentChangeFinished = onHeightPercentChangeFinished
                 )
 
                 chapterPickerVisible -> FloatingChapterPicker(
@@ -1009,7 +1033,7 @@ private fun ColumnScope.FloatingOriginalText(
             }
         }
         var firstCenter by remember(state.chapterKey) { mutableStateOf(true) }
-        LaunchedEffect(state.chapterKey, currentIndex) {
+        LaunchedEffect(state.chapterKey, currentIndex, maxHeight) {
             centerCurrent(animated = !firstCenter && !AppConfig.isEInkMode)
             firstCenter = false
         }
@@ -1155,15 +1179,19 @@ private fun ColumnScope.FloatingReaderSettings(
     colors: PlayerColors,
     fontSize: Int,
     backgroundAlpha: Int,
+    heightPercent: Int,
     onFontSizeChange: (Int) -> Unit,
     onFontSizeChangeFinished: () -> Unit,
     onBackgroundAlphaChange: (Int) -> Unit,
-    onBackgroundAlphaChangeFinished: () -> Unit
+    onBackgroundAlphaChangeFinished: () -> Unit,
+    onHeightPercentChange: (Int) -> Unit,
+    onHeightPercentChangeFinished: () -> Unit
 ) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .weight(1f)
+            .verticalScroll(rememberScrollState())
             .padding(horizontal = 22.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(22.dp)
     ) {
@@ -1180,10 +1208,19 @@ private fun ColumnScope.FloatingReaderSettings(
             title = "窗口背景透明度",
             valueText = "${100 - backgroundAlpha}%",
             value = (100 - backgroundAlpha).toFloat(),
-            range = 0f..80f,
+            range = 0f..100f,
             colors = colors,
             onValueChange = { onBackgroundAlphaChange(100 - it.roundToInt()) },
             onValueChangeFinished = onBackgroundAlphaChangeFinished
+        )
+        FloatingSettingSlider(
+            title = "窗口高度",
+            valueText = "$heightPercent%",
+            value = heightPercent.toFloat(),
+            range = 35f..90f,
+            colors = colors,
+            onValueChange = { onHeightPercentChange(it.roundToInt()) },
+            onValueChangeFinished = onHeightPercentChangeFinished
         )
         Text(
             text = "透明度过高时，原文在复杂背景上可能不易阅读。",

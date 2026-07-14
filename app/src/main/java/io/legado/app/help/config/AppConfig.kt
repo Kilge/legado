@@ -2447,10 +2447,17 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
         set(value) = appCtx.putPrefInt(PreferKey.readAloudFloatingFontSize, value.coerceIn(14, 34))
 
     var readAloudFloatingBackgroundAlpha: Int
-        get() = appCtx.getPrefInt(PreferKey.readAloudFloatingBackgroundAlpha, 92).coerceIn(20, 100)
+        get() = appCtx.getPrefInt(PreferKey.readAloudFloatingBackgroundAlpha, 92).coerceIn(0, 100)
         set(value) = appCtx.putPrefInt(
             PreferKey.readAloudFloatingBackgroundAlpha,
-            value.coerceIn(20, 100)
+            value.coerceIn(0, 100)
+        )
+
+    var readAloudFloatingHeightPercent: Int
+        get() = appCtx.getPrefInt(PreferKey.readAloudFloatingHeightPercent, 58).coerceIn(35, 90)
+        set(value) = appCtx.putPrefInt(
+            PreferKey.readAloudFloatingHeightPercent,
+            value.coerceIn(35, 90)
         )
 
     val replaceEnableDefault get() = appCtx.getPrefBoolean(PreferKey.replaceEnableDefault, true)
