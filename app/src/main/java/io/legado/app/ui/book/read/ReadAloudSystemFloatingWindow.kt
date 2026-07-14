@@ -35,7 +35,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -389,15 +388,16 @@ internal class ReadAloudSystemFloatingWindow(
         dragging = true
         if (mode == WindowMode.EdgeBall) {
             val space = resolveScreenSpace()
+            val currentCenterY = layoutParams.y + layoutParams.height / 2
+            mode = WindowMode.Controls
+            val controlsFrame = targetFrame(WindowMode.Controls)
             val minY = space.insetTop
-            val maxY = (space.height - space.insetBottom - layoutParams.height).coerceAtLeast(minY)
-            layoutParams.x = if (side == 0) {
-                space.insetLeft
-            } else {
-                space.width - space.insetRight - layoutParams.width
-            }
-            layoutParams.y = layoutParams.y.coerceIn(minY, maxY)
-            updateLayout()
+            val maxY = (space.height - space.insetBottom - controlsFrame.height).coerceAtLeast(minY)
+            applyFrame(
+                controlsFrame.copy(
+                    y = (currentCenterY - controlsFrame.height / 2).coerceIn(minY, maxY)
+                )
+            )
         }
     }
 
@@ -572,8 +572,8 @@ internal class ReadAloudSystemFloatingWindow(
 
     private companion object {
         const val TAG = "ReadAloudFloating"
-        const val CONTROLS_WIDTH_DP = 180
-        const val CONTROLS_HEIGHT_DP = 64
+        const val CONTROLS_WIDTH_DP = READ_ALOUD_CAPSULE_WIDTH_DP
+        const val CONTROLS_HEIGHT_DP = READ_ALOUD_CAPSULE_HEIGHT_DP
         const val COMPACT_SIDE_MARGIN_DP = 10
         const val COMPACT_BOTTOM_MARGIN_DP = 20
         const val READER_SIDE_MARGIN_DP = 8
@@ -647,58 +647,65 @@ private fun FloatingWindowContent(
     onHeightPercentChange: (Int) -> Unit,
     onHeightPercentChangeFinished: () -> Unit
 ) {
-    AnimatedContent(
-        targetState = mode,
-        transitionSpec = {
-            (fadeIn(tween(150)) togetherWith fadeOut(tween(120)))
-                .using(SizeTransform(clip = true))
-        },
-        label = "floatingReadAloudMode"
-    ) { targetMode ->
-        when (targetMode) {
-            ReadAloudSystemFloatingWindow.WindowMode.EdgeBall -> FloatingEdgeBall(
-                state = state,
-                colors = colors,
-                onTap = onBallTap,
-                onLongPress = onCoverLongPress,
-                onDragStart = onDragStart,
-                onDrag = onDrag,
-                onDragEnd = onDragEnd
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .then(
+                if (mode == ReadAloudSystemFloatingWindow.WindowMode.Reader) {
+                    Modifier
+                } else {
+                    Modifier.floatingDrag(onDragStart, onDrag, onDragEnd)
+                }
             )
+    ) {
+        AnimatedContent(
+            targetState = mode,
+            modifier = Modifier.fillMaxSize(),
+            transitionSpec = {
+                (fadeIn(tween(150)) togetherWith fadeOut(tween(120)))
+                    .using(SizeTransform(clip = true))
+            },
+            label = "floatingReadAloudMode"
+        ) { targetMode ->
+            when (targetMode) {
+                ReadAloudSystemFloatingWindow.WindowMode.EdgeBall -> FloatingEdgeBall(
+                    state = state,
+                    colors = colors,
+                    onTap = onBallTap,
+                    onLongPress = onCoverLongPress
+                )
 
-            ReadAloudSystemFloatingWindow.WindowMode.Controls -> FloatingControls(
-                state = state,
-                colors = colors,
-                onCoverTap = onCoverTap,
-                onCoverLongPress = onCoverLongPress,
-                onPlayPause = onPlayPause,
-                onStop = onStop,
-                onDragStart = onDragStart,
-                onDrag = onDrag,
-                onDragEnd = onDragEnd
-            )
+                ReadAloudSystemFloatingWindow.WindowMode.Controls -> FloatingControls(
+                    state = state,
+                    colors = colors,
+                    onCoverTap = onCoverTap,
+                    onCoverLongPress = onCoverLongPress,
+                    onPlayPause = onPlayPause,
+                    onStop = onStop
+                )
 
-            ReadAloudSystemFloatingWindow.WindowMode.Reader -> FloatingReaderWindow(
-                state = state,
-                colors = colors,
-                fontSize = fontSize,
-                backgroundAlpha = backgroundAlpha,
-                heightPercent = heightPercent,
-                settingsVisible = settingsVisible,
-                chapterPickerVisible = chapterPickerVisible,
-                onFullscreen = onFullscreen,
-                onMinimize = onMinimize,
-                onSettings = onSettings,
-                onChapterPicker = onChapterPicker,
-                onChapterSelect = onChapterSelect,
-                onCueSelect = onCueSelect,
-                onFontSizeChange = onFontSizeChange,
-                onFontSizeChangeFinished = onFontSizeChangeFinished,
-                onBackgroundAlphaChange = onBackgroundAlphaChange,
-                onBackgroundAlphaChangeFinished = onBackgroundAlphaChangeFinished,
-                onHeightPercentChange = onHeightPercentChange,
-                onHeightPercentChangeFinished = onHeightPercentChangeFinished
-            )
+                ReadAloudSystemFloatingWindow.WindowMode.Reader -> FloatingReaderWindow(
+                    state = state,
+                    colors = colors,
+                    fontSize = fontSize,
+                    backgroundAlpha = backgroundAlpha,
+                    heightPercent = heightPercent,
+                    settingsVisible = settingsVisible,
+                    chapterPickerVisible = chapterPickerVisible,
+                    onFullscreen = onFullscreen,
+                    onMinimize = onMinimize,
+                    onSettings = onSettings,
+                    onChapterPicker = onChapterPicker,
+                    onChapterSelect = onChapterSelect,
+                    onCueSelect = onCueSelect,
+                    onFontSizeChange = onFontSizeChange,
+                    onFontSizeChangeFinished = onFontSizeChangeFinished,
+                    onBackgroundAlphaChange = onBackgroundAlphaChange,
+                    onBackgroundAlphaChangeFinished = onBackgroundAlphaChangeFinished,
+                    onHeightPercentChange = onHeightPercentChange,
+                    onHeightPercentChangeFinished = onHeightPercentChangeFinished
+                )
+            }
         }
     }
 }
@@ -708,16 +715,12 @@ private fun FloatingEdgeBall(
     state: ReadAloudPlayerPanel.PlayerUiState,
     colors: PlayerColors,
     onTap: () -> Unit,
-    onLongPress: () -> Unit,
-    onDragStart: () -> Unit,
-    onDrag: (Int, Int) -> Unit,
-    onDragEnd: () -> Unit
+    onLongPress: () -> Unit
 ) {
     Box(
         modifier = Modifier
             .fillMaxSize()
             .clipToBounds()
-            .floatingDrag(onDragStart, onDrag, onDragEnd)
     ) {
         FloatingCoverBall(
             state = state,
@@ -742,45 +745,18 @@ private fun FloatingControls(
     onCoverTap: () -> Unit,
     onCoverLongPress: () -> Unit,
     onPlayPause: () -> Unit,
-    onStop: () -> Unit,
-    onDragStart: () -> Unit,
-    onDrag: (Int, Int) -> Unit,
-    onDragEnd: () -> Unit
+    onStop: () -> Unit
 ) {
-    Surface(
-        modifier = Modifier
-            .fillMaxSize()
-            .floatingDrag(onDragStart, onDrag, onDragEnd),
-        shape = CircleShape,
-        color = colors.panelStrong,
-        border = BorderStroke(1.dp, colors.panelBorder),
+    ReadAloudCapsuleSurface(
+        state = state,
+        colors = colors,
+        onPlayPause = onPlayPause,
+        onExpand = onCoverTap,
+        onCoverLongPress = onCoverLongPress,
+        onClose = onStop,
+        modifier = Modifier.fillMaxSize(),
         shadowElevation = 0.dp
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 6.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            FloatingCoverBall(
-                state = state,
-                colors = colors,
-                size = 52,
-                onTap = onCoverTap,
-                onLongPress = onCoverLongPress
-            )
-            Spacer(modifier = Modifier.weight(1f))
-            FloatingIconButton(
-                if (state.playing) R.drawable.ic_pause_24dp else R.drawable.ic_play_24dp,
-                if (state.playing) "暂停" else "继续",
-                colors,
-                onPlayPause,
-                emphasized = true
-            )
-            Spacer(modifier = Modifier.width(4.dp))
-            FloatingIconButton(R.drawable.ic_close_x, "停止", colors, onStop)
-        }
-    }
+    )
 }
 
 @Composable
@@ -830,31 +806,6 @@ private fun FloatingCoverBall(
             allowNameOverlay = state.coverAllowNameOverlay,
             fillBounds = true
         )
-    }
-}
-
-@Composable
-private fun FloatingIconButton(
-    icon: Int,
-    description: String,
-    colors: PlayerColors,
-    onClick: () -> Unit,
-    emphasized: Boolean = false
-) {
-    Surface(
-        modifier = Modifier.size(if (emphasized) 46.dp else 42.dp),
-        shape = CircleShape,
-        color = if (emphasized) Color.White.copy(alpha = 0.94f) else colors.panel,
-        onClick = onClick
-    ) {
-        Box(contentAlignment = Alignment.Center) {
-            Icon(
-                painter = painterResource(icon),
-                contentDescription = description,
-                tint = if (emphasized) Color.Black.copy(alpha = 0.86f) else colors.primaryText,
-                modifier = Modifier.size(if (emphasized) 23.dp else 20.dp)
-            )
-        }
     }
 }
 

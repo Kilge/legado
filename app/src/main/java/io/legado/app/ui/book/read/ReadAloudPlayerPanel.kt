@@ -2439,13 +2439,13 @@ internal fun ReadAloudCapsuleSurface(
     colors: PlayerColors,
     onPlayPause: () -> Unit,
     onExpand: () -> Unit,
+    onCoverLongPress: (() -> Unit)? = null,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
     coverRotation: Float = 0f,
     shadowElevation: Dp = 12.dp
 ) {
-    val capsuleHorizontalPadding = 8.dp
-    val capsuleButtonGap = 8.dp
+    val capsuleHorizontalPadding = 6.dp
     val coverButtonSize = 42.dp
     val playButtonSize = 38.dp
     val closeButtonSize = 34.dp
@@ -2461,7 +2461,7 @@ internal fun ReadAloudCapsuleSurface(
                 .fillMaxSize()
                 .padding(horizontal = capsuleHorizontalPadding),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(capsuleButtonGap)
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Box(
                 modifier = Modifier
@@ -2469,7 +2469,12 @@ internal fun ReadAloudCapsuleSurface(
                     .graphicsLayer { rotationZ = coverRotation % 360f }
                     .clip(CircleShape)
                     .background(colors.panel)
-                    .clickable(onClick = onExpand)
+                    .pointerInput(onExpand, onCoverLongPress) {
+                        detectTapGestures(
+                            onTap = { onExpand() },
+                            onLongPress = { onCoverLongPress?.invoke() }
+                        )
+                    }
             ) {
                 BookCoverImage(
                     path = state.coverUrl,
