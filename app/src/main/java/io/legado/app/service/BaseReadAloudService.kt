@@ -8,12 +8,15 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.media.AudioManager
 import android.net.wifi.WifiManager
 import android.os.Bundle
 import android.os.PowerManager
+import android.os.Looper
+import android.provider.Settings
 import android.support.v4.media.MediaMetadataCompat
 import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
@@ -35,6 +38,7 @@ import io.legado.app.constant.NotificationId
 import io.legado.app.constant.PreferKey
 import io.legado.app.constant.Status
 import io.legado.app.help.MediaHelp
+import io.legado.app.help.CoverDisplayResolver
 import io.legado.app.help.ai.AiReadAloudBgmService
 import io.legado.app.help.ai.AiReadAloudRoleService
 import io.legado.app.help.ai.AiReadAloudRoleState
@@ -55,6 +59,9 @@ import io.legado.app.model.ReadAloud
 import io.legado.app.model.ReadBook
 import io.legado.app.receiver.MediaButtonReceiver
 import io.legado.app.ui.book.read.ReadBookActivity
+import io.legado.app.ui.book.read.ReadAloudAppCapsuleHost
+import io.legado.app.ui.book.read.ReadAloudPlayerPanel
+import io.legado.app.ui.book.read.ReadAloudSystemFloatingWindow
 import io.legado.app.ui.book.read.page.entities.ReadAloudCue
 import io.legado.app.ui.book.read.page.entities.TextChapter
 import io.legado.app.ui.book.read.page.entities.buildReadAloudCues
@@ -66,6 +73,7 @@ import io.legado.app.utils.getPrefBoolean
 import io.legado.app.utils.observeEvent
 import io.legado.app.utils.observeSharedPreferences
 import io.legado.app.utils.postEvent
+import io.legado.app.utils.startActivityForBook
 import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers.IO
@@ -165,6 +173,11 @@ abstract class BaseReadAloudService : BaseService(),
     private var blockedPageIndex = 0
     private var blockedStartPos = 0
     private var upNotificationJob: Coroutine<*>? = null
+    @Volatile
+    private var floatingPlaybackState = ReadAloudPlaybackState()
+    private var floatingWindow: ReadAloudSystemFloatingWindow? = null
+    private var floatingWindowPermissionRequested = false
+    private var readAloudPanelActive = false
     private var skipDestroyProgressUpload = false
     private var cover: Bitmap =
         BitmapFactory.decodeResource(appCtx.resources, R.drawable.icon_read_book)
@@ -261,6 +274,15 @@ abstract class BaseReadAloudService : BaseService(),
         initMediaSession()
         initBroadcastReceiver()
         initPhoneStateListener()
+        floatingWindow = ReadAloudSystemFloatingWindow(
+            context = this,
+            lifecycleOwner = this,
+            onPlayPause = {
+                if (pause) ReadAloud.resume(this) else ReadAloud.pause(this)
+            },
+            onExpand = ::openReadAloudPanelFromFloatingWindow,
+            onClose = { ReadAloud.stop(this) }
+        )
         upMediaSessionPlaybackState(PlaybackStateCompat.STATE_PLAYING)
         setTimer(AppConfig.ttsTimer)
         if (AppConfig.ttsTimer > 0) {
@@ -296,11 +318,22 @@ abstract class BaseReadAloudService : BaseService(),
                 EventBus.READ_ALOUD_CONFIG_SCOPE_SPEECH -> rebuildCurrentReadAloud()
             }
         }
+        observeEvent<Boolean>(EventBus.READ_ALOUD_PANEL_ACTIVE) { active ->
+            readAloudPanelActive = active
+            floatingWindow?.setSuppressed(active)
+        }
+        observeEvent<String>(EventBus.RECREATE) {
+            floatingWindow?.refreshTheme()
+            syncReadAloudFloatingWindow(requestPermission = false)
+        }
         observeSharedPreferences { _, key ->
             when (key) {
                 PreferKey.ignoreAudioFocus,
                 PreferKey.pauseReadAloudWhilePhoneCalls -> {
                     initPhoneStateListener()
+                }
+                PreferKey.showReadAloudFloatingBall -> {
+                    syncReadAloudFloatingWindow(requestPermission = true)
                 }
             }
         }
@@ -352,6 +385,8 @@ abstract class BaseReadAloudService : BaseService(),
     }
 
     override fun onDestroy() {
+        floatingWindow?.dispose()
+        floatingWindow = null
         super.onDestroy()
         if (useWakeLock) {
             wakeLock.release()
@@ -393,6 +428,7 @@ abstract class BaseReadAloudService : BaseService(),
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        val stopping = intent?.action == IntentAction.stop
         when (intent?.action) {
             IntentAction.play -> newReadAloud(
                 intent.getBooleanExtra("play", true),
@@ -428,7 +464,18 @@ abstract class BaseReadAloudService : BaseService(),
                 stopSelf()
             }
         }
+        if (stopping) {
+            floatingWindow?.remove()
+        } else {
+            syncReadAloudFloatingWindow(requestPermission = true)
+        }
         return super.onStartCommand(intent, flags, startId)
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        floatingWindow?.onConfigurationChanged()
+        syncReadAloudFloatingWindow(requestPermission = false)
     }
 
     private fun newReadAloud(play: Boolean, pageIndex: Int, startPos: Int) {
@@ -791,11 +838,93 @@ abstract class BaseReadAloudService : BaseService(),
             serviceRunning = isRun,
             sessionId = activeSessionId
         )
+        floatingPlaybackState = state
         bgmPlayer.onPlaybackState(state)
         postEvent(
             EventBus.READ_ALOUD_PLAYBACK_STATE,
             state
         )
+        lifecycleScope.launch(Main.immediate) {
+            syncReadAloudFloatingWindow(requestPermission = false)
+        }
+    }
+
+    private fun syncReadAloudFloatingWindow(requestPermission: Boolean) {
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            lifecycleScope.launch(Main) {
+                syncReadAloudFloatingWindow(requestPermission)
+            }
+            return
+        }
+        val window = floatingWindow ?: return
+        if (!AppConfig.showReadAloudFloatingBall) {
+            window.remove()
+            return
+        }
+        if (!canDrawReadAloudFloatingWindow()) {
+            window.remove()
+            if (requestPermission) requestReadAloudFloatingWindowPermission()
+            return
+        }
+        floatingWindowPermissionRequested = false
+        val book = ReadBook.book
+        val coverDisplay = book?.let { CoverDisplayResolver.resolve(it) }
+        val playbackState = floatingPlaybackState
+        window.setSuppressed(readAloudPanelActive)
+        window.showOrUpdate(
+            ReadAloudPlayerPanel.PlayerUiState(
+                bookName = book?.name.orEmpty(),
+                author = book?.author.orEmpty(),
+                coverUrl = coverDisplay?.path,
+                sourceOrigin = coverDisplay?.sourceOrigin,
+                coverForcePath = coverDisplay?.forcePath ?: false,
+                coverAllowNameOverlay = coverDisplay?.allowNameOverlay,
+                chapterTitle = ReadBook.curTextChapter?.chapter?.title.orEmpty(),
+                playing = playbackState.playing ?: isPlay(),
+                playbackPhase = playbackState.phase,
+                playbackBusy = playbackState.busy && !pause,
+                serviceRunning = isRun && book != null,
+                foregroundActive = true,
+                expanded = false,
+                readMenuVisible = false
+            )
+        )
+    }
+
+    private fun requestReadAloudFloatingWindowPermission() {
+        if (floatingWindowPermissionRequested) return
+        floatingWindowPermissionRequested = true
+        PermissionsCompat.Builder()
+            .addPermissions(Permissions.SYSTEM_ALERT_WINDOW)
+            .rationale(R.string.read_aloud_floating_ball_permission_rationale)
+            .onGranted {
+                floatingWindowPermissionRequested = false
+                if (lifecycleScope.isActive) {
+                    syncReadAloudFloatingWindow(requestPermission = false)
+                }
+            }
+            .onDenied {
+                floatingWindowPermissionRequested = false
+                AppConfig.showReadAloudFloatingBall = false
+            }
+            .onError {
+                floatingWindowPermissionRequested = false
+                AppConfig.showReadAloudFloatingBall = false
+            }
+            .request()
+    }
+
+    private fun canDrawReadAloudFloatingWindow(): Boolean {
+        return android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.M ||
+                Settings.canDrawOverlays(this)
+    }
+
+    private fun openReadAloudPanelFromFloatingWindow() {
+        val book = ReadBook.book ?: return
+        ReadAloudAppCapsuleHost.requestReadAloudPanelOpen(book.bookUrl)
+        startActivityForBook(book) {
+            putExtra("openReadAloudPanel", true)
+        }
     }
 
     protected open fun moveToCue(

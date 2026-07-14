@@ -79,7 +79,6 @@ import io.legado.app.lib.theme.primaryTextColor
 import io.legado.app.lib.theme.secondaryTextColor
 import io.legado.app.lib.theme.uiTypeface
 import io.legado.app.service.BaseReadAloudService
-import io.legado.app.ui.book.read.ReadAloudAppCapsuleHost
 import io.legado.app.ui.about.CrashLogsDialog
 import io.legado.app.ui.about.ReadRecordWidgetStore
 import io.legado.app.ui.about.loadReadRecordAvatar
@@ -281,7 +280,6 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
         upBottomMenu()
         initView()
         handleTargetIntent(intent)
-        ReadAloudAppCapsuleHost.attachMain(this, binding.root)
         onBackPressedDispatcher.addCallback(this) {
             if (isSidebarMode() && sideNavigationOpen) {
                 closeSideNavigation()
@@ -2198,7 +2196,6 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
     }
 
     override fun onDestroy() {
-        ReadAloudAppCapsuleHost.detach(this)
         aiFloatingBall?.removeCallbacks(aiFloatingBallAttachRunnable)
         binding.root.removeCallbacks(appearanceRefreshRunnable)
         clearLiquidGlassCallbacks()

@@ -24,6 +24,8 @@ import io.legado.app.help.readaloud.role.ReadAloudRolePreprocessor
 import io.legado.app.help.readaloud.role.ReadAloudSoundEffectPreprocessor
 import io.legado.app.help.readaloud.speech.SpeechRoute
 import io.legado.app.lib.theme.UiCorner
+import io.legado.app.lib.permission.Permissions
+import io.legado.app.lib.permission.PermissionsCompat
 import io.legado.app.lib.theme.dialogSurfaceBackground
 import io.legado.app.lib.theme.primaryColor
 import io.legado.app.lib.theme.primaryTextColor
@@ -71,6 +73,7 @@ enum class ReadAloudConfigGroup(
             PreferKey.ignoreAudioFocus,
             PreferKey.pauseReadAloudWhilePhoneCalls,
             PreferKey.readAloudWakeLock,
+            PreferKey.showReadAloudFloatingBall,
             KEY_MEDIA_BUTTON_PER_NEXT
         )
     ),
@@ -294,6 +297,8 @@ class ReadAloudConfigDialog : BasePrefDialogFragment() {
                     applySpeechRate()
                 }
 
+                PreferKey.showReadAloudFloatingBall -> Unit
+
                 PreferKey.aiReadAloudRoleEnabled,
                 PreferKey.aiReadAloudRoleModelId,
                 PreferKey.aiReadAloudRoleBackupModelId,
@@ -378,12 +383,39 @@ class ReadAloudConfigDialog : BasePrefDialogFragment() {
                     defaultValue = false
                 ),
                 switch(
+                    key = PreferKey.showReadAloudFloatingBall,
+                    title = getString(R.string.read_aloud_floating_ball),
+                    summary = getString(R.string.read_aloud_floating_ball_summary),
+                    checked = booleanSetting(PreferKey.showReadAloudFloatingBall, true),
+                    onCheckedChange = ::setReadAloudFloatingBallEnabled
+                ),
+                switch(
                     key = KEY_MEDIA_BUTTON_PER_NEXT,
                     title = getString(R.string.pref_media_button_per_next),
                     summary = getString(R.string.pref_media_button_per_next_summary),
                     defaultValue = false
                 )
             )
+        }
+
+        private fun setReadAloudFloatingBallEnabled(enabled: Boolean) {
+            if (!enabled) {
+                updateBooleanSetting(PreferKey.showReadAloudFloatingBall, false)
+                return
+            }
+            PermissionsCompat.Builder()
+                .addPermissions(Permissions.SYSTEM_ALERT_WINDOW)
+                .rationale(R.string.read_aloud_floating_ball_permission_rationale)
+                .onGranted {
+                    updateBooleanSetting(PreferKey.showReadAloudFloatingBall, true)
+                }
+                .onDenied {
+                    updateBooleanSetting(PreferKey.showReadAloudFloatingBall, false)
+                }
+                .onError {
+                    updateBooleanSetting(PreferKey.showReadAloudFloatingBall, false)
+                }
+                .request()
         }
 
         private fun readingItems(): List<SettingItemSpec> {

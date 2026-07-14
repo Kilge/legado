@@ -444,9 +444,6 @@ class ReadBookActivity : BaseReadBookActivity(),
         binding.readAiPanel.attach(this)
         binding.readAiSummaryPanel.attach(this)
         binding.readAloudPlayerPanel.attach(this, this)
-        ReadAloudAppCapsuleHost.attachReadBook(this, binding.root) {
-            openReadAloudPanelFromExternalRequest()
-        }
         ReadAloudAppCapsuleHost.updateReadBookPanelActive(binding.readAloudPlayerPanel.isFullPanelActive())
         binding.readAloudPlayerPanel.post {
             consumeGlobalReadAloudPanelOpen()
@@ -4579,7 +4576,6 @@ class ReadBookActivity : BaseReadBookActivity(),
 
     override fun onMenuHide() {
         binding.readAloudPlayerPanel.setReadMenuAvoidBounds(null)
-        ReadAloudAppCapsuleHost.updateReadMenuAvoidBounds(null)
         if (epubCoreActive) return
         binding.readView.autoPager.resume()
     }
@@ -4587,7 +4583,6 @@ class ReadBookActivity : BaseReadBookActivity(),
     private fun syncReadMenuAvoidBounds() {
         val bounds = binding.readMenu.bottomMenuBoundsIn(binding.readAloudPlayerPanel)
         binding.readAloudPlayerPanel.setReadMenuAvoidBounds(bounds)
-        ReadAloudAppCapsuleHost.updateReadMenuAvoidBounds(bounds)
     }
 
     override fun epubCorePageCount(): Int {
@@ -4930,7 +4925,7 @@ class ReadBookActivity : BaseReadBookActivity(),
     }
 
     override fun onDestroy() {
-        ReadAloudAppCapsuleHost.detach(this)
+        ReadAloudAppCapsuleHost.updateReadBookPanelActive(false)
         clearRestoreProcessState()
         super.onDestroy()
         epubCoreRequestSeq++

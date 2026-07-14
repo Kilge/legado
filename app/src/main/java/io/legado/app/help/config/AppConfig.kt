@@ -2438,6 +2438,10 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
     val readAloudByMediaButton
         get() = appCtx.getPrefBoolean(PreferKey.readAloudByMediaButton, false)
 
+    var showReadAloudFloatingBall: Boolean
+        get() = appCtx.getPrefBoolean(PreferKey.showReadAloudFloatingBall, true)
+        set(value) = appCtx.putPrefBoolean(PreferKey.showReadAloudFloatingBall, value)
+
     val replaceEnableDefault get() = appCtx.getPrefBoolean(PreferKey.replaceEnableDefault, true)
 
     val webDavDir get() = appCtx.getPrefString(PreferKey.webDavDir, "legado")

@@ -1286,6 +1286,9 @@
     <string name="web_service_wake_lock_summary">开启web服务的时候启用唤醒锁,有些手机开启唤醒锁会被杀后台</string>
     <string name="read_aloud_wake_lock">朗读服务唤醒锁</string>
     <string name="read_aloud_wake_lock_summary">开启朗读的时候启用唤醒锁,有些手机开启唤醒锁会被杀后台</string>
+    <string name="read_aloud_floating_ball">听书系统悬浮球</string>
+    <string name="read_aloud_floating_ball_summary">朗读时在本应用、桌面和其他应用上层显示播放控制；关闭后仍可使用系统通知控制</string>
+    <string name="read_aloud_floating_ball_permission_rationale">需要“显示在其他应用上层”权限来显示听书悬浮球；拒绝权限不会影响后台朗读和通知栏控制。</string>
     <string name="audio_play_wake_lock">音频服务唤醒锁</string>
     <string name="audio_play_wake_lock_summary">播放音频的时候启用唤醒锁,有些手机开启唤醒锁会被杀后台</string>
     <string name="change_search_scope">切换搜索范围</string>

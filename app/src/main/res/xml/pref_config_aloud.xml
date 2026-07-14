@@ -29,6 +29,13 @@
             app:iconSpaceReserved="false" />
 
         <io.legado.app.lib.prefs.SwitchPreference
+            android:defaultValue="true"
+            android:key="showReadAloudFloatingBall"
+            android:summary="@string/read_aloud_floating_ball_summary"
+            android:title="@string/read_aloud_floating_ball"
+            app:iconSpaceReserved="false" />
+
+        <io.legado.app.lib.prefs.SwitchPreference
             android:defaultValue="false"
             android:key="mediaButtonPerNext"
             android:summary="@string/pref_media_button_per_next_summary"

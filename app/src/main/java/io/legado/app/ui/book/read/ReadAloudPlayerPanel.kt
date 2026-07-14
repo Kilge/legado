@@ -2134,6 +2134,9 @@ internal data class CapsulePositionState(
     val y: Float? = null
 )
 
+internal const val READ_ALOUD_CAPSULE_WIDTH_DP = 146
+internal const val READ_ALOUD_CAPSULE_HEIGHT_DP = 54
+
 private data class PendingTtsEngineSwitch(
     val wasPlaying: Boolean,
     val pageIndex: Int,
@@ -2302,17 +2305,8 @@ internal fun ReadAloudCapsule(
         val layoutDirection = LocalLayoutDirection.current
         val widthPx = with(density) { maxWidth.toPx() }
         val heightPx = with(density) { maxHeight.toPx() }
-        val capsuleHeight = 54.dp
-        val capsuleHorizontalPadding = 8.dp
-        val capsuleButtonGap = 8.dp
-        val coverButtonSize = 42.dp
-        val playButtonSize = 38.dp
-        val closeButtonSize = 34.dp
-        val capsuleWidth = capsuleHorizontalPadding * 2 +
-                capsuleButtonGap * 2 +
-                coverButtonSize +
-                playButtonSize +
-                closeButtonSize
+        val capsuleHeight = READ_ALOUD_CAPSULE_HEIGHT_DP.dp
+        val capsuleWidth = READ_ALOUD_CAPSULE_WIDTH_DP.dp
         val capsuleWidthPx = with(density) { capsuleWidth.toPx() }
         val capsuleHeightPx = with(density) { capsuleHeight.toPx() }
         val sidePx = with(density) { 18.dp.toPx() }
@@ -2389,7 +2383,12 @@ internal fun ReadAloudCapsule(
                 }
             }
         }
-        Surface(
+        ReadAloudCapsuleSurface(
+            state = state,
+            colors = colors,
+            onPlayPause = onPlayPause,
+            onExpand = onExpand,
+            onClose = onClose,
             modifier = Modifier
                 .offset { IntOffset(renderedX.roundToInt(), renderedY.roundToInt()) }
                 .width(capsuleWidth)
@@ -2428,85 +2427,104 @@ internal fun ReadAloudCapsule(
                         baseOffsetY = (baseOffsetY + dragAmount.y).coerceIn(minY, maxY)
                     }
                 },
-            shape = CircleShape,
-            color = colors.panelStrong,
-            border = BorderStroke(1.dp, colors.panelBorder),
-            shadowElevation = 12.dp
+            coverRotation = coverRotation.value
+        )
+    }
+}
+
+@Composable
+internal fun ReadAloudCapsuleSurface(
+    state: ReadAloudPlayerPanel.PlayerUiState,
+    colors: PlayerColors,
+    onPlayPause: () -> Unit,
+    onExpand: () -> Unit,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier,
+    coverRotation: Float = 0f
+) {
+    val capsuleHorizontalPadding = 8.dp
+    val capsuleButtonGap = 8.dp
+    val coverButtonSize = 42.dp
+    val playButtonSize = 38.dp
+    val closeButtonSize = 34.dp
+    Surface(
+        modifier = modifier,
+        shape = CircleShape,
+        color = colors.panelStrong,
+        border = BorderStroke(1.dp, colors.panelBorder),
+        shadowElevation = 12.dp
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = capsuleHorizontalPadding),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(capsuleButtonGap)
         ) {
-            Row(
+            Box(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = capsuleHorizontalPadding),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(capsuleButtonGap)
+                    .size(coverButtonSize)
+                    .graphicsLayer { rotationZ = coverRotation % 360f }
+                    .clip(CircleShape)
+                    .background(colors.panel)
+                    .clickable(onClick = onExpand)
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(coverButtonSize)
-                        .graphicsLayer {
-                            rotationZ = coverRotation.value % 360f
-                        }
-                        .clip(CircleShape)
-                        .background(colors.panel)
-                        .clickable(onClick = onExpand)
-                ) {
-                    BookCoverImage(
-                        path = state.coverUrl,
-                        name = state.bookName,
-                        author = state.author,
-                        sourceOrigin = state.sourceOrigin,
-                        modifier = Modifier.fillMaxSize(),
-                        style = CoverImageView.CoverStyle.FLAT,
-                        loadOnlyWifi = false,
-                        preferThumb = true,
-                        forcePath = state.coverForcePath,
-                        allowNameOverlay = state.coverAllowNameOverlay,
-                        fillBounds = true
-                    )
-                }
-                Surface(
-                    onClick = onPlayPause,
-                    modifier = Modifier.size(playButtonSize),
-                    shape = CircleShape,
-                    color = Color.White.copy(alpha = 0.92f)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        if (state.playbackBusy) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(18.dp),
-                                strokeWidth = 2.dp,
-                                color = Color.Black.copy(alpha = 0.72f),
-                                trackColor = Color.Black.copy(alpha = 0.12f)
-                            )
-                        } else {
-                            Icon(
-                                painter = painterResource(if (state.playing) R.drawable.ic_pause_24dp else R.drawable.ic_play_24dp),
-                                contentDescription = null,
-                                tint = Color.Black.copy(alpha = 0.86f),
-                                modifier = Modifier.size(21.dp)
-                            )
-                        }
-                    }
-                }
-                Surface(
-                    onClick = onClose,
-                    modifier = Modifier.size(closeButtonSize),
-                    shape = CircleShape,
-                    color = Color.White.copy(alpha = 0.12f),
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
+                BookCoverImage(
+                    path = state.coverUrl,
+                    name = state.bookName,
+                    author = state.author,
+                    sourceOrigin = state.sourceOrigin,
+                    modifier = Modifier.fillMaxSize(),
+                    style = CoverImageView.CoverStyle.FLAT,
+                    loadOnlyWifi = false,
+                    preferThumb = true,
+                    forcePath = state.coverForcePath,
+                    allowNameOverlay = state.coverAllowNameOverlay,
+                    fillBounds = true
+                )
+            }
+            Surface(
+                onClick = onPlayPause,
+                modifier = Modifier.size(playButtonSize),
+                shape = CircleShape,
+                color = Color.White.copy(alpha = 0.92f)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    if (state.playbackBusy) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp,
+                            color = Color.Black.copy(alpha = 0.72f),
+                            trackColor = Color.Black.copy(alpha = 0.12f)
+                        )
+                    } else {
                         Icon(
-                            painter = painterResource(R.drawable.ic_close_x),
+                            painter = painterResource(if (state.playing) R.drawable.ic_pause_24dp else R.drawable.ic_play_24dp),
                             contentDescription = null,
-                            tint = colors.primaryText,
-                            modifier = Modifier.size(17.dp)
+                            tint = Color.Black.copy(alpha = 0.86f),
+                            modifier = Modifier.size(21.dp)
                         )
                     }
                 }
             }
+            Surface(
+                onClick = onClose,
+                modifier = Modifier.size(closeButtonSize),
+                shape = CircleShape,
+                color = Color.White.copy(alpha = 0.12f),
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_close_x),
+                        contentDescription = null,
+                        tint = colors.primaryText,
+                        modifier = Modifier.size(17.dp)
+                    )
+                }
+            }
         }
     }
-        }
+}
 
 @Composable
 private fun FluidBackdropLayer(

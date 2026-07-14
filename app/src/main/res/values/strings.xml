@@ -1595,6 +1595,9 @@ function login() {
     <string name="web_service_wake_lock_summary">The wake-up lock is enabled when the web service is enabled, and some phones will be killed when the wake-up lock is enabled.</string>
     <string name="read_aloud_wake_lock">Read aloud service wake-up lock</string>
     <string name="read_aloud_wake_lock_summary">The wake-up lock is enabled when reading aloud is enabled, and the wake-up lock on some mobile phones will be killed in the background.</string>
+    <string name="read_aloud_floating_ball">System read-aloud floating ball</string>
+    <string name="read_aloud_floating_ball_summary">Show playback controls above this app, the launcher, and other apps while reading aloud</string>
+    <string name="read_aloud_floating_ball_permission_rationale">Allow display over other apps to show the read-aloud floating ball. Denying this permission does not affect background playback or notification controls.</string>
     <string name="audio_play_wake_lock">Audio service wake-up lock</string>
     <string name="audio_play_wake_lock_summary">The wake-up lock is enabled when playing audio, and some phones will be killed when the wake-up lock is turned on.</string>
     <string name="change_search_scope">Toggle search scope</string>
