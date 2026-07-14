@@ -65,8 +65,8 @@ class ReadAloudFloatingWindowLayoutTest {
     }
 
     @Test
-    fun `edge ball keeps a half circle plus outer antialiasing space`() {
-        assertEquals(-28, ReadAloudFloatingWindowLayout.edgeBallOffset(0, 32, 56))
-        assertEquals(4, ReadAloudFloatingWindowLayout.edgeBallOffset(1, 32, 56))
+    fun `edge ball keeps its full circle centered on the physical screen edge`() {
+        assertEquals(-30, ReadAloudFloatingWindowLayout.edgeBallX(0, 1080, 60))
+        assertEquals(1050, ReadAloudFloatingWindowLayout.edgeBallX(1, 1080, 60))
     }
 }

@@ -61,12 +61,12 @@ internal object ReadAloudFloatingWindowLayout {
             .coerceIn(safeMinHeight, availableHeight)
     }
 
-    fun edgeBallOffset(side: Int, windowWidth: Int, ballSize: Int): Int {
-        val halfBall = ballSize.coerceAtLeast(0) / 2
+    fun edgeBallX(side: Int, screenWidth: Int, windowSize: Int): Int {
+        val halfWindow = windowSize.coerceAtLeast(0) / 2
         return if (side.coerceIn(0, 1) == 0) {
-            -halfBall
+            -halfWindow
         } else {
-            windowWidth.coerceAtLeast(halfBall) - halfBall
+            screenWidth.coerceAtLeast(halfWindow) - halfWindow
         }
     }
 }

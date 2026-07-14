@@ -108,8 +108,9 @@ import io.legado.app.utils.getPrefInt
 import io.legado.app.utils.putPrefInt
 import kotlin.math.roundToInt
 
-private const val EDGE_WINDOW_WIDTH_DP = 32
+private const val EDGE_WINDOW_SIZE_DP = 60
 private const val EDGE_BALL_SIZE_DP = 56
+private const val EDGE_BALL_PADDING_DP = 2
 
 internal class ReadAloudSystemFloatingWindow(
     private val context: Context,
@@ -180,6 +181,7 @@ internal class ReadAloudSystemFloatingWindow(
         WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                 WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
                 WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
         PixelFormat.TRANSLUCENT
     ).apply {
@@ -198,7 +200,6 @@ internal class ReadAloudSystemFloatingWindow(
             val colors = rememberPlayerColors(palette)
             FloatingWindowContent(
                 mode = mode,
-                side = side,
                 state = uiState,
                 colors = colors,
                 fontSize = floatingFontSize,
@@ -207,10 +208,9 @@ internal class ReadAloudSystemFloatingWindow(
                 settingsVisible = settingsVisible,
                 chapterPickerVisible = chapterPickerVisible,
                 onBallTap = {
-                    noteInteraction()
-                    changeMode(WindowMode.Controls, animate = true)
+                    onExpand()
                 },
-                onCoverTap = ::noteInteraction,
+                onCoverTap = onExpand,
                 onCoverLongPress = {
                     noteInteraction()
                     changeMode(WindowMode.Reader, animate = true)
@@ -387,6 +387,18 @@ internal class ReadAloudSystemFloatingWindow(
         handler.removeCallbacks(idleRunnable)
         layoutAnimator?.cancel()
         dragging = true
+        if (mode == WindowMode.EdgeBall) {
+            val space = resolveScreenSpace()
+            val minY = space.insetTop
+            val maxY = (space.height - space.insetBottom - layoutParams.height).coerceAtLeast(minY)
+            layoutParams.x = if (side == 0) {
+                space.insetLeft
+            } else {
+                space.width - space.insetRight - layoutParams.width
+            }
+            layoutParams.y = layoutParams.y.coerceIn(minY, maxY)
+            updateLayout()
+        }
     }
 
     private fun dragBy(dx: Int, dy: Int) {
@@ -433,8 +445,8 @@ internal class ReadAloudSystemFloatingWindow(
             .coerceIn(0, 100)
         return when (targetMode) {
             WindowMode.EdgeBall -> {
-                val width = EDGE_WINDOW_WIDTH_DP.dpToPx()
-                val height = EDGE_BALL_SIZE_DP.dpToPx()
+                val width = EDGE_WINDOW_SIZE_DP.dpToPx()
+                val height = EDGE_WINDOW_SIZE_DP.dpToPx()
                 val bounds = ReadAloudFloatingWindowLayout.bounds(
                     screenWidth = space.width,
                     screenHeight = space.height,
@@ -448,7 +460,11 @@ internal class ReadAloudSystemFloatingWindow(
                     bottomMargin = COMPACT_BOTTOM_MARGIN_DP.dpToPx()
                 )
                 WindowFrame(
-                    x = if (side == 0) space.insetLeft else space.width - space.insetRight - width,
+                    x = ReadAloudFloatingWindowLayout.edgeBallX(
+                        side = side,
+                        screenWidth = space.width,
+                        windowSize = width
+                    ),
                     y = ReadAloudFloatingWindowLayout.yForPercent(yPercent, bounds),
                     width = width,
                     height = height
@@ -603,7 +619,6 @@ internal class ReadAloudSystemFloatingWindow(
 @Composable
 private fun FloatingWindowContent(
     mode: ReadAloudSystemFloatingWindow.WindowMode,
-    side: Int,
     state: ReadAloudPlayerPanel.PlayerUiState,
     colors: PlayerColors,
     fontSize: Int,
@@ -642,7 +657,6 @@ private fun FloatingWindowContent(
     ) { targetMode ->
         when (targetMode) {
             ReadAloudSystemFloatingWindow.WindowMode.EdgeBall -> FloatingEdgeBall(
-                side = side,
                 state = state,
                 colors = colors,
                 onTap = onBallTap,
@@ -691,7 +705,6 @@ private fun FloatingWindowContent(
 
 @Composable
 private fun FloatingEdgeBall(
-    side: Int,
     state: ReadAloudPlayerPanel.PlayerUiState,
     colors: PlayerColors,
     onTap: () -> Unit,
@@ -714,12 +727,8 @@ private fun FloatingEdgeBall(
             onLongPress = onLongPress,
             modifier = Modifier.offset {
                 IntOffset(
-                    x = ReadAloudFloatingWindowLayout.edgeBallOffset(
-                        side = side,
-                        windowWidth = EDGE_WINDOW_WIDTH_DP,
-                        ballSize = EDGE_BALL_SIZE_DP
-                    ).dpToPx(),
-                    y = 0
+                    x = EDGE_BALL_PADDING_DP.dpToPx(),
+                    y = EDGE_BALL_PADDING_DP.dpToPx()
                 )
             }
         )
@@ -751,8 +760,7 @@ private fun FloatingControls(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(horizontal = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceEvenly
+            verticalAlignment = Alignment.CenterVertically
         ) {
             FloatingCoverBall(
                 state = state,
@@ -761,6 +769,7 @@ private fun FloatingControls(
                 onTap = onCoverTap,
                 onLongPress = onCoverLongPress
             )
+            Spacer(modifier = Modifier.weight(1f))
             FloatingIconButton(
                 if (state.playing) R.drawable.ic_pause_24dp else R.drawable.ic_play_24dp,
                 if (state.playing) "暂停" else "继续",
@@ -768,6 +777,7 @@ private fun FloatingControls(
                 onPlayPause,
                 emphasized = true
             )
+            Spacer(modifier = Modifier.width(4.dp))
             FloatingIconButton(R.drawable.ic_close_x, "停止", colors, onStop)
         }
     }
