@@ -276,7 +276,9 @@ class HttpReadAloudService : BaseReadAloudService(),
     private fun syncToMediaItemCue(mediaItem: MediaItem? = exoPlayer.currentMediaItem): Int {
         val cueIndex = mediaItemCueIndex(mediaItem)
         if (cueIndex != null) {
-            syncToCueIndex(cueIndex)
+            if (cueIndex != nowSpeak) {
+                syncToCueIndex(cueIndex)
+            }
             applySpeakerVolume(cueIndex)
             return cueIndex
         }
@@ -1079,15 +1081,19 @@ class HttpReadAloudService : BaseReadAloudService(),
         val textChapter = textChapter ?: return
         val cueIndex = syncToMediaItemCue()
         val cueText = contentList.getOrNull(cueIndex) ?: return
+        val cueStartOffset = paragraphStartPos
+            .takeIf { cueIndex == nowSpeak }
+            ?.coerceIn(0, cueText.length)
+            ?: 0
         playIndexJob = lifecycleScope.launch {
-            upTtsProgress(readAloudNumber + 1)
+            upTtsProgress(readAloudNumber + cueStartOffset + 1)
             if (exoPlayer.duration <= 0) {
                 return@launch
             }
             if (cueIndex != nowSpeak || contentList.getOrNull(cueIndex) != cueText) {
                 return@launch
             }
-            val speakTextLength = cueText.length
+            val speakTextLength = cueText.length - cueStartOffset
             if (speakTextLength <= 0) {
                 return@launch
             }
@@ -1098,11 +1104,11 @@ class HttpReadAloudService : BaseReadAloudService(),
                     return@launch
                 }
                 if (pageIndex + 1 < textChapter.pageSize
-                    && readAloudNumber + i > textChapter.getReadLength(pageIndex + 1)
+                    && readAloudNumber + cueStartOffset + i > textChapter.getReadLength(pageIndex + 1)
                 ) {
                     pageIndex++
                     ReadBook.moveToNextPage(fromReadAloud = true)
-                    upTtsProgress(readAloudNumber + i.toInt())
+                    upTtsProgress(readAloudNumber + cueStartOffset + i.toInt())
                 }
                 delay(sleep)
             }

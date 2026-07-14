@@ -208,6 +208,8 @@
     <string name="content_select_default_open">Default open</string>
     <string name="content_select_speak_from_selection">Switched to continuous reading from selection</string>
     <string name="content_select_speak_selected">Switched to reading selected text</string>
+    <string name="read_aloud_from_here">Read from here</string>
+    <string name="epub_selection_read_aloud_unsupported">Continuous reading from an EPUB selection is not supported by this layout yet</string>
     <string name="selection_search_engine_manage">Search engines</string>
     <string name="selection_search_engine_name">Engine name</string>
     <string name="selection_search_engine_url">Search URL</string>

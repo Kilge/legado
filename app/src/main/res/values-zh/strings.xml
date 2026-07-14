@@ -207,6 +207,8 @@
     <string name="content_select_default_open">默认打开</string>
     <string name="content_select_speak_from_selection">已切换为从选择处开始连续朗读</string>
     <string name="content_select_speak_selected">已切换为朗读选择内容</string>
+    <string name="read_aloud_from_here">从此朗读</string>
+    <string name="epub_selection_read_aloud_unsupported">当前 EPUB 排版暂不支持从选中位置连续朗读</string>
     <string name="selection_search_engine_manage">搜索引擎</string>
     <string name="selection_search_engine_name">引擎名称</string>
     <string name="selection_search_engine_url">搜索 URL</string>

@@ -117,6 +117,7 @@ abstract class BaseReadAloudService : BaseService(),
         }
 
         private const val TAG = "BaseReadAloudService"
+        private const val READ_FROM_POSITION_TIMEOUT_MILLIS = 15_000L
 
         private var suppressNextStopEvent = false
 
@@ -166,6 +167,8 @@ abstract class BaseReadAloudService : BaseService(),
     private var playbackChapterIndex = -1
     @Volatile
     private var playbackChapterUrl = ""
+    protected val currentReadAloudSessionId: Long
+        get() = activeSessionId
     private var needResumeOnAudioFocusGain = false
     private var needResumeOnCallStateIdle = false
     private var registeredPhoneStateListener = false
@@ -213,6 +216,9 @@ abstract class BaseReadAloudService : BaseService(),
                 playbackChapterIndex == (chapter?.chapter?.index ?: -1) &&
                 playbackChapterUrl == chapter?.chapter?.url.orEmpty()
     }
+
+    protected fun isCurrentReadAloudSession(sessionId: Long): Boolean =
+        sessionId == activeSessionId
 
     private val broadcastReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -470,6 +476,12 @@ abstract class BaseReadAloudService : BaseService(),
                 expectedChapterIndex = intent.getIntExtra("expectedChapterIndex", -1),
                 play = intent.getBooleanExtra("play", isPlay())
             )
+            IntentAction.playFromPosition -> playFromPosition(
+                bookUrl = intent.getStringExtra("bookUrl").orEmpty(),
+                chapterIndex = intent.getIntExtra("chapterIndex", -1),
+                chapterUrl = intent.getStringExtra("chapterUrl").orEmpty(),
+                chapterPosition = intent.getIntExtra("chapterPosition", -1)
+            )
             IntentAction.prev -> prevChapter(
                 continuePlayback = intent.getBooleanExtra("continuePlayback", true)
             )
@@ -597,6 +609,9 @@ abstract class BaseReadAloudService : BaseService(),
                 syncReadAloudPositionToCue()
                 paragraphStartPos = (startChapterPosition - readAloudNumber)
                     .coerceIn(0, contentList.getOrNull(nowSpeak)?.length ?: 0)
+                this@BaseReadAloudService.pageIndex =
+                    textChapter.getPageIndexByCharIndex(startChapterPosition)
+                    .coerceAtLeast(0)
             }
             if (toLast) {
                 toLast = false
@@ -1074,6 +1089,90 @@ abstract class BaseReadAloudService : BaseService(),
         } else {
             pageChanged = true
             postReadAloudPlaybackPhase(ReadAloudPlaybackState.PHASE_PAUSED, playing = false)
+        }
+    }
+
+    private fun playFromPosition(
+        bookUrl: String,
+        chapterIndex: Int,
+        chapterUrl: String,
+        chapterPosition: Int
+    ) {
+        val book = ReadBook.book ?: return
+        if (book.bookUrl != bookUrl ||
+            chapterIndex !in 0 until ReadBook.chapterSize ||
+            chapterPosition < 0
+        ) {
+            if (contentList.isEmpty()) stopSelf()
+            return
+        }
+
+        // Invalidate any asynchronous preparation from the old playback session before
+        // changing the global ReadBook chapter state.
+        val pendingSessionId = beginReadAloudSession(bookUrl, null)
+        prepareChapterTransition(continuePlayback = true)
+
+        fun failPendingRequest(message: String) {
+            if (activeSessionId != pendingSessionId) return
+            markReadAloudStartUnavailable(0, 0, message)
+        }
+
+        fun startWhenReady() {
+            if (activeSessionId != pendingSessionId) return
+            val latestBook = ReadBook.book ?: return
+            val chapter = ReadBook.curTextChapter ?: return
+            if (latestBook.bookUrl != bookUrl ||
+                chapter.chapter.index != chapterIndex ||
+                chapter.chapter.url != chapterUrl ||
+                !chapter.isCompleted
+            ) {
+                failPendingRequest("无法加载选中的章节")
+                return
+            }
+            val lastPage = chapter.lastPage
+            if (lastPage == null || chapter.pageSize <= 0) {
+                failPendingRequest("选中的章节没有可朗读内容")
+                return
+            }
+            val chapterEndExclusive =
+                (lastPage.chapterPosition + lastPage.text.length).coerceAtLeast(0)
+            if (chapterEndExclusive <= 0) {
+                failPendingRequest("选中的章节没有可朗读内容")
+                return
+            }
+            val safePosition = chapterPosition.coerceIn(0, chapterEndExclusive - 1)
+            val targetPageIndex = chapter.getPageIndexByCharIndex(safePosition)
+                .coerceIn(0, chapter.lastIndex)
+            val targetPageStart = chapter.getReadLength(targetPageIndex)
+            val targetStartPos = (safePosition - targetPageStart).coerceAtLeast(0)
+            ReadBook.durChapterPos = safePosition
+            newReadAloud(
+                play = true,
+                pageIndex = targetPageIndex,
+                startPos = targetStartPos
+            )
+        }
+
+        lifecycleScope.launch {
+            delay(READ_FROM_POSITION_TIMEOUT_MILLIS)
+            if (activeSessionId == pendingSessionId) {
+                failPendingRequest("从选中位置开始朗读超时")
+            }
+        }
+
+        val currentChapter = ReadBook.curTextChapter
+        if (ReadBook.durChapterIndex == chapterIndex &&
+            currentChapter?.chapter?.url == chapterUrl &&
+            currentChapter.isCompleted
+        ) {
+            startWhenReady()
+        } else {
+            ReadBook.openChapter(
+                index = chapterIndex,
+                durChapterPos = chapterPosition,
+                upContent = true,
+                success = ::startWhenReady
+            )
         }
     }
 

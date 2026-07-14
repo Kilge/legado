@@ -1361,12 +1361,9 @@ class ReadBookActivity : BaseReadBookActivity(),
                 return true
             }
 
-            R.id.menu_aloud -> when (AppConfig.contentSelectSpeakMod) {
-                1 -> lifecycleScope.launch {
-                    binding.readView.aloudStartSelect()
-                }
-
-                else -> speak(binding.readView.getSelectText())
+            R.id.menu_aloud -> {
+                handleSelectedTextReadAloud()
+                return true
             }
 
             R.id.menu_bookmark -> binding.readView.curPage.let {
@@ -1422,6 +1419,35 @@ class ReadBookActivity : BaseReadBookActivity(),
             }
         }
         return false
+    }
+
+    private fun handleSelectedTextReadAloud() {
+        val shouldReadContinuously =
+            BaseReadAloudService.isRun || AppConfig.contentSelectSpeakMod == 1
+        if (epubCoreActive) {
+            if (shouldReadContinuously) {
+                toastOnUi(R.string.epub_selection_read_aloud_unsupported)
+            } else {
+                speak(selectedText)
+            }
+            return
+        }
+        if (!shouldReadContinuously) {
+            speak(selectedText)
+            return
+        }
+        val position = binding.readView.getSelectedReadPosition()
+        if (position == null) {
+            toastOnUi(R.string.epub_selection_read_aloud_unsupported)
+            return
+        }
+        ReadAloud.playFromPosition(
+            context = this,
+            bookUrl = position.bookUrl,
+            chapterIndex = position.chapterIndex,
+            chapterUrl = position.chapterUrl,
+            chapterPosition = position.chapterPosition
+        )
     }
 
     private fun askAiBySelection() {

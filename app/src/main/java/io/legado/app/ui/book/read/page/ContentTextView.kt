@@ -24,6 +24,7 @@ import io.legado.app.ui.book.read.page.delegate.PageDelegate
 import io.legado.app.ui.book.read.page.entities.TextLine
 import io.legado.app.ui.book.read.page.entities.TextPage
 import io.legado.app.ui.book.read.page.entities.TextPos
+import io.legado.app.ui.book.read.page.entities.ReadSelectionPosition
 import io.legado.app.ui.book.read.page.entities.column.BaseColumn
 import io.legado.app.ui.book.read.page.entities.column.ButtonColumn
 import io.legado.app.ui.book.read.page.entities.column.TextHtmlColumn
@@ -900,6 +901,25 @@ class ContentTextView(context: Context, attrs: AttributeSet?) : View(context, at
     }
 
     fun hasNativeSelection(): Boolean = !nativeSelectedText.isNullOrBlank()
+
+    fun getSelectedReadPosition(): ReadSelectionPosition? {
+        if (hasNativeSelection() || !selectStart.isSelected()) return null
+        val bookUrl = ReadBook.book?.bookUrl ?: return null
+        return runCatching {
+            val page = relativePage(selectStart.relativePagePos)
+            val chapter = page.getTextChapter()
+            val pagePosition = page.getPosByLineColumn(
+                selectStart.lineIndex,
+                selectStart.columnIndex
+            )
+            ReadSelectionPosition(
+                bookUrl = bookUrl,
+                chapterIndex = page.chapterIndex,
+                chapterUrl = chapter.chapter.url,
+                chapterPosition = chapter.getReadLength(page.index) + pagePosition
+            )
+        }.getOrNull()
+    }
 
     private fun isNativeEpubHit(x: Float, y: Float): Boolean {
         val last = lastRelativePageIndex()

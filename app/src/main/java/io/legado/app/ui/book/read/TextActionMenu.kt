@@ -63,6 +63,7 @@ import io.legado.app.constant.AppLog
 import io.legado.app.constant.PreferKey
 import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.theme.uiTypeface
+import io.legado.app.service.BaseReadAloudService
 import io.legado.app.ui.widget.compose.LegadoComposeTheme
 import io.legado.app.ui.widget.compose.installViewTreeOwnersFrom
 import io.legado.app.ui.widget.compose.rememberAppDialogStyle
@@ -131,13 +132,16 @@ class TextActionMenu(private val context: Context, private val callBack: CallBac
                     pageCapacity = pageCapacity,
                     itemWidthPx = itemWidthPx,
                     onActionClick = { action ->
-                        if (!callBack.onMenuItemSelected(action.itemId)) {
-                            onMenuItemSelected(action)
+                        try {
+                            if (!callBack.onMenuItemSelected(action.itemId)) {
+                                onMenuItemSelected(action)
+                            }
+                        } finally {
+                            callBack.onMenuActionFinally()
                         }
-                        callBack.onMenuActionFinally()
                     },
-                    onActionLongClick = {
-                        toggleSpeakMode()
+                    onActionLongClick = { action ->
+                        if (action.itemId == R.id.menu_aloud) toggleSpeakMode()
                     }
                 )
             }
@@ -165,7 +169,13 @@ class TextActionMenu(private val context: Context, private val callBack: CallBac
             TextMenuAction(
                 itemId = item.itemId,
                 actionId = actionId,
-                title = item.title?.toString().orEmpty(),
+                title = if (item.itemId == R.id.menu_aloud &&
+                    (BaseReadAloudService.isRun || AppConfig.contentSelectSpeakMod == 1)
+                ) {
+                    context.getString(R.string.read_aloud_from_here)
+                } else {
+                    item.title?.toString().orEmpty()
+                },
                 intent = item.intent
             )
         }
@@ -423,7 +433,7 @@ private fun TextActionMenuContent(
     pageCapacity: Int,
     itemWidthPx: Int,
     onActionClick: (TextMenuAction) -> Unit,
-    onActionLongClick: () -> Unit
+    onActionLongClick: (TextMenuAction) -> Unit
 ) {
     val style = rememberAppDialogStyle()
     val density = LocalDensity.current
@@ -487,7 +497,7 @@ private fun TextActionMenuContent(
                                     background = style.fieldSurface,
                                     accent = style.accent,
                                     onClick = { onActionClick(action) },
-                                    onLongClick = onActionLongClick
+                                    onLongClick = { onActionLongClick(action) }
                                 )
                             }
                         }

@@ -115,6 +115,28 @@ object ReadAloud {
         context.startForegroundServiceCompat(intent)
     }
 
+    fun playFromPosition(
+        context: Context,
+        bookUrl: String,
+        chapterIndex: Int,
+        chapterUrl: String,
+        chapterPosition: Int
+    ) {
+        val intent = Intent(context, aloudClass)
+        intent.action = IntentAction.playFromPosition
+        intent.putExtra("bookUrl", bookUrl)
+        intent.putExtra("chapterIndex", chapterIndex)
+        intent.putExtra("chapterUrl", chapterUrl)
+        intent.putExtra("chapterPosition", chapterPosition)
+        try {
+            context.startForegroundServiceCompat(intent)
+        } catch (e: Exception) {
+            val msg = "启动选句朗读出错\n${e.localizedMessage}"
+            AppLog.put(msg, e)
+            context.toastOnUi(msg)
+        }
+    }
+
     fun pause(context: Context) {
         if (BaseReadAloudService.isRun) {
             val intent = Intent(context, aloudClass)

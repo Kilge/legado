@@ -39,6 +39,7 @@ import io.legado.app.ui.book.read.ReadBookActivity
 import io.legado.app.ui.book.read.page.entities.TextLine
 import io.legado.app.ui.book.read.page.entities.TextPage
 import io.legado.app.ui.book.read.page.entities.TextPos
+import io.legado.app.ui.book.read.page.entities.ReadSelectionPosition
 import io.legado.app.ui.book.read.page.provider.ChapterProvider
 import io.legado.app.ui.widget.BatteryView
 import io.legado.app.utils.activity
@@ -1006,6 +1007,9 @@ class PageView(context: Context) : FrameLayout(context) {
     fun hasSelection(): Boolean = binding.contentTextView.hasSelection()
 
     fun hasNativeSelection(): Boolean = binding.contentTextView.hasNativeSelection()
+
+    fun getSelectedReadPosition(): ReadSelectionPosition? =
+        binding.contentTextView.getSelectedReadPosition()
 
     val selectStartPos get() = binding.contentTextView.selectStart
 

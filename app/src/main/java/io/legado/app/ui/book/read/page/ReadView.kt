@@ -31,6 +31,7 @@ import io.legado.app.ui.book.read.page.delegate.ScrollPageDelegate
 import io.legado.app.ui.book.read.page.delegate.SimulationPageDelegate
 import io.legado.app.ui.book.read.page.delegate.SlidePageDelegate
 import io.legado.app.ui.book.read.page.entities.PageDirection
+import io.legado.app.ui.book.read.page.entities.ReadSelectionPosition
 import io.legado.app.ui.book.read.page.entities.TextChapter
 import io.legado.app.ui.book.read.page.entities.TextLine
 import io.legado.app.ui.book.read.page.entities.TextPage
@@ -707,20 +708,8 @@ class ReadView(context: Context, attrs: AttributeSet) :
     /**
      * 从选择位置开始朗读
      */
-    suspend fun aloudStartSelect() {
-        val selectStartPos = curPage.selectStartPos
-        var pagePos = selectStartPos.relativePagePos
-        val line = selectStartPos.lineIndex
-        val column = selectStartPos.columnIndex
-        while (pagePos > 0) {
-            if (!ReadBook.moveToNextPage()) {
-                ReadBook.moveToNextChapterAwait(false)
-            }
-            pagePos--
-        }
-        val startPos = curPage.textPage.getPosByLineColumn(line, column)
-        ReadBook.readAloud(startPos = startPos)
-    }
+    fun getSelectedReadPosition(): ReadSelectionPosition? =
+        curPage.getSelectedReadPosition()
 
     /**
      * @return 选择的文本

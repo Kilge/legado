@@ -22,6 +22,7 @@ object IntentAction {
     const val next = "next"
     const val selectChapter = "selectChapter"
     const val moveTo = "moveTo"
+    const val playFromPosition = "playFromPosition"
     const val init = "init"
     const val remove = "remove"
     const val stopPlay = "stopPlay"
