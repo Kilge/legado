@@ -61,6 +61,7 @@ class ReadAloudFloatingWindowLayoutTest {
         assertEquals(1160, ReadAloudFloatingWindowLayout.readerHeight(2000, 720, 58))
         assertEquals(720, ReadAloudFloatingWindowLayout.readerHeight(2000, 720, 20))
         assertEquals(600, ReadAloudFloatingWindowLayout.readerHeight(600, 720, 90))
+        assertEquals(320, ReadAloudFloatingWindowLayout.readerHeight(2000, 320, 15))
     }
 
     @Test

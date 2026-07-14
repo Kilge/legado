@@ -258,7 +258,7 @@ internal class ReadAloudSystemFloatingWindow(
                     AppConfig.readAloudFloatingBackgroundAlpha = floatingBackgroundAlpha
                 },
                 onHeightPercentChange = {
-                    floatingHeightPercent = it.coerceIn(35, 90)
+                    floatingHeightPercent = it.coerceIn(15, 90)
                     if (mode == WindowMode.Reader) {
                         applyFrame(targetFrame(WindowMode.Reader))
                     }
@@ -562,7 +562,7 @@ internal class ReadAloudSystemFloatingWindow(
         const val COMPACT_BOTTOM_MARGIN_DP = 20
         const val READER_SIDE_MARGIN_DP = 8
         const val READER_TOP_MARGIN_DP = 8
-        const val READER_MIN_HEIGHT_DP = 360
+        const val READER_MIN_HEIGHT_DP = 160
         const val IDLE_COLLAPSE_MILLIS = 5_000L
         const val MODE_ANIMATION_MILLIS = 260L
     }
@@ -1221,7 +1221,7 @@ private fun ColumnScope.FloatingReaderSettings(
             title = "窗口高度",
             valueText = "$heightPercent%",
             value = heightPercent.toFloat(),
-            range = 35f..90f,
+            range = 15f..90f,
             colors = colors,
             onValueChange = { onHeightPercentChange(it.roundToInt()) },
             onValueChangeFinished = onHeightPercentChangeFinished

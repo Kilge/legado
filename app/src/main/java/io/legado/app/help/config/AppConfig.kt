@@ -2454,10 +2454,10 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
         )
 
     var readAloudFloatingHeightPercent: Int
-        get() = appCtx.getPrefInt(PreferKey.readAloudFloatingHeightPercent, 58).coerceIn(35, 90)
+        get() = appCtx.getPrefInt(PreferKey.readAloudFloatingHeightPercent, 58).coerceIn(15, 90)
         set(value) = appCtx.putPrefInt(
             PreferKey.readAloudFloatingHeightPercent,
-            value.coerceIn(35, 90)
+            value.coerceIn(15, 90)
         )
 
     val replaceEnableDefault get() = appCtx.getPrefBoolean(PreferKey.replaceEnableDefault, true)
