@@ -444,6 +444,7 @@ class ReadBookActivity : BaseReadBookActivity(),
         binding.readAiPanel.attach(this)
         binding.readAiSummaryPanel.attach(this)
         binding.readAloudPlayerPanel.attach(this, this)
+        ReadAloudAppCapsuleHost.updateReadBookForegroundActive(true)
         ReadAloudAppCapsuleHost.updateReadBookPanelActive(binding.readAloudPlayerPanel.isFullPanelActive())
         binding.readAloudPlayerPanel.post {
             consumeGlobalReadAloudPanelOpen()
@@ -2290,6 +2291,18 @@ class ReadBookActivity : BaseReadBookActivity(),
                 binding.epubReadView.invalidateRendererStyle()
             }
         }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        ReadAloudAppCapsuleHost.updateReadBookForegroundActive(true)
+    }
+
+    override fun onStop() {
+        if (!isChangingConfigurations) {
+            ReadAloudAppCapsuleHost.updateReadBookForegroundActive(false)
+        }
+        super.onStop()
     }
 
     private fun applyEpubRendererStyleOnly() {
@@ -4925,7 +4938,10 @@ class ReadBookActivity : BaseReadBookActivity(),
     }
 
     override fun onDestroy() {
-        ReadAloudAppCapsuleHost.updateReadBookPanelActive(false)
+        if (!isChangingConfigurations) {
+            ReadAloudAppCapsuleHost.updateReadBookPanelActive(false)
+            ReadAloudAppCapsuleHost.updateReadBookForegroundActive(false)
+        }
         clearRestoreProcessState()
         super.onDestroy()
         epubCoreRequestSeq++
