@@ -532,6 +532,14 @@ class ReadAloudPlayerPanel @JvmOverloads constructor(
         val currentChapterUrl = ReadBook.curTextChapter?.chapter?.url.orEmpty()
         if (state.chapterIndex >= 0 && state.chapterIndex != currentChapterIndex) return
         if (state.chapterUrl.isNotBlank() && currentChapterUrl.isNotBlank() && state.chapterUrl != currentChapterUrl) return
+        val cueChanged = ReadAloudPanelLayout.playbackTargetChanged(
+            currentCueIndex = playbackCueIndex,
+            currentChapterIndex = playbackChapterIndex,
+            currentPlanKey = playbackPlanKey,
+            nextCueIndex = state.cueIndex,
+            nextChapterIndex = state.chapterIndex,
+            nextPlanKey = state.planKey
+        )
         playbackPhase = state.phase
         playbackMessage = state.message
         playbackActualPlaying = state.playing
@@ -544,7 +552,11 @@ class ReadAloudPlayerPanel @JvmOverloads constructor(
         playbackCueKey = state.cueKey
         playbackCueText = state.cueText
         playbackPlanKey = state.planKey
-        syncPlaybackUiState()
+        if (cueChanged) {
+            refresh()
+        } else {
+            syncPlaybackUiState()
+        }
     }
 
     fun onAiRoleState(state: AiReadAloudRoleState) {
@@ -4423,7 +4435,7 @@ private fun LyricCueBody(
             .fillMaxHeight()
             .widthIn(max = 720.dp)
     ) {
-        val centerPadding = ((maxHeight / 2) - if (compact) 42.dp else 54.dp)
+        val centerPadding = (maxHeight / 2)
             .coerceAtLeast(if (compact) 42.dp else 58.dp)
 
         suspend fun centerCue(index: Int, animated: Boolean) {
@@ -4438,7 +4450,8 @@ private fun LyricCueBody(
             }
             targetItem?.let { item ->
                 val scrollDelta = ReadAloudPanelLayout.centeredScrollDelta(
-                    viewportHeight = listState.layoutInfo.viewportSize.height,
+                    viewportStartOffset = listState.layoutInfo.viewportStartOffset,
+                    viewportEndOffset = listState.layoutInfo.viewportEndOffset,
                     itemOffset = item.offset,
                     itemSize = item.size
                 )
