@@ -63,6 +63,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
@@ -1918,7 +1919,7 @@ private fun ReadAloudPlayerContent(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .systemBarsPadding()
+                    .windowInsetsPadding(WindowInsets.safeDrawing)
                     .padding(start = sidePadding, end = sidePadding, top = topPadding, bottom = bottomPadding),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
@@ -2026,7 +2027,7 @@ private fun ReadAloudPlayerContent(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .systemBarsPadding()
+                    .windowInsetsPadding(WindowInsets.safeDrawing)
                     .padding(
                         start = sidePadding,
                         end = sidePadding,
@@ -2064,7 +2065,7 @@ private fun ReadAloudPlayerContent(
                     onExit = { sceneFullscreen = false },
                     modifier = Modifier
                         .align(Alignment.TopCenter)
-                        .systemBarsPadding()
+                        .windowInsetsPadding(WindowInsets.safeDrawing)
                         .padding(start = sidePadding, end = sidePadding, top = topPadding)
                         .onGloballyPositioned { coordinates ->
                             sceneFullscreenTopBarHeight = with(density) {
@@ -2440,7 +2441,8 @@ internal fun ReadAloudCapsuleSurface(
     onExpand: () -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
-    coverRotation: Float = 0f
+    coverRotation: Float = 0f,
+    shadowElevation: Dp = 12.dp
 ) {
     val capsuleHorizontalPadding = 8.dp
     val capsuleButtonGap = 8.dp
@@ -2452,7 +2454,7 @@ internal fun ReadAloudCapsuleSurface(
         shape = CircleShape,
         color = colors.panelStrong,
         border = BorderStroke(1.dp, colors.panelBorder),
-        shadowElevation = 12.dp
+        shadowElevation = shadowElevation
     ) {
         Row(
             modifier = Modifier

@@ -131,7 +131,8 @@ internal class ReadAloudSystemFloatingWindow(
                                 dragBy(amount.x.roundToInt(), amount.y.roundToInt())
                             }
                         },
-                    coverRotation = coverRotation.value
+                    coverRotation = coverRotation.value,
+                    shadowElevation = 0.dp
                 )
             }
         }
@@ -282,7 +283,7 @@ internal class ReadAloudSystemFloatingWindow(
 
     private companion object {
         const val TAG = "ReadAloudFloating"
-        const val SHADOW_PADDING_DP = 12
+        const val SHADOW_PADDING_DP = 0
         const val SIDE_MARGIN_DP = 10
         const val BOTTOM_MARGIN_DP = 20
     }
