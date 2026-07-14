@@ -25,8 +25,18 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.LifecycleRegistry
+import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.setViewTreeLifecycleOwner
+import androidx.lifecycle.setViewTreeViewModelStoreOwner
+import androidx.savedstate.SavedStateRegistry
+import androidx.savedstate.SavedStateRegistryController
+import androidx.savedstate.SavedStateRegistryOwner
+import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import io.legado.app.constant.PreferKey
 import io.legado.app.help.config.AppConfig
 import io.legado.app.ui.book.read.config.ReaderSheetStyle
@@ -45,6 +55,7 @@ internal class ReadAloudSystemFloatingWindow(
 ) {
 
     private val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+    private val viewTreeOwners = FloatingViewTreeOwners(lifecycleOwner)
     private var uiState by mutableStateOf(ReadAloudPlayerPanel.PlayerUiState())
     private var themeRevision by mutableIntStateOf(0)
     private var suppressed = false
@@ -75,7 +86,9 @@ internal class ReadAloudSystemFloatingWindow(
     }
 
     private val composeView = ComposeView(context).apply {
-        setViewTreeLifecycleOwner(lifecycleOwner)
+        setViewTreeLifecycleOwner(viewTreeOwners)
+        setViewTreeViewModelStoreOwner(viewTreeOwners)
+        setViewTreeSavedStateRegistryOwner(viewTreeOwners)
         setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
         setContent {
             val revision = themeRevision
@@ -161,6 +174,7 @@ internal class ReadAloudSystemFloatingWindow(
     fun dispose() {
         remove()
         composeView.disposeComposition()
+        viewTreeOwners.clear()
     }
 
     private fun attachIfNeeded() {
@@ -271,5 +285,37 @@ internal class ReadAloudSystemFloatingWindow(
         const val SHADOW_PADDING_DP = 12
         const val SIDE_MARGIN_DP = 10
         const val BOTTOM_MARGIN_DP = 20
+    }
+
+    private class FloatingViewTreeOwners(
+        private val serviceLifecycleOwner: LifecycleOwner
+    ) : LifecycleOwner, ViewModelStoreOwner, SavedStateRegistryOwner, LifecycleEventObserver {
+
+        private val savedStateController = SavedStateRegistryController.create(this)
+        private val lifecycleRegistry = LifecycleRegistry(this)
+
+        override val lifecycle
+            get() = lifecycleRegistry
+
+        override val viewModelStore = ViewModelStore()
+
+        override val savedStateRegistry: SavedStateRegistry
+            get() = savedStateController.savedStateRegistry
+
+        init {
+            savedStateController.performAttach()
+            savedStateController.performRestore(null)
+            serviceLifecycleOwner.lifecycle.addObserver(this)
+        }
+
+        override fun onStateChanged(source: LifecycleOwner, event: Lifecycle.Event) {
+            lifecycleRegistry.handleLifecycleEvent(event)
+        }
+
+        fun clear() {
+            serviceLifecycleOwner.lifecycle.removeObserver(this)
+            lifecycleRegistry.currentState = Lifecycle.State.DESTROYED
+            viewModelStore.clear()
+        }
     }
 }
