@@ -62,4 +62,10 @@ class ReadAloudFloatingWindowLayoutTest {
         assertEquals(720, ReadAloudFloatingWindowLayout.readerHeight(2000, 720, 20))
         assertEquals(600, ReadAloudFloatingWindowLayout.readerHeight(600, 720, 90))
     }
+
+    @Test
+    fun `edge ball keeps a half circle plus outer antialiasing space`() {
+        assertEquals(-28, ReadAloudFloatingWindowLayout.edgeBallOffset(0, 32, 56))
+        assertEquals(4, ReadAloudFloatingWindowLayout.edgeBallOffset(1, 32, 56))
+    }
 }

@@ -60,4 +60,13 @@ internal object ReadAloudFloatingWindowLayout {
             .roundToInt()
             .coerceIn(safeMinHeight, availableHeight)
     }
+
+    fun edgeBallOffset(side: Int, windowWidth: Int, ballSize: Int): Int {
+        val halfBall = ballSize.coerceAtLeast(0) / 2
+        return if (side.coerceIn(0, 1) == 0) {
+            -halfBall
+        } else {
+            windowWidth.coerceAtLeast(halfBall) - halfBall
+        }
+    }
 }

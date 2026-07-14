@@ -108,6 +108,9 @@ import io.legado.app.utils.getPrefInt
 import io.legado.app.utils.putPrefInt
 import kotlin.math.roundToInt
 
+private const val EDGE_WINDOW_WIDTH_DP = 32
+private const val EDGE_BALL_SIZE_DP = 56
+
 internal class ReadAloudSystemFloatingWindow(
     private val context: Context,
     lifecycleOwner: LifecycleOwner,
@@ -430,7 +433,7 @@ internal class ReadAloudSystemFloatingWindow(
             .coerceIn(0, 100)
         return when (targetMode) {
             WindowMode.EdgeBall -> {
-                val width = EDGE_VISIBLE_WIDTH_DP.dpToPx()
+                val width = EDGE_WINDOW_WIDTH_DP.dpToPx()
                 val height = EDGE_BALL_SIZE_DP.dpToPx()
                 val bounds = ReadAloudFloatingWindowLayout.bounds(
                     screenWidth = space.width,
@@ -553,8 +556,6 @@ internal class ReadAloudSystemFloatingWindow(
 
     private companion object {
         const val TAG = "ReadAloudFloating"
-        const val EDGE_VISIBLE_WIDTH_DP = 28
-        const val EDGE_BALL_SIZE_DP = 56
         const val CONTROLS_WIDTH_DP = 180
         const val CONTROLS_HEIGHT_DP = 64
         const val COMPACT_SIDE_MARGIN_DP = 10
@@ -708,12 +709,16 @@ private fun FloatingEdgeBall(
         FloatingCoverBall(
             state = state,
             colors = colors,
-            size = 56,
+            size = EDGE_BALL_SIZE_DP,
             onTap = onTap,
             onLongPress = onLongPress,
             modifier = Modifier.offset {
                 IntOffset(
-                    x = if (side == 0) -28.dpToPx() else 0,
+                    x = ReadAloudFloatingWindowLayout.edgeBallOffset(
+                        side = side,
+                        windowWidth = EDGE_WINDOW_WIDTH_DP,
+                        ballSize = EDGE_BALL_SIZE_DP
+                    ).dpToPx(),
                     y = 0
                 )
             }
@@ -733,12 +738,11 @@ private fun FloatingControls(
     onDrag: (Int, Int) -> Unit,
     onDragEnd: () -> Unit
 ) {
-    val panelShape = LocalContext.current.composePanelShape()
     Surface(
         modifier = Modifier
             .fillMaxSize()
             .floatingDrag(onDragStart, onDrag, onDragEnd),
-        shape = panelShape,
+        shape = CircleShape,
         color = colors.panelStrong,
         border = BorderStroke(1.dp, colors.panelBorder),
         shadowElevation = 0.dp
