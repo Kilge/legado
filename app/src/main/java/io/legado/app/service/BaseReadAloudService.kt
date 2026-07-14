@@ -921,9 +921,13 @@ abstract class BaseReadAloudService : BaseService(),
 
     private fun openReadAloudPanelFromFloatingWindow() {
         val book = ReadBook.book ?: return
-        ReadAloudAppCapsuleHost.requestReadAloudPanelOpen(book.bookUrl)
-        startActivityForBook(book) {
-            putExtra("openReadAloudPanel", true)
+        runCatching {
+            ReadAloudAppCapsuleHost.requestReadAloudPanelOpen(book.bookUrl)
+            startActivityForBook(book) {
+                putExtra("openReadAloudPanel", true)
+            }
+        }.onFailure {
+            LogUtils.d(TAG, "open read aloud panel from floating window failed: ${it.localizedMessage}")
         }
     }
 
