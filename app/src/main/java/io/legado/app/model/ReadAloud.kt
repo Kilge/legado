@@ -102,6 +102,7 @@ object ReadAloud {
         context: Context,
         cueIndex: Int,
         chapterPosition: Int,
+        expectedChapterIndex: Int = ReadBook.durChapterIndex,
         play: Boolean = BaseReadAloudService.isPlay()
     ) {
         if (!BaseReadAloudService.isRun) return
@@ -109,6 +110,7 @@ object ReadAloud {
         intent.action = IntentAction.moveTo
         intent.putExtra("cueIndex", cueIndex)
         intent.putExtra("chapterPosition", chapterPosition)
+        intent.putExtra("expectedChapterIndex", expectedChapterIndex)
         intent.putExtra("play", play)
         context.startForegroundServiceCompat(intent)
     }

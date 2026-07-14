@@ -221,11 +221,13 @@ class HttpReadAloudService : BaseReadAloudService(),
     protected override fun moveToCue(
         cueIndex: Int,
         chapterPosition: Int,
+        expectedChapterIndex: Int,
         play: Boolean
     ) {
+        if (expectedChapterIndex >= 0 && expectedChapterIndex != ReadBook.durChapterIndex) return
         val targetIndex = when {
-            cueIndex in contentList.indices -> cueIndex
             chapterPosition >= 0 -> readAloudCues.indexForChapterPosition(chapterPosition)
+            cueIndex in contentList.indices -> cueIndex
             else -> -1
         }
         if (targetIndex !in contentList.indices) return

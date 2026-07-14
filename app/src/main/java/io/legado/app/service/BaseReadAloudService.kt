@@ -288,11 +288,12 @@ abstract class BaseReadAloudService : BaseService(),
             onPlayPause = {
                 if (pause) ReadAloud.resume(this) else ReadAloud.pause(this)
             },
-            onCueSelect = { cueIndex, chapterPosition ->
+            onCueSelect = { cueIndex, chapterPosition, expectedChapterIndex ->
                 ReadAloud.moveToCue(
                     context = this,
                     cueIndex = cueIndex,
                     chapterPosition = chapterPosition,
+                    expectedChapterIndex = expectedChapterIndex,
                     play = true
                 )
             },
@@ -411,8 +412,8 @@ abstract class BaseReadAloudService : BaseService(),
         floatingWindow = null
         super.onDestroy()
         if (useWakeLock) {
-            wakeLock.release()
-            wifiLock?.release()
+            if (wakeLock.isHeld) wakeLock.release()
+            wifiLock?.let { if (it.isHeld) it.release() }
         }
         isRun = false
         pause = true
@@ -466,6 +467,7 @@ abstract class BaseReadAloudService : BaseService(),
             IntentAction.moveTo -> moveToCue(
                 cueIndex = intent.getIntExtra("cueIndex", -1),
                 chapterPosition = intent.getIntExtra("chapterPosition", -1),
+                expectedChapterIndex = intent.getIntExtra("expectedChapterIndex", -1),
                 play = intent.getBooleanExtra("play", isPlay())
             )
             IntentAction.prev -> prevChapter(
@@ -756,8 +758,8 @@ abstract class BaseReadAloudService : BaseService(),
     @SuppressLint("WakelockTimeout")
     open fun play() {
         if (useWakeLock) {
-            wakeLock.acquire()
-            wifiLock?.acquire()
+            if (!wakeLock.isHeld) wakeLock.acquire()
+            wifiLock?.let { if (!it.isHeld) it.acquire() }
         }
         isRun = true
         pause = false
@@ -773,8 +775,8 @@ abstract class BaseReadAloudService : BaseService(),
     @CallSuper
     open fun pauseReadAloud(abandonFocus: Boolean = true) {
         if (useWakeLock) {
-            wakeLock.release()
-            wifiLock?.release()
+            if (wakeLock.isHeld) wakeLock.release()
+            wifiLock?.let { if (it.isHeld) it.release() }
         }
         pause = true
         if (abandonFocus) {
@@ -958,6 +960,7 @@ abstract class BaseReadAloudService : BaseService(),
         val last = readAloudCues.lastOrNull()
         val key = listOf(
             chapterKey,
+            activeSessionId.toString(),
             readAloudPlanKey,
             readAloudCues.size.toString(),
             first?.key.orEmpty(),
@@ -1047,11 +1050,13 @@ abstract class BaseReadAloudService : BaseService(),
     protected open fun moveToCue(
         cueIndex: Int,
         chapterPosition: Int,
+        expectedChapterIndex: Int,
         play: Boolean
     ) {
+        if (expectedChapterIndex >= 0 && expectedChapterIndex != ReadBook.durChapterIndex) return
         val targetIndex = when {
-            cueIndex in contentList.indices -> cueIndex
             chapterPosition >= 0 -> readAloudCues.indexForChapterPosition(chapterPosition)
+            cueIndex in contentList.indices -> cueIndex
             else -> -1
         }
         if (targetIndex !in contentList.indices) return

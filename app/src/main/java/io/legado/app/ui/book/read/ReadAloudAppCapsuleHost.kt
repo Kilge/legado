@@ -34,8 +34,8 @@ object ReadAloudAppCapsuleHost {
 
     fun consumeReadAloudPanelOpen(bookUrl: String?): Boolean {
         val request = pendingPanelOpenRequest ?: return false
-        if (bookUrl.isNullOrBlank() || request.bookUrl != bookUrl) return false
         pendingPanelOpenRequest = null
+        if (bookUrl.isNullOrBlank() || request.bookUrl != bookUrl) return false
         return System.currentTimeMillis() - request.requestedAt <= REQUEST_TIMEOUT_MILLIS
     }
 
