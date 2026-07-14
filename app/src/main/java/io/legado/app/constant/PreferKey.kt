@@ -45,6 +45,8 @@ object PreferKey {
     const val showReadAloudFloatingBall = "showReadAloudFloatingBall"
     const val readAloudFloatingBallSide = "readAloudFloatingBallSide"
     const val readAloudFloatingBallYPercent = "readAloudFloatingBallYPercent"
+    const val readAloudFloatingFontSize = "readAloudFloatingFontSize"
+    const val readAloudFloatingBackgroundAlpha = "readAloudFloatingBackgroundAlpha"
     const val ttsEngine = "appTtsEngine"
     const val ttsFollowSys = "ttsFollowSys"
     const val ttsSpeechRate = "ttsSpeechRate"

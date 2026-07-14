@@ -37,6 +37,7 @@ import io.legado.app.constant.IntentAction
 import io.legado.app.constant.NotificationId
 import io.legado.app.constant.PreferKey
 import io.legado.app.constant.Status
+import io.legado.app.data.appDb
 import io.legado.app.help.MediaHelp
 import io.legado.app.help.CoverDisplayResolver
 import io.legado.app.help.ai.AiReadAloudBgmService
@@ -178,6 +179,10 @@ abstract class BaseReadAloudService : BaseService(),
     private var floatingWindow: ReadAloudSystemFloatingWindow? = null
     private var floatingWindowPermissionRequested = false
     private var readAloudPanelActive = false
+    private var floatingChapterPreviewKey = ""
+    private var floatingChapterPreview = emptyList<ReadAloudPlayerPanel.ChapterPreviewUi>()
+    private var floatingTextCueKey = ""
+    private var floatingTextCues = emptyList<ReadAloudPlayerPanel.TextCueUi>()
     private var skipDestroyProgressUpload = false
     private var cover: Bitmap =
         BitmapFactory.decodeResource(appCtx.resources, R.drawable.icon_read_book)
@@ -279,6 +284,19 @@ abstract class BaseReadAloudService : BaseService(),
             lifecycleOwner = this,
             onPlayPause = {
                 if (pause) ReadAloud.resume(this) else ReadAloud.pause(this)
+            },
+            onPreviousParagraph = { ReadAloud.prevParagraph(this) },
+            onNextParagraph = { ReadAloud.nextParagraph(this) },
+            onCueSelect = { cueIndex, chapterPosition ->
+                ReadAloud.moveToCue(
+                    context = this,
+                    cueIndex = cueIndex,
+                    chapterPosition = chapterPosition,
+                    play = true
+                )
+            },
+            onChapterSelect = { chapterIndex ->
+                ReadAloud.selectChapter(this, chapterIndex, continuePlayback = isPlay())
             },
             onExpand = ::openReadAloudPanelFromFloatingWindow,
             onClose = { ReadAloud.stop(this) }
@@ -870,6 +888,17 @@ abstract class BaseReadAloudService : BaseService(),
         val book = ReadBook.book
         val coverDisplay = book?.let { CoverDisplayResolver.resolve(it) }
         val playbackState = floatingPlaybackState
+        val currentCueIndex = playbackState.cueIndex.coerceIn(
+            0,
+            readAloudCues.lastIndex.coerceAtLeast(0)
+        )
+        val chapterIndex = playbackState.chapterIndex
+            .takeIf { it >= 0 }
+            ?: ReadBook.durChapterIndex
+        val chapterCount = ReadBook.chapterSize.coerceAtLeast(chapterIndex + 1)
+        val chapterKey = "${book?.bookUrl.orEmpty()}:$chapterIndex"
+        val textCues = buildFloatingTextCues(chapterKey, chapterIndex)
+        val currentCue = readAloudCues.getOrNull(currentCueIndex)
         window.setSuppressed(readAloudPanelActive)
         window.showOrUpdate(
             ReadAloudPlayerPanel.PlayerUiState(
@@ -880,15 +909,84 @@ abstract class BaseReadAloudService : BaseService(),
                 coverForcePath = coverDisplay?.forcePath ?: false,
                 coverAllowNameOverlay = coverDisplay?.allowNameOverlay,
                 chapterTitle = ReadBook.curTextChapter?.chapter?.title.orEmpty(),
+                chapterIndexText = "${chapterIndex + 1}/$chapterCount",
+                chapterIndex = chapterIndex,
+                chapterCount = chapterCount,
+                chapterPreview = buildFloatingChapterPreview(
+                    bookUrl = book?.bookUrl,
+                    currentIndex = chapterIndex,
+                    chapterCount = chapterCount
+                ),
                 playing = playbackState.playing ?: isPlay(),
                 playbackPhase = playbackState.phase,
                 playbackBusy = playbackState.busy && !pause,
                 serviceRunning = isRun && book != null,
+                paragraphText = currentCue?.text.orEmpty(),
+                paragraphIndex = currentCueIndex + 1,
+                paragraphCount = textCues.size,
+                textCues = textCues,
+                currentCueIndex = currentCueIndex,
+                chapterKey = chapterKey,
+                paragraphKey = currentCue?.key.orEmpty(),
                 foregroundActive = true,
                 expanded = false,
                 readMenuVisible = false
             )
         )
+    }
+
+    private fun buildFloatingTextCues(
+        chapterKey: String,
+        chapterIndex: Int
+    ): List<ReadAloudPlayerPanel.TextCueUi> {
+        val first = readAloudCues.firstOrNull()
+        val last = readAloudCues.lastOrNull()
+        val key = listOf(
+            chapterKey,
+            readAloudPlanKey,
+            readAloudCues.size.toString(),
+            first?.key.orEmpty(),
+            last?.key.orEmpty()
+        ).joinToString("|")
+        if (floatingTextCueKey == key) return floatingTextCues
+        floatingTextCues = readAloudCues.mapIndexed { index, cue ->
+            ReadAloudPlayerPanel.TextCueUi(
+                index = index + 1,
+                text = cue.text,
+                current = false,
+                key = "$chapterKey:${cue.chapterPosition}:${cue.key}",
+                sequence = chapterIndex * 100_000 + index,
+                chapterPosition = cue.chapterPosition
+            )
+        }
+        floatingTextCueKey = key
+        return floatingTextCues
+    }
+
+    private fun buildFloatingChapterPreview(
+        bookUrl: String?,
+        currentIndex: Int,
+        chapterCount: Int
+    ): List<ReadAloudPlayerPanel.ChapterPreviewUi> {
+        if (bookUrl.isNullOrBlank() || chapterCount <= 0) return emptyList()
+        val key = "$bookUrl:$currentIndex:$chapterCount"
+        if (floatingChapterPreviewKey == key) return floatingChapterPreview
+        val start = (currentIndex - 8).coerceAtLeast(0)
+        val end = (currentIndex + 9).coerceAtMost(chapterCount - 1)
+        floatingChapterPreview = runCatching {
+            appDb.bookChapterDao.getChapterList(bookUrl, start, end).map { chapter ->
+                ReadAloudPlayerPanel.ChapterPreviewUi(
+                    index = chapter.index,
+                    title = chapter.title.ifBlank { "未命名章节" },
+                    indexText = if (chapter.isVolume) "卷" else "${chapter.index + 1}/$chapterCount",
+                    current = chapter.index == currentIndex,
+                    volume = chapter.isVolume,
+                    key = "$bookUrl:${chapter.index}:${chapter.title}"
+                )
+            }
+        }.getOrDefault(emptyList())
+        floatingChapterPreviewKey = key
+        return floatingChapterPreview
     }
 
     private fun requestReadAloudFloatingWindowPermission() {

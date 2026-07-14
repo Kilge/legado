@@ -2442,6 +2442,17 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
         get() = appCtx.getPrefBoolean(PreferKey.showReadAloudFloatingBall, true)
         set(value) = appCtx.putPrefBoolean(PreferKey.showReadAloudFloatingBall, value)
 
+    var readAloudFloatingFontSize: Int
+        get() = appCtx.getPrefInt(PreferKey.readAloudFloatingFontSize, 20).coerceIn(14, 34)
+        set(value) = appCtx.putPrefInt(PreferKey.readAloudFloatingFontSize, value.coerceIn(14, 34))
+
+    var readAloudFloatingBackgroundAlpha: Int
+        get() = appCtx.getPrefInt(PreferKey.readAloudFloatingBackgroundAlpha, 92).coerceIn(20, 100)
+        set(value) = appCtx.putPrefInt(
+            PreferKey.readAloudFloatingBackgroundAlpha,
+            value.coerceIn(20, 100)
+        )
+
     val replaceEnableDefault get() = appCtx.getPrefBoolean(PreferKey.replaceEnableDefault, true)
 
     val webDavDir get() = appCtx.getPrefString(PreferKey.webDavDir, "legado")
