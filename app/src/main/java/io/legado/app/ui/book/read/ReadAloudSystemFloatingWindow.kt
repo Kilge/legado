@@ -71,6 +71,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -94,6 +95,8 @@ import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import io.legado.app.R
 import io.legado.app.constant.PreferKey
 import io.legado.app.help.config.AppConfig
+import io.legado.app.lib.theme.composeActionShape
+import io.legado.app.lib.theme.composePanelShape
 import io.legado.app.ui.book.read.config.ReaderSheetStyle
 import io.legado.app.ui.widget.compose.BookCoverImage
 import io.legado.app.ui.widget.image.CoverImageView
@@ -107,8 +110,6 @@ internal class ReadAloudSystemFloatingWindow(
     private val context: Context,
     lifecycleOwner: LifecycleOwner,
     private val onPlayPause: () -> Unit,
-    private val onPreviousParagraph: () -> Unit,
-    private val onNextParagraph: () -> Unit,
     private val onCueSelect: (Int, Int) -> Unit,
     private val onChapterSelect: (Int) -> Unit,
     private val onExpand: () -> Unit,
@@ -207,17 +208,9 @@ internal class ReadAloudSystemFloatingWindow(
                     noteInteraction()
                     changeMode(WindowMode.Reader, animate = true)
                 },
-                onPreviousParagraph = {
-                    noteInteraction()
-                    onPreviousParagraph()
-                },
                 onPlayPause = {
                     noteInteraction()
                     onPlayPause()
-                },
-                onNextParagraph = {
-                    noteInteraction()
-                    onNextParagraph()
                 },
                 onStop = onClose,
                 onDragStart = ::startDrag,
@@ -547,9 +540,9 @@ internal class ReadAloudSystemFloatingWindow(
 
     private companion object {
         const val TAG = "ReadAloudFloating"
-        const val EDGE_VISIBLE_WIDTH_DP = 40
+        const val EDGE_VISIBLE_WIDTH_DP = 28
         const val EDGE_BALL_SIZE_DP = 56
-        const val CONTROLS_WIDTH_DP = 276
+        const val CONTROLS_WIDTH_DP = 180
         const val CONTROLS_HEIGHT_DP = 64
         const val COMPACT_SIDE_MARGIN_DP = 10
         const val COMPACT_BOTTOM_MARGIN_DP = 20
@@ -607,9 +600,7 @@ private fun FloatingWindowContent(
     onBallTap: () -> Unit,
     onCoverTap: () -> Unit,
     onCoverLongPress: () -> Unit,
-    onPreviousParagraph: () -> Unit,
     onPlayPause: () -> Unit,
-    onNextParagraph: () -> Unit,
     onStop: () -> Unit,
     onDragStart: () -> Unit,
     onDrag: (Int, Int) -> Unit,
@@ -650,9 +641,7 @@ private fun FloatingWindowContent(
                 colors = colors,
                 onCoverTap = onCoverTap,
                 onCoverLongPress = onCoverLongPress,
-                onPreviousParagraph = onPreviousParagraph,
                 onPlayPause = onPlayPause,
-                onNextParagraph = onNextParagraph,
                 onStop = onStop,
                 onDragStart = onDragStart,
                 onDrag = onDrag,
@@ -706,7 +695,7 @@ private fun FloatingEdgeBall(
             onLongPress = onLongPress,
             modifier = Modifier.offset {
                 IntOffset(
-                    x = if (side == 0) -16.dpToPx() else 0,
+                    x = if (side == 0) -28.dpToPx() else 0,
                     y = 0
                 )
             }
@@ -720,19 +709,18 @@ private fun FloatingControls(
     colors: PlayerColors,
     onCoverTap: () -> Unit,
     onCoverLongPress: () -> Unit,
-    onPreviousParagraph: () -> Unit,
     onPlayPause: () -> Unit,
-    onNextParagraph: () -> Unit,
     onStop: () -> Unit,
     onDragStart: () -> Unit,
     onDrag: (Int, Int) -> Unit,
     onDragEnd: () -> Unit
 ) {
+    val panelShape = LocalContext.current.composePanelShape()
     Surface(
         modifier = Modifier
             .fillMaxSize()
             .floatingDrag(onDragStart, onDrag, onDragEnd),
-        shape = CircleShape,
+        shape = panelShape,
         color = colors.panelStrong,
         border = BorderStroke(1.dp, colors.panelBorder),
         shadowElevation = 0.dp
@@ -751,7 +739,6 @@ private fun FloatingControls(
                 onTap = onCoverTap,
                 onLongPress = onCoverLongPress
             )
-            FloatingIconButton(R.drawable.ic_fast_rewind, "上一段", colors, onPreviousParagraph)
             FloatingIconButton(
                 if (state.playing) R.drawable.ic_pause_24dp else R.drawable.ic_play_24dp,
                 if (state.playing) "暂停" else "继续",
@@ -759,7 +746,6 @@ private fun FloatingControls(
                 onPlayPause,
                 emphasized = true
             )
-            FloatingIconButton(R.drawable.ic_fast_forward, "下一段", colors, onNextParagraph)
             FloatingIconButton(R.drawable.ic_close_x, "停止", colors, onStop)
         }
     }
@@ -859,9 +845,10 @@ private fun FloatingReaderWindow(
     onBackgroundAlphaChange: (Int) -> Unit,
     onBackgroundAlphaChangeFinished: () -> Unit
 ) {
+    val panelShape = LocalContext.current.composePanelShape()
     Surface(
         modifier = Modifier.fillMaxSize(),
-        shape = RoundedCornerShape(24.dp),
+        shape = panelShape,
         color = colors.panelStrong.copy(alpha = backgroundAlpha / 100f),
         border = BorderStroke(1.dp, colors.panelBorder),
         shadowElevation = 0.dp
@@ -912,6 +899,7 @@ private fun FloatingReaderTopBar(
     onMinimize: () -> Unit,
     onSettings: () -> Unit
 ) {
+    val actionShape = LocalContext.current.composeActionShape()
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -923,7 +911,7 @@ private fun FloatingReaderTopBar(
             modifier = Modifier
                 .weight(1f)
                 .height(42.dp)
-                .clip(RoundedCornerShape(14.dp))
+                .clip(actionShape)
                 .clickable(onClick = onChapterPicker)
                 .padding(horizontal = 10.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -1059,6 +1047,7 @@ private fun ColumnScope.FloatingChapterPicker(
     colors: PlayerColors,
     onChapterSelect: (Int) -> Unit
 ) {
+    val actionShape = LocalContext.current.composeActionShape()
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -1082,7 +1071,7 @@ private fun ColumnScope.FloatingChapterPicker(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(46.dp),
-                    shape = RoundedCornerShape(14.dp),
+                    shape = actionShape,
                     color = if (chapter.current) colors.accent else colors.panel,
                     onClick = { if (!chapter.volume) onChapterSelect(chapter.index) }
                 ) {
@@ -1119,6 +1108,7 @@ private fun ColumnScope.FloatingChapterPicker(
                 colors = colors,
                 enabled = state.chapterIndex > 0,
                 modifier = Modifier.weight(1f),
+                shape = actionShape,
                 onClick = { onChapterSelect(state.chapterIndex - 1) }
             )
             FloatingChapterStepButton(
@@ -1126,6 +1116,7 @@ private fun ColumnScope.FloatingChapterPicker(
                 colors = colors,
                 enabled = state.chapterIndex + 1 < state.chapterCount,
                 modifier = Modifier.weight(1f),
+                shape = actionShape,
                 onClick = { onChapterSelect(state.chapterIndex + 1) }
             )
         }
@@ -1138,11 +1129,12 @@ private fun FloatingChapterStepButton(
     colors: PlayerColors,
     enabled: Boolean,
     modifier: Modifier = Modifier,
+    shape: RoundedCornerShape = RoundedCornerShape(14.dp),
     onClick: () -> Unit
 ) {
     Surface(
         modifier = modifier.height(42.dp),
-        shape = RoundedCornerShape(14.dp),
+        shape = shape,
         color = colors.panel,
         onClick = onClick,
         enabled = enabled

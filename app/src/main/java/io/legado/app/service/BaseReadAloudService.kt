@@ -285,8 +285,6 @@ abstract class BaseReadAloudService : BaseService(),
             onPlayPause = {
                 if (pause) ReadAloud.resume(this) else ReadAloud.pause(this)
             },
-            onPreviousParagraph = { ReadAloud.prevParagraph(this) },
-            onNextParagraph = { ReadAloud.nextParagraph(this) },
             onCueSelect = { cueIndex, chapterPosition ->
                 ReadAloud.moveToCue(
                     context = this,
