@@ -326,6 +326,7 @@ internal class ReadAloudSystemFloatingWindow(
         runCatching {
             windowManager.addView(composeView, layoutParams)
             attached = true
+            LogUtils.d(TAG, "floating window attached mode=$mode")
             noteInteraction()
         }.onFailure {
             attached = false

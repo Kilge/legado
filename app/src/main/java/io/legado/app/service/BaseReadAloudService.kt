@@ -942,7 +942,13 @@ abstract class BaseReadAloudService : BaseService(),
     }
 
     private fun updateFloatingWindowSuppression() {
-        floatingWindow?.setSuppressed(shouldSuppressFloatingWindow())
+        val suppressed = shouldSuppressFloatingWindow()
+        LogUtils.d(
+            TAG,
+            "floating suppression panel=$readAloudPanelActive " +
+                    "appForeground=${LifecycleHelp.isAppForeground()} suppressed=$suppressed"
+        )
+        floatingWindow?.setSuppressed(suppressed)
     }
 
     private fun shouldSuppressFloatingWindow(): Boolean {
