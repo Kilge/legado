@@ -165,7 +165,10 @@ class ImportBookSourceDialog() : ComposeDialogFragment(),
         val palette = style.toMiuixPalette()
         var loadState by remember { mutableStateOf(ImportLoadState.LOADING) }
         var errorMsg by remember { mutableStateOf("") }
+        var importErrorMsg by remember { mutableStateOf("") }
         var refreshTrigger by remember { mutableIntStateOf(0) }
+        val conflictRefreshPending = viewModel.conflictRefreshPending
+        val conflictRefreshError = viewModel.conflictRefreshError
 
         DisposableEffect(Unit) {
             val errorObserver = Observer<String> {
@@ -211,6 +214,31 @@ class ImportBookSourceDialog() : ComposeDialogFragment(),
                         palette = palette,
                         onClick = { showMenuDialog() },
                         cornerRadius = style.actionRadius
+                    )
+                }
+
+                if (conflictRefreshPending) {
+                    Text(
+                        text = getString(R.string.loading),
+                        color = style.secondaryText,
+                        fontSize = 13.sp,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                } else if (!conflictRefreshError.isNullOrBlank()) {
+                    Text(
+                        text = "重新检查书源冲突失败：$conflictRefreshError",
+                        color = style.danger,
+                        fontSize = 13.sp,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                }
+
+                if (importErrorMsg.isNotBlank()) {
+                    Text(
+                        text = importErrorMsg,
+                        color = style.danger,
+                        fontSize = 13.sp,
+                        modifier = Modifier.padding(bottom = 8.dp)
                     )
                 }
 
@@ -327,11 +355,23 @@ class ImportBookSourceDialog() : ComposeDialogFragment(),
                         text = stringResource(R.string.ok),
                         palette = palette,
                         onClick = {
-                            val waitDialog = WaitDialog(requireContext())
-                            waitDialog.show()
-                            viewModel.importSelect {
-                                waitDialog.dismiss()
-                                dismissAllowingStateLoss()
+                            if (!viewModel.conflictRefreshPending) {
+                                importErrorMsg = ""
+                                val waitDialog = WaitDialog(requireContext())
+                                waitDialog.setCancelable(false)
+                                waitDialog.show()
+                                viewModel.importSelect(
+                                    onSuccess = {
+                                        waitDialog.dismiss()
+                                        dismissAllowingStateLoss()
+                                    },
+                                    onError = { error ->
+                                        waitDialog.dismiss()
+                                        val detail = error.localizedMessage
+                                            ?: getString(R.string.unknown_error)
+                                        importErrorMsg = "导入失败：$detail"
+                                    }
+                                )
                             }
                         },
                         primary = true,
@@ -345,7 +385,7 @@ class ImportBookSourceDialog() : ComposeDialogFragment(),
     override fun onCodeSave(code: String, requestId: String?) {
         requestId?.toInt()?.let {
             GSON.fromJsonObject<BookSource>(code).getOrNull()?.let { source ->
-                viewModel.allSources[it] = source
+                viewModel.updateEditedSource(it, source)
             }
         }
     }

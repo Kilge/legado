@@ -31,6 +31,71 @@ import io.legado.app.utils.isUri
 import io.legado.app.utils.splitNotBlank
 
 
+internal data class BookSourceImportConflict(
+    val localSource: BookSourcePart?,
+    val selectedByDefault: Boolean,
+    val isNew: Boolean,
+    val isUpdate: Boolean
+)
+
+internal fun resolveBookSourceImportConflict(
+    importedSource: BookSource,
+    localCandidate: BookSourcePart?
+): BookSourceImportConflict {
+    val localSource = localCandidate?.takeIf {
+        it.bookSourceUrl == importedSource.bookSourceUrl
+    }
+    val isNew = localSource == null
+    val isUpdate = localSource != null && localSource.lastUpdateTime < importedSource.lastUpdateTime
+    return BookSourceImportConflict(
+        localSource = localSource,
+        selectedByDefault = isNew || isUpdate,
+        isNew = isNew,
+        isUpdate = isUpdate
+    )
+}
+
+internal data class BookSourceImportOptions(
+    val keepName: Boolean,
+    val keepGroup: Boolean,
+    val keepEnable: Boolean,
+    val groupName: String?,
+    val addGroup: Boolean
+)
+
+internal fun prepareBookSourceForImport(
+    importedSource: BookSource,
+    localCandidate: BookSourcePart?,
+    options: BookSourceImportOptions
+): BookSource {
+    val source = importedSource.copy()
+    resolveBookSourceImportConflict(source, localCandidate).localSource?.let { localSource ->
+        if (options.keepName) {
+            source.bookSourceName = localSource.bookSourceName
+        }
+        if (options.keepGroup) {
+            source.bookSourceGroup = localSource.bookSourceGroup
+        }
+        if (options.keepEnable) {
+            source.enabled = localSource.enabled
+            source.enabledExplore = localSource.enabledExplore
+        }
+        source.customOrder = localSource.customOrder
+    }
+    options.groupName?.trim()?.takeIf { it.isNotEmpty() }?.let { group ->
+        if (options.addGroup) {
+            val groups = linkedSetOf<String>()
+            source.bookSourceGroup?.splitNotBlank(AppPattern.splitGroupRegex)?.let(groups::addAll)
+            groups.add(group)
+            source.bookSourceGroup = groups.joinToString(",")
+        } else {
+            source.bookSourceGroup = group
+        }
+    }
+    return source
+}
+
+
 class ImportBookSourceViewModel(app: Application) : BaseViewModel(app) {
     var isAddGroup = false
     var groupName: String? = null
@@ -42,6 +107,19 @@ class ImportBookSourceViewModel(app: Application) : BaseViewModel(app) {
     val selectStatus = androidx.compose.runtime.mutableStateListOf<Boolean>()
     val newSourceStatus = arrayListOf<Boolean>()
     val updateSourceStatus = arrayListOf<Boolean>()
+
+    private val pendingConflictIndicesState =
+        androidx.compose.runtime.mutableStateOf<Set<Int>>(emptySet())
+    private val conflictRefreshErrorsState =
+        androidx.compose.runtime.mutableStateOf<Map<Int, String>>(emptyMap())
+    private val conflictRefreshTokens = mutableMapOf<Int, Long>()
+    private var nextConflictRefreshToken = 0L
+
+    val conflictRefreshPending: Boolean
+        get() = pendingConflictIndicesState.value.isNotEmpty()
+
+    val conflictRefreshError: String?
+        get() = conflictRefreshErrorsState.value.values.firstOrNull()
 
     val isSelectAll: Boolean
         get() {
@@ -84,49 +162,74 @@ class ImportBookSourceViewModel(app: Application) : BaseViewModel(app) {
             return count
         }
 
-    fun importSelect(finally: () -> Unit) {
-        execute {
-            val group = groupName?.trim()
-            val keepName = AppConfig.importKeepName
-            val keepGroup = AppConfig.importKeepGroup
-            val keepEnable = AppConfig.importKeepEnable
+    fun importSelect(onSuccess: () -> Unit, onError: (Throwable) -> Unit) {
+        executeLazy {
+            val options = BookSourceImportOptions(
+                keepName = AppConfig.importKeepName,
+                keepGroup = AppConfig.importKeepGroup,
+                keepEnable = AppConfig.importKeepEnable,
+                groupName = groupName,
+                addGroup = isAddGroup
+            )
             val selectSource = arrayListOf<BookSource>()
             selectStatus.forEachIndexed { index, b ->
                 if (b) {
-                    val source = allSources[index]
-                    checkSources[index]?.let {
-                        if (keepName) {
-                            source.bookSourceName = it.bookSourceName
-                        }
-                        if (keepGroup) {
-                            source.bookSourceGroup = it.bookSourceGroup
-                        }
-                        if (keepEnable) {
-                            source.enabled = it.enabled
-                            source.enabledExplore = it.enabledExplore
-                        }
-                        source.customOrder = it.customOrder
-                    }
-                    if (!group.isNullOrEmpty()) {
-                        if (isAddGroup) {
-                            val groups = linkedSetOf<String>()
-                            source.bookSourceGroup?.splitNotBlank(AppPattern.splitGroupRegex)?.let {
-                                groups.addAll(it)
-                            }
-                            groups.add(group)
-                            source.bookSourceGroup = groups.joinToString(",")
-                        } else {
-                            source.bookSourceGroup = group
-                        }
-                    }
-                    selectSource.add(source)
+                    val importedSource = allSources[index]
+                    val localSource = appDb.bookSourceDao
+                        .getBookSourcePart(importedSource.bookSourceUrl)
+                    selectSource.add(
+                        prepareBookSourceForImport(importedSource, localSource, options)
+                    )
                 }
             }
             SourceHelp.insertBookSource(*selectSource.toTypedArray())
             ContentProcessor.upReplaceRules()
-        }.onFinally {
-            finally.invoke()
+        }.onSuccess {
+            onSuccess()
+        }.onError {
+            AppLog.put("ImportError:${it.localizedMessage}", it)
+            onError(it)
+        }.start()
+    }
+
+    fun updateEditedSource(index: Int, source: BookSource) {
+        if (index !in allSources.indices ||
+            index !in checkSources.indices ||
+            index !in newSourceStatus.indices ||
+            index !in updateSourceStatus.indices ||
+            index !in selectStatus.indices
+        ) {
+            return
         }
+        val resetSelection = allSources[index].bookSourceUrl != source.bookSourceUrl
+        allSources[index] = source
+        checkSources[index] = null
+        newSourceStatus[index] = false
+        updateSourceStatus[index] = false
+        conflictRefreshErrorsState.value = conflictRefreshErrorsState.value - index
+        pendingConflictIndicesState.value = pendingConflictIndicesState.value + index
+        val token = ++nextConflictRefreshToken
+        conflictRefreshTokens[index] = token
+        executeLazy {
+            appDb.bookSourceDao.getBookSourcePart(source.bookSourceUrl)
+        }.onSuccess { localSource ->
+            if (conflictRefreshTokens[index] != token || allSources.getOrNull(index) !== source) {
+                return@onSuccess
+            }
+            applyConflict(index, resolveBookSourceImportConflict(source, localSource), resetSelection)
+            conflictRefreshTokens.remove(index)
+            pendingConflictIndicesState.value = pendingConflictIndicesState.value - index
+            conflictRefreshErrorsState.value = conflictRefreshErrorsState.value - index
+        }.onError {
+            if (conflictRefreshTokens[index] != token || allSources.getOrNull(index) !== source) {
+                return@onError
+            }
+            conflictRefreshTokens.remove(index)
+            pendingConflictIndicesState.value = pendingConflictIndicesState.value - index
+            conflictRefreshErrorsState.value = conflictRefreshErrorsState.value + (
+                index to (it.localizedMessage ?: context.getString(R.string.unknown_error))
+            )
+        }.start()
     }
 
     fun importSource(text: String) {
@@ -213,14 +316,28 @@ class ImportBookSourceViewModel(app: Application) : BaseViewModel(app) {
 
     private fun comparisonSource() {
         execute {
-            allSources.forEach {
-                val source = appDb.bookSourceDao.getBookSourcePart(it.bookSourceUrl)
-                checkSources.add(source)
-                selectStatus.add(source == null || source.lastUpdateTime < it.lastUpdateTime)
-                newSourceStatus.add(source == null)
-                updateSourceStatus.add(source != null && source.lastUpdateTime < it.lastUpdateTime)
+            allSources.forEach { importedSource ->
+                val localSource = appDb.bookSourceDao.getBookSourcePart(importedSource.bookSourceUrl)
+                val conflict = resolveBookSourceImportConflict(importedSource, localSource)
+                checkSources.add(conflict.localSource)
+                selectStatus.add(conflict.selectedByDefault)
+                newSourceStatus.add(conflict.isNew)
+                updateSourceStatus.add(conflict.isUpdate)
             }
             successLiveData.postValue(allSources.size)
+        }
+    }
+
+    private fun applyConflict(
+        index: Int,
+        conflict: BookSourceImportConflict,
+        resetSelection: Boolean
+    ) {
+        checkSources[index] = conflict.localSource
+        newSourceStatus[index] = conflict.isNew
+        updateSourceStatus[index] = conflict.isUpdate
+        if (resetSelection) {
+            selectStatus[index] = conflict.selectedByDefault
         }
     }
 
