@@ -34,6 +34,29 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
         val sessionId: Long,
         val generation: Long,
         val cueIndex: Int
+    ) {
+        val queueToken: TtsQueueToken
+            get() = TtsQueueToken(sessionId, generation)
+    }
+
+    private data class QueueContext(
+        val ref: UtteranceRef,
+        val content: List<String>,
+        val startCueIndex: Int,
+        val startOffset: Int
+    )
+
+    private data class QueueFillResult(
+        val addedCount: Int,
+        val flushFailed: Boolean = false,
+        val exhaustedAndEmpty: Boolean = false
+    )
+
+    private data class SpeakAttempt(
+        val reservation: TtsQueueReservation,
+        val text: String,
+        val result: Int,
+        val error: Throwable?
     )
 
     private var textToSpeech: TextToSpeech? = null
@@ -42,6 +65,9 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
     private val ttsUtteranceListener = TTSUtteranceListener()
     private var speakJob: Coroutine<*>? = null
     private val utteranceGeneration = AtomicLong(0L)
+    private val queueStateLock = Any()
+    private val queueWindow = TtsQueueWindow(TTS_QUEUE_WINDOW_SIZE)
+    private var queueContext: QueueContext? = null
     private val TAG = "TTSReadAloudService"
 
     override fun onCreate() {
@@ -84,12 +110,16 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
         speakJob?.cancel()
         speakJob = null
         pendingPlayOnInit = false
-        utteranceGeneration.incrementAndGet()
-        textToSpeech?.runCatching {
+        val tts = synchronized(queueStateLock) {
+            utteranceGeneration.incrementAndGet()
+            queueWindow.clear()
+            queueContext = null
+            textToSpeech.also { textToSpeech = null }
+        }
+        tts?.runCatching {
             stop()
             shutdown()
         }
-        textToSpeech = null
         ttsInitFinish = false
     }
 
@@ -129,82 +159,153 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
         MediaHelp.playSilentSound(this@TTSReadAloudService)
         speakJob?.cancel()
         val sessionId = currentReadAloudSessionId
-        val generation = utteranceGeneration.incrementAndGet()
+        val queueRef = synchronized(queueStateLock) {
+            val generation = utteranceGeneration.incrementAndGet()
+            UtteranceRef(sessionId, generation, nowSpeak).also { ref ->
+                queueContext = QueueContext(
+                    ref = ref,
+                    content = contentList,
+                    startCueIndex = nowSpeak,
+                    startOffset = paragraphStartPos
+                )
+                queueWindow.reset(ref.queueToken, nowSpeak)
+            }
+        }
         speakJob = execute {
             LogUtils.d(TAG, "朗读列表大小 ${contentList.size}")
             LogUtils.d(TAG, "朗读页数 ${textChapter?.pageSize}")
-            val tts = textToSpeech ?: throw NoStackTraceException("tts is null")
-            val contentList = contentList
-            var isAddedText = false
-            for (i in nowSpeak until contentList.size) {
-                ensureActive()
-                if (!isCurrentReadAloudSession(sessionId) ||
-                    utteranceGeneration.get() != generation
-                ) {
-                    return@execute
-                }
-                var text = contentList[i]
-                if (paragraphStartPos > 0 && i == nowSpeak) {
-                    text = text.substring(paragraphStartPos)
-                }
-                if (text.matches(AppPattern.notReadAloudRegex)) {
-                    continue
-                }
-                if (!isAddedText) {
-                    val result = tts.runCatching {
-                        speak(
-                            text,
-                            TextToSpeech.QUEUE_FLUSH,
-                            ttsParamsForCue(i),
-                            utteranceId(sessionId, generation, i)
-                        )
-                    }.getOrElse {
-                        AppLog.put("tts出错\n${it.localizedMessage}", it, true)
-                        TextToSpeech.ERROR
-                    }
-                    if (result == TextToSpeech.ERROR) {
-                        AppLog.put("tts出错 尝试重新初始化")
-                        clearTTS()
-                        initTts()
-                        return@execute
-                    }
-                } else {
-                    val result = tts.runCatching {
-                        speak(
-                            text,
-                            TextToSpeech.QUEUE_ADD,
-                            ttsParamsForCue(i),
-                            utteranceId(sessionId, generation, i)
-                        )
-                    }.getOrElse {
-                        AppLog.put("tts出错\n${it.localizedMessage}", it, true)
-                        TextToSpeech.ERROR
-                    }
-                    if (result == TextToSpeech.ERROR) {
-                        AppLog.put("tts朗读出错:$text")
-                    }
-                }
-                isAddedText = true
-            }
-            LogUtils.d(TAG, "朗读内容添加完成")
-            if (!isAddedText &&
-                isCurrentReadAloudSession(sessionId) &&
-                utteranceGeneration.get() == generation
-            ) {
-                playStop()
-                val stopGeneration = utteranceGeneration.get()
-                lifecycleScope.launch {
-                    delay(1000)
-                    if (isCurrentReadAloudSession(sessionId) &&
-                        utteranceGeneration.get() == stopGeneration &&
-                        !pause
-                    ) {
-                        nextChapter()
-                    }
-                }
+            ensureActive()
+            val fillResult = fillTtsQueue(queueRef)
+            when {
+                fillResult.flushFailed -> recoverFromFlushFailure(queueRef)
+                fillResult.exhaustedAndEmpty -> moveToNextChapterAfterEmptyQueue(queueRef)
+                else -> LogUtils.d(
+                    TAG,
+                    "TTS queue primed ${fillResult.addedCount}/$TTS_QUEUE_WINDOW_SIZE"
+                )
             }
         }.onError {
             AppLog.put("tts朗读出错\n${it.localizedMessage}", it, true)
+        }
+    }
+
+    private fun fillTtsQueue(ref: UtteranceRef): QueueFillResult {
+        var addedCount = 0
+        while (true) {
+            val attempt = synchronized(queueStateLock) {
+                val context = activeQueueContextLocked(ref)
+                    ?: return QueueFillResult(addedCount)
+                val reservation = queueWindow.reserve(
+                    token = ref.queueToken,
+                    cueCount = context.content.size
+                ) { cueIndex ->
+                    context.speakText(cueIndex) != null
+                } ?: return QueueFillResult(
+                    addedCount = addedCount,
+                    exhaustedAndEmpty = queueWindow.exhausted && queueWindow.queuedCount == 0
+                )
+                val text = checkNotNull(context.speakText(reservation.cueIndex))
+                val tts = textToSpeech
+                val result: Result<Int> = if (tts == null) {
+                    Result.failure(NoStackTraceException("tts is null"))
+                } else {
+                    runCatching {
+                        tts.speak(
+                            text,
+                            if (reservation.flush) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD,
+                            ttsParamsForCue(reservation.cueIndex),
+                            utteranceId(ref.sessionId, ref.generation, reservation.cueIndex)
+                        )
+                    }
+                }
+                val resultCode = result.getOrDefault(TextToSpeech.ERROR)
+                if (resultCode == TextToSpeech.ERROR) {
+                    queueWindow.complete(ref.queueToken, reservation.cueIndex)
+                }
+                SpeakAttempt(
+                    reservation = reservation,
+                    text = text,
+                    result = resultCode,
+                    error = result.exceptionOrNull()
+                )
+            }
+            if (attempt.result != TextToSpeech.ERROR) {
+                addedCount++
+                continue
+            }
+            attempt.error?.let {
+                AppLog.put("tts出错\n${it.localizedMessage}", it, true)
+            }
+            if (attempt.reservation.flush) {
+                return QueueFillResult(addedCount, flushFailed = true)
+            }
+            AppLog.put("tts朗读出错:${attempt.text}")
+        }
+    }
+
+    private fun QueueContext.speakText(cueIndex: Int): String? {
+        var text = content.getOrNull(cueIndex) ?: return null
+        if (cueIndex == startCueIndex && startOffset > 0) {
+            text = text.substring(startOffset.coerceIn(0, text.length))
+        }
+        return text.takeUnless { it.matches(AppPattern.notReadAloudRegex) }
+    }
+
+    private fun activeQueueContextLocked(ref: UtteranceRef): QueueContext? {
+        val context = queueContext ?: return null
+        return context.takeIf {
+            it.ref.queueToken == ref.queueToken &&
+                    queueWindow.isActive(ref.queueToken) &&
+                    utteranceGeneration.get() == ref.generation &&
+                    isCurrentReadAloudSession(ref.sessionId) &&
+                    !pause
+        }
+    }
+
+    private fun completeQueuedUtterance(ref: UtteranceRef): Boolean {
+        return synchronized(queueStateLock) {
+            activeQueueContextLocked(ref) != null &&
+                    queueWindow.complete(ref.queueToken, ref.cueIndex)
+        }
+    }
+
+    private fun finishUtteranceAndRefill(ref: UtteranceRef) {
+        if (!completeQueuedUtterance(ref) || pause) return
+        if (ref.cueIndex == nowSpeak && !moveToNextCue()) {
+            nextChapter()
+            return
+        }
+        val fillResult = fillTtsQueue(ref)
+        if (fillResult.flushFailed) {
+            recoverFromFlushFailure(ref)
+        }
+    }
+
+    private fun recoverFromFlushFailure(ref: UtteranceRef) {
+        val active = synchronized(queueStateLock) {
+            activeQueueContextLocked(ref) != null
+        }
+        if (!active) return
+        AppLog.put("tts出错 尝试重新初始化")
+        clearTTS()
+        initTts()
+    }
+
+    private fun moveToNextChapterAfterEmptyQueue(ref: UtteranceRef) {
+        val active = synchronized(queueStateLock) {
+            activeQueueContextLocked(ref) != null && queueWindow.queuedCount == 0
+        }
+        if (!active) return
+        playStop()
+        val stopGeneration = utteranceGeneration.get()
+        lifecycleScope.launch {
+            delay(1000)
+            if (isCurrentReadAloudSession(ref.sessionId) &&
+                utteranceGeneration.get() == stopGeneration &&
+                !pause
+            ) {
+                nextChapter()
+            }
         }
     }
 
@@ -220,12 +321,18 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
     private fun utteranceId(sessionId: Long, generation: Long, cueIndex: Int): String =
         "${AppConst.APP_TAG}|$sessionId|$generation|$cueIndex"
 
+    @Synchronized
     override fun playStop() {
         speakJob?.cancel()
         speakJob = null
         pendingPlayOnInit = false
-        utteranceGeneration.incrementAndGet()
-        textToSpeech?.runCatching {
+        val tts = synchronized(queueStateLock) {
+            utteranceGeneration.incrementAndGet()
+            queueWindow.clear()
+            queueContext = null
+            textToSpeech
+        }
+        tts?.runCatching {
             stop()
         }
     }
@@ -315,10 +422,8 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
 
         override fun onDone(s: String) {
             LogUtils.d(TAG, "onDone utteranceId:$s")
-            val cueIndex = utteranceRef(s)?.cueIndex ?: return
-            if (!pause && cueIndex == nowSpeak) {
-                nextParagraph()
-            }
+            val ref = utteranceRef(s) ?: return
+            finishUtteranceAndRefill(ref)
         }
 
         override fun onRangeStart(utteranceId: String?, start: Int, end: Int, frame: Int) {
@@ -344,7 +449,8 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
         }
 
         override fun onError(utteranceId: String?, errorCode: Int) {
-            val cueIndex = utteranceRef(utteranceId)?.cueIndex ?: return
+            val ref = utteranceRef(utteranceId) ?: return
+            val cueIndex = ref.cueIndex
             postReadAloudPlaybackPhase(
                 ReadAloudPlaybackState.PHASE_ERROR,
                 cueIndex = cueIndex,
@@ -354,9 +460,7 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
                 TAG,
                 "onError nowSpeak:$nowSpeak pageIndex:$pageIndex utteranceId:$utteranceId errorCode:$errorCode"
             )
-            if (!pause && cueIndex == nowSpeak) {
-                nextParagraph()
-            }
+            finishUtteranceAndRefill(ref)
         }
 
         private fun nextParagraph() {
@@ -368,22 +472,25 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
 
         @Deprecated("Deprecated in Java")
         override fun onError(s: String) {
-            val cueIndex = utteranceRef(s)?.cueIndex ?: return
+            val ref = utteranceRef(s) ?: return
+            val cueIndex = ref.cueIndex
             postReadAloudPlaybackPhase(
                 ReadAloudPlaybackState.PHASE_ERROR,
                 cueIndex = cueIndex,
                 message = "TTS错误"
             )
             LogUtils.d(TAG, "onError nowSpeak:$nowSpeak pageIndex:$pageIndex s:$s")
-            if (!pause && cueIndex == nowSpeak) {
-                nextParagraph()
-            }
+            finishUtteranceAndRefill(ref)
         }
 
     }
 
     override fun aloudServicePendingIntent(actionStr: String): PendingIntent? {
         return servicePendingIntent<TTSReadAloudService>(actionStr)
+    }
+
+    private companion object {
+        const val TTS_QUEUE_WINDOW_SIZE = 4
     }
 
 }
