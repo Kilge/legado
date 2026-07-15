@@ -4966,7 +4966,10 @@ class ReadBookActivity : BaseReadBookActivity(),
         epubCoreForegroundTarget = null
         epubCoreCommittedChapterIndex = null
         epubCoreBoundaryTargetEdge = EpubCorePageEdge.Start
-        EpubCoreProvider.clear()
+        val releasedReadSession = ReadBook.unregister(this)
+        if (releasedReadSession) {
+            EpubCoreProvider.clear()
+        }
         tts?.clearTts()
         textActionMenu.dismiss()
         popupAction.dismiss()
@@ -4977,7 +4980,6 @@ class ReadBookActivity : BaseReadBookActivity(),
         commentWebViewSession = null
         commentBrowserOpening = false
         commentBrowserShowing = false
-        ReadBook.unregister(this)
         handler.removeCallbacksAndMessages(null) // 清理Handler消息
         if (!ReadBook.inBookshelf && !isChangingConfigurations) {
             viewModel.removeFromBookshelf(null)

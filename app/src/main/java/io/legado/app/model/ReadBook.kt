@@ -1715,39 +1715,67 @@ object ReadBook : CoroutineScope by MainScope() {
     }
 
     fun saveRead(pageChanged: Boolean = false, fullUpdate: Boolean = false) {
-        val book = book ?: return
+        val targetBook = book ?: return
+        val targetChapterIndex = durChapterIndex
+        val targetChapterPos = durChapterPos
+        val targetBookSource = bookSource
+        val durTime = System.currentTimeMillis()
+        val chapterChanged = targetBook.durChapterIndex != targetChapterIndex
+        targetBook.lastCheckCount = 0
+        targetBook.durChapterIndex = targetChapterIndex
+        targetBook.durChapterPos = targetChapterPos
+        targetBook.durChapterTime = durTime
+        curTextChapter
+            ?.takeIf {
+                it.chapter.bookUrl == targetBook.bookUrl &&
+                        it.chapter.index == targetChapterIndex
+            }
+            ?.title
+            ?.takeIf(String::isNotBlank)
+            ?.let { targetBook.durChapterTitle = it }
+        val bookSnapshot = targetBook.copy().also {
+            it.infoHtml = targetBook.infoHtml
+            it.tocHtml = targetBook.tocHtml
+            it.downloadUrls = targetBook.downloadUrls
+        }
         executor.execute {
             kotlin.runCatching {
-                book.lastCheckCount = 0
-                val durTime = System.currentTimeMillis()
-                book.durChapterTime = durTime
-                val chapterChanged = book.durChapterIndex != durChapterIndex
-                book.durChapterIndex = durChapterIndex
-                book.durChapterPos = durChapterPos
                 if (!pageChanged || chapterChanged) {
-                    appDb.bookChapterDao.getChapter(book.bookUrl, durChapterIndex)?.let {
-                        book.durChapterTitle = it.getDisplayTitle(
-                            ContentProcessor.get(book.name, book.origin).getTitleReplaceRules(),
-                            book.getUseReplaceRule(),
-                            replaceBook = book.toReplaceBook()
+                    appDb.bookChapterDao.getChapter(
+                        bookSnapshot.bookUrl,
+                        targetChapterIndex
+                    )?.let {
+                        bookSnapshot.durChapterTitle = it.getDisplayTitle(
+                            ContentProcessor.get(
+                                bookSnapshot.name,
+                                bookSnapshot.origin
+                            ).getTitleReplaceRules(),
+                            bookSnapshot.getUseReplaceRule(),
+                            replaceBook = bookSnapshot.toReplaceBook()
                         )
-                        SourceCallBack.callBackBook(SourceCallBack.SAVE_READ, bookSource, book, it, durTime.toString())
+                        SourceCallBack.callBackBook(
+                            SourceCallBack.SAVE_READ,
+                            targetBookSource,
+                            bookSnapshot,
+                            it,
+                            durTime.toString()
+                        )
                     }
                 }
                 if (fullUpdate) {
-                    book.update()
+                    bookSnapshot.update()
                 } else {
                     appDb.bookDao.updateReadProgress(
-                        bookUrl = book.bookUrl,
-                        lastCheckCount = book.lastCheckCount,
-                        durChapterTitle = book.durChapterTitle,
-                        durChapterIndex = book.durChapterIndex,
-                        durChapterPos = book.durChapterPos,
-                        durChapterTime = book.durChapterTime
+                        bookUrl = bookSnapshot.bookUrl,
+                        lastCheckCount = bookSnapshot.lastCheckCount,
+                        durChapterTitle = bookSnapshot.durChapterTitle,
+                        durChapterIndex = bookSnapshot.durChapterIndex,
+                        durChapterPos = bookSnapshot.durChapterPos,
+                        durChapterTime = bookSnapshot.durChapterTime
                     )
                 }
-                appDb.readRecentBookDao.insert(ReadRecentBook(book.bookUrl, durTime))
-                ReadRecordWidgetStore.updateRecentSnapshot(book, durTime)
+                appDb.readRecentBookDao.insert(ReadRecentBook(bookSnapshot.bookUrl, durTime))
+                ReadRecordWidgetStore.updateRecentSnapshot(bookSnapshot, durTime)
             }.onFailure {
                 AppLog.put("保存书籍阅读进度信息出错\n$it", it)
             }
@@ -1838,11 +1866,11 @@ object ReadBook : CoroutineScope by MainScope() {
     /**
      * 取消注册回调
      */
-    fun unregister(cb: CallBack) {
-        if (callBack === cb) {
-            callBack = null
-        }
+    fun unregister(cb: CallBack): Boolean {
+        if (callBack !== cb) return false
+        callBack = null
         releaseAndCancel()
+        return true
     }
 
     private fun releaseAndCancel() {
