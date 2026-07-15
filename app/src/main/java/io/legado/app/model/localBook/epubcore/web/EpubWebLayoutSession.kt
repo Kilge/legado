@@ -27,6 +27,7 @@ import splitties.init.appCtx
 import java.io.ByteArrayInputStream
 import java.io.Closeable
 import java.net.URLConnection
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.resume
 
 class EpubWebLayoutSession(
@@ -36,8 +37,12 @@ class EpubWebLayoutSession(
     private val mutex = Mutex()
     private val handler = Handler(Looper.getMainLooper())
     private var webView: WebView? = null
+    @Volatile
     private var closed = false
+    @Volatile
     private var layoutToken = 0L
+    private var pendingToken: Long? = null
+    private var pendingCompletion: ((EpubWebLayoutDocument?) -> Unit)? = null
 
     suspend fun layout(request: EpubWebLayoutRequest): EpubWebLayoutDocument? {
         if (closed) return null
@@ -54,10 +59,15 @@ class EpubWebLayoutSession(
     private suspend fun layoutLocked(request: EpubWebLayoutRequest): EpubWebLayoutDocument? {
         return suspendCancellableCoroutine { continuation ->
             val token = ++layoutToken
-            var completed = false
-            fun finish(result: EpubWebLayoutDocument?) {
-                if (completed) return
-                completed = true
+            val completed = AtomicBoolean(false)
+            val finish: (EpubWebLayoutDocument?) -> Unit = finish@ { result ->
+                if (!completed.compareAndSet(false, true)) return@finish
+                synchronized(this@EpubWebLayoutSession) {
+                    if (pendingToken == token) {
+                        pendingToken = null
+                        pendingCompletion = null
+                    }
+                }
                 handler.removeCallbacksAndMessages(token)
                 runOnUI {
                     if (layoutToken == token) {
@@ -71,16 +81,37 @@ class EpubWebLayoutSession(
             }
 
             continuation.invokeOnCancellation {
-                if (layoutToken == token) {
-                    layoutToken++
-                }
-                handler.removeCallbacksAndMessages(token)
-                runOnUI {
-                    if (layoutToken == token + 1) {
-                        webView?.stopLoading()
-                        webView?.loadUrl(WebViewBlank)
+                val invalidated = synchronized(this@EpubWebLayoutSession) {
+                    if (layoutToken == token) {
+                        layoutToken++
+                        true
+                    } else {
+                        false
                     }
                 }
+                finish(null)
+                if (invalidated) {
+                    runOnUI {
+                        if (layoutToken == token + 1) {
+                            webView?.stopLoading()
+                            webView?.loadUrl(WebViewBlank)
+                        }
+                    }
+                }
+            }
+
+            val registered = synchronized(this@EpubWebLayoutSession) {
+                if (closed || !continuation.isActive) {
+                    false
+                } else {
+                    pendingToken = token
+                    pendingCompletion = finish
+                    true
+                }
+            }
+            if (!registered) {
+                finish(null)
+                return@suspendCancellableCoroutine
             }
 
             runOnUI {
@@ -95,7 +126,7 @@ class EpubWebLayoutSession(
                         request = request,
                         baseUrl = baseUrl,
                         token = token,
-                        onResult = ::finish
+                        onResult = finish
                     )
                     view.measure(
                         View.MeasureSpec.makeMeasureSpec(request.viewportWidthPx, View.MeasureSpec.EXACTLY),
@@ -138,8 +169,15 @@ class EpubWebLayoutSession(
     }
 
     override fun close() {
-        closed = true
-        layoutToken++
+        val completion = synchronized(this) {
+            closed = true
+            layoutToken++
+            pendingCompletion.also {
+                pendingToken = null
+                pendingCompletion = null
+            }
+        }
+        completion?.invoke(null)
         handler.removeCallbacksAndMessages(null)
         runOnUI {
             webView?.run {
@@ -174,10 +212,13 @@ class EpubWebLayoutSession(
         }
 
         override fun onRenderProcessGone(view: WebView?, detail: RenderProcessGoneDetail?): Boolean {
+            if (webView === view) {
+                webView = null
+            }
+            runCatching { view?.destroy() }
             if (token == layoutToken) {
                 onResult(null)
             }
-            webView = null
             return true
         }
     }

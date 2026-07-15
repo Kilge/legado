@@ -32,6 +32,7 @@ import splitties.init.appCtx
 import java.io.ByteArrayInputStream
 import java.io.Closeable
 import java.net.URLConnection
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.resume
 
 enum class EpubWebSelectionAction {
@@ -81,9 +82,13 @@ class EpubWebSelectionLayerSession(
     private val mutex = Mutex()
     private val handler = Handler(Looper.getMainLooper())
     private var webView: WebView? = null
+    @Volatile
     private var closed = false
+    @Volatile
     private var token = 0L
     private var loadedKey: String? = null
+    private var pendingToken: Long? = null
+    private var pendingCompletion: ((EpubWebSelectionPayload?) -> Unit)? = null
 
     suspend fun select(
         request: EpubWebLayoutRequest,
@@ -124,16 +129,36 @@ class EpubWebSelectionLayerSession(
         return suspendCancellableCoroutine { continuation ->
             val requestKey = request.selectionKey()
             val currentToken = ++token
-            var completed = false
-            fun finish(payload: EpubWebSelectionPayload?) {
-                if (completed) return
-                completed = true
+            val completed = AtomicBoolean(false)
+            val finish: (EpubWebSelectionPayload?) -> Unit = finish@ { payload ->
+                if (!completed.compareAndSet(false, true)) return@finish
+                synchronized(this@EpubWebSelectionLayerSession) {
+                    if (pendingToken == currentToken) {
+                        pendingToken = null
+                        pendingCompletion = null
+                    }
+                }
                 handler.removeCallbacksAndMessages(currentToken)
                 if (continuation.isActive) continuation.resume(payload)
             }
             continuation.invokeOnCancellation {
-                if (token == currentToken) token++
-                handler.removeCallbacksAndMessages(currentToken)
+                synchronized(this@EpubWebSelectionLayerSession) {
+                    if (token == currentToken) token++
+                }
+                finish(null)
+            }
+            val registered = synchronized(this@EpubWebSelectionLayerSession) {
+                if (closed || !continuation.isActive) {
+                    false
+                } else {
+                    pendingToken = currentToken
+                    pendingCompletion = finish
+                    true
+                }
+            }
+            if (!registered) {
+                finish(null)
+                return@suspendCancellableCoroutine
             }
             runOnUI {
                 if (closed || !continuation.isActive) {
@@ -212,9 +237,12 @@ class EpubWebSelectionLayerSession(
                         }
 
                         override fun onRenderProcessGone(view: WebView?, detail: RenderProcessGoneDetail?): Boolean {
+                            if (webView === view) {
+                                webView = null
+                                loadedKey = null
+                            }
+                            runCatching { view?.destroy() }
                             if (token == currentToken) finish(null)
-                            webView = null
-                            loadedKey = null
                             return true
                         }
                     }
@@ -1129,8 +1157,15 @@ class EpubWebSelectionLayerSession(
     }
 
     override fun close() {
-        closed = true
-        token++
+        val completion = synchronized(this) {
+            closed = true
+            token++
+            pendingCompletion.also {
+                pendingToken = null
+                pendingCompletion = null
+            }
+        }
+        completion?.invoke(null)
         handler.removeCallbacksAndMessages(null)
         runOnUI {
             webView?.run {
