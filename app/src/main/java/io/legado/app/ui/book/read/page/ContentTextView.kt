@@ -224,6 +224,14 @@ class ContentTextView(context: Context, attrs: AttributeSet?) : View(context, at
         autoPager?.computeOffset()
     }
 
+    override fun onDetachedFromWindow() {
+        // Render requests capture TextPage instances and this View. Invalidate their generation
+        // before detaching so queued work cannot post a stale reader update.
+        renderGeneration.incrementAndGet()
+        pendingRenderSnapshot.set(null)
+        super.onDetachedFromWindow()
+    }
+
     /**
      * 滚动事件
      * pageOffset 向上滚动 减小 向下滚动 增大
