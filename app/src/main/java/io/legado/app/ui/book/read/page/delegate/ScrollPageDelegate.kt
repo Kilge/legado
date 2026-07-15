@@ -53,6 +53,9 @@ class ScrollPageDelegate(readView: ReadView) : PageDelegate(readView) {
             MotionEvent.ACTION_DOWN -> {
                 abortAnim()
                 mVelocity.clear()
+                // Keep the initial sample so a quick gesture with only one MOVE event still
+                // has enough history to produce a release velocity.
+                mVelocity.addMovement(event)
             }
 
             MotionEvent.ACTION_MOVE -> {
@@ -105,6 +108,11 @@ class ScrollPageDelegate(readView: ReadView) : PageDelegate(readView) {
     override fun computeScroll() {
         if (scroller.computeScrollOffset()) {
             readView.setTouchPoint(scroller.currX.toFloat(), scroller.currY.toFloat(), false)
+            // Scroller exposes integer coordinates. On a high refresh-rate display two
+            // consecutive frames can therefore have the same currY even though the fling is
+            // still active. In that case onScroll() has no pixel to apply and does not
+            // invalidate the content view, so explicitly keep the animation clock running.
+            readView.postInvalidateOnAnimation()
         } else if (isStarted) {
             onAnimStop()
             stopScroll()
