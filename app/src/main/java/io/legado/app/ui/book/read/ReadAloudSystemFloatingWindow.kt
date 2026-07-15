@@ -10,6 +10,7 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
 import android.view.Gravity
+import android.view.Choreographer
 import android.view.WindowInsets
 import android.view.WindowManager
 import android.view.animation.PathInterpolator
@@ -160,6 +161,12 @@ internal class ReadAloudSystemFloatingWindow(
     private var transitioning by mutableStateOf(false)
     private var capsuleExpansion by mutableFloatStateOf(0f)
     private var layoutAnimator: ValueAnimator? = null
+    private val choreographer = Choreographer.getInstance()
+    private var dragLayoutUpdatePosted = false
+    private val dragLayoutFrameCallback = Choreographer.FrameCallback {
+        dragLayoutUpdatePosted = false
+        updateLayout()
+    }
 
     private val idleRunnable = Runnable {
         if (attached && (mode == WindowMode.FullBall || mode == WindowMode.Controls) && !dragging) {
@@ -308,6 +315,7 @@ internal class ReadAloudSystemFloatingWindow(
 
     fun remove() {
         handler.removeCallbacks(idleRunnable)
+        cancelPendingDragLayoutUpdate()
         layoutAnimator?.cancel()
         layoutAnimator = null
         transitioning = false
@@ -491,12 +499,13 @@ internal class ReadAloudSystemFloatingWindow(
         val maxY = (space.height - space.insetBottom - layoutParams.height).coerceAtLeast(minY)
         layoutParams.x = (layoutParams.x + dx).coerceIn(minX, maxX)
         layoutParams.y = (layoutParams.y + dy).coerceIn(minY, maxY)
-        updateLayout()
+        scheduleDragLayoutUpdate()
     }
 
     private fun finishDrag() {
         if (!attached || !dragging || mode == WindowMode.Reader) return
         dragging = false
+        flushPendingDragLayoutUpdate()
         val space = resolveScreenSpace()
         side = if (layoutParams.x + layoutParams.width / 2 < space.width / 2) 0 else 1
         val verticalBounds = ReadAloudFloatingWindowLayout.bounds(
@@ -646,6 +655,25 @@ internal class ReadAloudSystemFloatingWindow(
             }
     }
 
+    private fun scheduleDragLayoutUpdate() {
+        if (dragLayoutUpdatePosted) return
+        dragLayoutUpdatePosted = true
+        choreographer.postFrameCallback(dragLayoutFrameCallback)
+    }
+
+    private fun flushPendingDragLayoutUpdate() {
+        if (!dragLayoutUpdatePosted) return
+        choreographer.removeFrameCallback(dragLayoutFrameCallback)
+        dragLayoutUpdatePosted = false
+        updateLayout()
+    }
+
+    private fun cancelPendingDragLayoutUpdate() {
+        if (!dragLayoutUpdatePosted) return
+        choreographer.removeFrameCallback(dragLayoutFrameCallback)
+        dragLayoutUpdatePosted = false
+    }
+
     private fun resolveScreenSpace(): ScreenSpace {
         var width = context.resources.displayMetrics.widthPixels
         var height = context.resources.displayMetrics.heightPixels
@@ -762,11 +790,6 @@ private fun FloatingWindowContent(
     onHeightPercentChange: (Int) -> Unit,
     onHeightPercentChangeFinished: () -> Unit
 ) {
-    val coverRotation = if (mode == ReadAloudSystemFloatingWindow.WindowMode.Reader) {
-        0f
-    } else {
-        rememberCoverRotation(state.playing)
-    }
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -783,7 +806,6 @@ private fun FloatingWindowContent(
             ReadAloudSystemFloatingWindow.WindowMode.FullBall -> FloatingEdgeBall(
                 state = state,
                 colors = colors,
-                rotation = coverRotation,
                 onTap = if (mode == ReadAloudSystemFloatingWindow.WindowMode.FullBall) {
                     onFullBallTap
                 } else {
@@ -797,7 +819,6 @@ private fun FloatingWindowContent(
                 colors = colors,
                 expansion = capsuleExpansion,
                 interactionEnabled = !transitioning && capsuleExpansion >= 1f,
-                rotation = coverRotation,
                 onCoverTap = onCoverTap,
                 onCoverLongPress = onCoverLongPress,
                 onPlayPause = onPlayPause,
@@ -833,7 +854,6 @@ private fun FloatingWindowContent(
 private fun FloatingEdgeBall(
     state: ReadAloudPlayerPanel.PlayerUiState,
     colors: PlayerColors,
-    rotation: Float,
     onTap: () -> Unit,
     onLongPress: () -> Unit
 ) {
@@ -847,7 +867,6 @@ private fun FloatingEdgeBall(
             state = state,
             colors = colors,
             size = EDGE_BALL_SIZE_DP,
-            rotation = rotation,
             onTap = onTap,
             onLongPress = onLongPress
         )
@@ -860,7 +879,6 @@ private fun FloatingControls(
     colors: PlayerColors,
     expansion: Float,
     interactionEnabled: Boolean,
-    rotation: Float,
     onCoverTap: () -> Unit,
     onCoverLongPress: () -> Unit,
     onPlayPause: () -> Unit,
@@ -883,7 +901,6 @@ private fun FloatingControls(
             FloatingCover(
                 state = state,
                 colors = colors,
-                rotation = rotation,
                 enabled = interactionEnabled,
                 onTap = onCoverTap,
                 onLongPress = onCoverLongPress,
@@ -955,7 +972,6 @@ private fun FloatingCoverBall(
     state: ReadAloudPlayerPanel.PlayerUiState,
     colors: PlayerColors,
     size: Int,
-    rotation: Float,
     onTap: () -> Unit,
     onLongPress: () -> Unit,
     modifier: Modifier = Modifier
@@ -963,7 +979,6 @@ private fun FloatingCoverBall(
     FloatingCover(
         state = state,
         colors = colors,
-        rotation = rotation,
         enabled = true,
         onTap = onTap,
         onLongPress = onLongPress,
@@ -972,10 +987,17 @@ private fun FloatingCoverBall(
 }
 
 @Composable
-private fun rememberCoverRotation(playing: Boolean): Float {
+private fun FloatingCover(
+    state: ReadAloudPlayerPanel.PlayerUiState,
+    colors: PlayerColors,
+    enabled: Boolean,
+    onTap: () -> Unit,
+    onLongPress: () -> Unit,
+    modifier: Modifier = Modifier
+) {
     val rotation = remember { Animatable(0f) }
-    LaunchedEffect(playing) {
-        if (playing && !AppConfig.isEInkMode) {
+    LaunchedEffect(state.playing) {
+        if (state.playing && !AppConfig.isEInkMode) {
             while (true) {
                 val start = rotation.value % 360f
                 rotation.snapTo(start)
@@ -986,22 +1008,9 @@ private fun rememberCoverRotation(playing: Boolean): Float {
             }
         }
     }
-    return rotation.value % 360f
-}
-
-@Composable
-private fun FloatingCover(
-    state: ReadAloudPlayerPanel.PlayerUiState,
-    colors: PlayerColors,
-    rotation: Float,
-    enabled: Boolean,
-    onTap: () -> Unit,
-    onLongPress: () -> Unit,
-    modifier: Modifier = Modifier
-) {
     Surface(
         modifier = modifier
-            .graphicsLayer { rotationZ = rotation }
+            .graphicsLayer { rotationZ = rotation.value % 360f }
             .pointerInput(enabled, onTap, onLongPress) {
                 if (enabled) {
                     detectTapGestures(onTap = { onTap() }, onLongPress = { onLongPress() })
