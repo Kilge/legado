@@ -5,6 +5,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -14,12 +15,15 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -41,8 +45,6 @@ import io.legado.app.ui.widget.compose.showComposeActionListDialog
 import io.legado.app.ui.widget.compose.rememberAppDialogStyle
 import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.ui.widget.compose.toMiuixPalette
-import io.legado.app.utils.GSON
-import io.legado.app.utils.fromJsonObject
 import io.legado.app.utils.getClipText
 import io.legado.app.utils.sendToClip
 import io.legado.app.utils.toastOnUi
@@ -60,67 +62,89 @@ class ComposeDirectLinkUploadDialog : ComposeDialogFragment() {
         container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View {
-        val initialRule = DirectLinkUpload.getRule()
         return ComposeView(requireContext()).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
-                DirectLinkUploadContent(
-                    initialRule = initialRule,
-                    onDismiss = { dismissAllowingStateLoss() },
-                    onImportDefault = ::importDefault,
-                    onCopyRule = ::copyRule,
-                    onPasteRule = ::pasteRule,
-                    onTest = ::test,
-                    onSave = { rule ->
-                        DirectLinkUpload.putConfig(rule)
-                        dismissAllowingStateLoss()
+                val initialRule by produceState<DirectLinkUpload.Rule?>(null) {
+                    value = withContext(IO) {
+                        runCatching { DirectLinkUpload.getRule() }
+                            .getOrElse { DirectLinkUpload.Rule("", "", "") }
                     }
+                }
+                initialRule?.let { rule ->
+                    DirectLinkUploadContent(
+                        initialRule = rule,
+                        onDismiss = { dismissAllowingStateLoss() },
+                        onImportDefault = ::importDefault,
+                        onCopyRule = ::copyRule,
+                        onPasteRule = ::pasteRule,
+                        onTest = ::test,
+                        onSave = ::saveRuleAndDismiss
+                    )
+                } ?: DirectLinkUploadLoadingContent(
+                    onDismiss = { dismissAllowingStateLoss() }
                 )
             }
         }
     }
 
     private fun importDefault() {
-        val rules = DirectLinkUpload.defaultRules
-        showComposeActionListDialog(
-            title = getString(R.string.import_default_rule),
-            labels = rules.map { it.summary }
-        ) { index ->
-            rules.getOrNull(index)?.let { rule ->
-                DirectLinkUpload.putConfig(rule)
-                dismissAllowingStateLoss()
+        lifecycleScope.launch {
+            val rules = withContext(IO) { DirectLinkUpload.defaultRules }
+            showComposeActionListDialog(
+                title = getString(R.string.import_default_rule),
+                labels = rules.map { it.summary.orEmpty() }
+            ) { index ->
+                rules.getOrNull(index)?.let { rule ->
+                    saveRuleAndDismiss(rule)
+                }
             }
         }
     }
 
     private fun copyRule() {
-        // Read current values from the view would be complex, use stored rule
-        val rule = DirectLinkUpload.getRule()
-        appCtx.sendToClip(GSON.toJson(rule))
+        lifecycleScope.launch {
+            val result = withContext(IO) {
+                DirectLinkUpload.encodeRule(DirectLinkUpload.getRule())
+            }
+            result.onSuccess { appCtx.sendToClip(it) }
+                .onFailure {
+                    toastOnUi("复制失败：${it.localizedMessage ?: "规则格式不正确"}")
+                }
+        }
     }
 
     private fun pasteRule() {
         lifecycleScope.launch {
-            val clipText = withContext(IO) { requireContext().getClipText() }
+            val clipText = requireContext().getClipText()
             if (clipText.isNullOrBlank()) {
                 toastOnUi("剪贴板为空或格式不对")
                 return@launch
             }
-            runCatching {
-                GSON.fromJsonObject<DirectLinkUpload.Rule>(clipText).getOrThrow()
-            }.onSuccess { rule ->
-                DirectLinkUpload.putConfig(rule)
+            val result = withContext(IO) { DirectLinkUpload.importRule(clipText) }
+            result.onSuccess {
                 dismissAllowingStateLoss()
             }.onFailure {
-                toastOnUi("格式不对")
+                toastOnUi("格式不对：${it.localizedMessage ?: "规则校验失败"}")
+            }
+        }
+    }
+
+    private fun saveRuleAndDismiss(rule: DirectLinkUpload.Rule) {
+        lifecycleScope.launch {
+            val result = withContext(IO) { DirectLinkUpload.putConfig(rule) }
+            result.onSuccess {
+                dismissAllowingStateLoss()
+            }.onFailure {
+                toastOnUi("保存失败：${it.localizedMessage ?: "规则校验失败"}")
             }
         }
     }
 
     private fun test() {
-        val rule = DirectLinkUpload.getRule()
         lifecycleScope.launch {
             val result = withContext(IO) {
+                val rule = DirectLinkUpload.getRule()
                 runCatching { DirectLinkUpload.upLoad("test.json", "{}", "application/json", rule) }
             }
             result.onSuccess { msg ->
@@ -145,6 +169,34 @@ class ComposeDirectLinkUploadDialog : ComposeDialogFragment() {
 }
 
 @Composable
+private fun DirectLinkUploadLoadingContent(onDismiss: () -> Unit) {
+    val style = rememberAppDialogStyle()
+    val palette = style.toMiuixPalette()
+    AppDialogFrame(
+        title = stringResource(R.string.backup_restore),
+        scrollContent = false,
+        content = {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(96.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(color = style.accent)
+            }
+        },
+        actions = {
+            LegadoMiuixActionButton(
+                text = stringResource(R.string.cancel),
+                palette = palette,
+                onClick = onDismiss,
+                cornerRadius = style.actionRadius
+            )
+        }
+    )
+}
+
+@Composable
 private fun DirectLinkUploadContent(
     initialRule: DirectLinkUpload.Rule,
     onDismiss: () -> Unit,
@@ -156,9 +208,11 @@ private fun DirectLinkUploadContent(
 ) {
     val style = rememberAppDialogStyle()
     val palette = style.toMiuixPalette()
-    var uploadUrl by rememberSaveable { mutableStateOf(initialRule.uploadUrl) }
-    var downloadUrlRule by rememberSaveable { mutableStateOf(initialRule.downloadUrlRule) }
-    var summary by rememberSaveable { mutableStateOf(initialRule.summary) }
+    var uploadUrl by remember { mutableStateOf(initialRule.uploadUrl.orEmpty()) }
+    var downloadUrlRule by remember {
+        mutableStateOf(initialRule.downloadUrlRule.orEmpty())
+    }
+    var summary by remember { mutableStateOf(initialRule.summary.orEmpty()) }
     var compress by rememberSaveable { mutableStateOf(initialRule.compress) }
 
     AppDialogFrame(
@@ -259,9 +313,6 @@ private fun DirectLinkUploadContent(
                         return@LegadoMiuixActionButton
                     }
                     if (downloadUrlRule.isBlank()) {
-                        return@LegadoMiuixActionButton
-                    }
-                    if (summary.isBlank()) {
                         return@LegadoMiuixActionButton
                     }
                     onSave(DirectLinkUpload.Rule(uploadUrl, downloadUrlRule, summary, compress))

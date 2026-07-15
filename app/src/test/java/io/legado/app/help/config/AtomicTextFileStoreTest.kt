@@ -83,6 +83,49 @@ class AtomicTextFileStoreTest {
     }
 
     @Test
+    fun deleteRemovesTargetAndAtomicResidue() {
+        val target = temporaryFolder.newFile("theme.json").apply { writeText("current") }
+        backupOf(target).writeText("old")
+        stagingOf(target).writeText("new")
+
+        val removedSize = AtomicTextFileStore(target).delete()
+
+        assertEquals("current".toByteArray().size.toLong(), removedSize)
+        assertFalse(target.exists())
+        assertFalse(backupOf(target).exists())
+        assertFalse(stagingOf(target).exists())
+    }
+
+    @Test
+    fun deleteWithOnlyBackupCannotResurrectConfiguration() {
+        val target = File(temporaryFolder.root, "theme.json")
+        backupOf(target).writeText("old")
+
+        val store = AtomicTextFileStore(target)
+        val removedSize = store.delete()
+        store.recoverInterruptedCommit()
+
+        assertEquals("old".toByteArray().size.toLong(), removedSize)
+        assertFalse(target.exists())
+        assertFalse(backupOf(target).exists())
+        assertFalse(stagingOf(target).exists())
+    }
+
+    @Test
+    fun backupDeleteFailureKeepsCommittedTarget() {
+        val target = temporaryFolder.newFile("theme.json").apply { writeText("current") }
+        backupOf(target).writeText("old")
+        val exchange = FailingExchange(failBackupDelete = true)
+
+        assertThrows(IOException::class.java) {
+            AtomicTextFileStore(target, exchange).delete()
+        }
+
+        assertEquals("current", target.readText())
+        assertTrue(backupOf(target).exists())
+    }
+
+    @Test
     fun separateInstancesSerializeWritesToSameTarget() {
         val target = temporaryFolder.newFile("theme.json").apply { writeText("old") }
         val firstInstallStarted = CountDownLatch(1)

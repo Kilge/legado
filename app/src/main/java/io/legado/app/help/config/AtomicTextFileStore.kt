@@ -62,6 +62,28 @@ internal class AtomicTextFileStore(
         }
     }
 
+    /**
+     * Removes every file that can participate in this store's atomic state.
+     *
+     * The backup is deleted before the target so a partial failure cannot leave a backup that a
+     * later recovery would resurrect after the user explicitly deleted the configuration.
+     *
+     * @return the best available size of the previously committed value, for external accounting.
+     */
+    fun delete(): Long {
+        return synchronized(pathLock) {
+            val committedSize = when {
+                target.isFile -> target.length()
+                backup.isFile -> backup.length()
+                else -> 0L
+            }
+            deleteRequired(backup)
+            deleteRequired(staging)
+            deleteRequired(target)
+            committedSize
+        }
+    }
+
     private fun recoverInterruptedCommitUnlocked() {
         if (target.exists()) {
             deleteBestEffort(backup)

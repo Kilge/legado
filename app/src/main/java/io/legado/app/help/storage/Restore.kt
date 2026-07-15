@@ -49,7 +49,6 @@ import io.legado.app.help.config.TopBarConfig
 import io.legado.app.model.VideoPlay.VIDEO_PREF_NAME
 import io.legado.app.model.BookCover
 import io.legado.app.model.localBook.LocalBook
-import io.legado.app.utils.ACache
 import io.legado.app.utils.FileUtils
 import io.legado.app.utils.GSON
 import io.legado.app.utils.LogUtils
@@ -233,12 +232,23 @@ object Restore {
             AppLog.put("恢复服务器配置出错\n${it.localizedMessage}", it)
         }
         File(path, DirectLinkUpload.ruleFileName).takeIf {
-            it.exists()
-        }?.runCatching {
-            val json = readText()
-            ACache.get(cacheDir = false).put(DirectLinkUpload.ruleFileName, json)
-        }?.onFailure {
-            AppLog.put("恢复直链上传出错\n${it.localizedMessage}", it)
+            it.isFile
+        }?.let { ruleFile ->
+            runCatching {
+                require(ruleFile.length() <= DirectLinkUpload.MAX_RULE_JSON_BYTES.toLong()) {
+                    "备份中的直链上传规则超过大小限制"
+                }
+                ruleFile.readText(Charsets.UTF_8)
+            }
+                .mapCatching { json -> DirectLinkUpload.importRule(json).getOrThrow() }
+                .onFailure { error ->
+                    AppLog.put(
+                        "备份中的直链上传规则无效，已保留当前配置\n" +
+                            (error.localizedMessage ?: "未知错误"),
+                        error
+                    )
+                    appCtx.toastOnUi("备份中的直链上传规则无效，已保留当前配置")
+                }
         }
         //恢复主题配置
         File(path, ThemeConfig.configFileName).takeIf {

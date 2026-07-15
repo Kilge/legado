@@ -1,6 +1,7 @@
 package io.legado.app.help.storage
 
 import io.legado.app.constant.AppLog
+import io.legado.app.help.DirectLinkUpload
 import io.legado.app.help.config.NavigationBarIconConfig
 import io.legado.app.help.config.CoverCollectionManager
 import io.legado.app.help.config.ReadBookConfig
@@ -56,6 +57,9 @@ object RestoreJournal {
         addIfBackupExists(ThemeConfig.configFileName, ThemeConfig.configFilePath)
         addIfBackupExists(ReadBookConfig.configFileName, ReadBookConfig.configFilePath)
         addIfBackupExists(ReadBookConfig.shareConfigFileName, ReadBookConfig.shareConfigFilePath)
+        if (File(path, DirectLinkUpload.ruleFileName).isFile) {
+            DirectLinkUpload.configStorageFile()?.let(targets::add)
+        }
         addIfBackupExists("config.xml", sharedPrefsFile("${appCtx.packageName}_preferences").absolutePath)
         addIfBackupExists("videoConfig.xml", sharedPrefsFile(VIDEO_PREF_NAME).absolutePath)
         Restore.backgroundAssetDirNames.forEach { dirName ->
@@ -89,6 +93,13 @@ object RestoreJournal {
         val state = State(status = STATUS_APPLYING)
         targets.forEachIndexed { index, target ->
             val snapshot = snapshotDir.getFile(index.toString())
+            if (DirectLinkUpload.isConfigStorageFile(target)) {
+                val existed = DirectLinkUpload.snapshotConfigTo(snapshot).getOrThrow()
+                state.entries.add(
+                    Entry(target.absolutePath, snapshot.absolutePath, false, existed)
+                )
+                return@forEachIndexed
+            }
             if (target.exists()) {
                 if (target.isDirectory) {
                     FileUtils.copy(target, snapshot)
@@ -149,27 +160,48 @@ object RestoreJournal {
     }
 
     private fun rollback(state: State, reason: String) {
-        kotlin.runCatching {
-            state.entries.asReversed().forEach { entry ->
+        val failures = arrayListOf<Throwable>()
+        state.entries.asReversed().forEach { entry ->
+            kotlin.runCatching {
                 val target = File(entry.targetPath)
+                if (DirectLinkUpload.isConfigStorageFile(target)) {
+                    DirectLinkUpload.restoreConfigSnapshot(
+                        snapshot = File(entry.snapshotPath).takeIf { entry.existed },
+                        existed = entry.existed
+                    ).getOrThrow()
+                    return@runCatching
+                }
                 if (entry.existed) {
                     val snapshot = File(entry.snapshotPath)
-                    if (snapshot.exists()) {
-                        if (target.exists()) {
-                            FileUtils.delete(target, deleteRootDir = true)
-                        }
-                        target.parentFile?.mkdirs()
-                        FileUtils.copy(snapshot, target)
+                    require(snapshot.exists()) {
+                        "恢复备份回滚快照不存在: ${entry.snapshotPath}"
                     }
+                    if (target.exists()) {
+                        FileUtils.delete(target, deleteRootDir = true)
+                    }
+                    target.parentFile?.mkdirs()
+                    FileUtils.copy(snapshot, target)
                 } else if (target.exists()) {
                     FileUtils.delete(target, deleteRootDir = true)
                 }
+            }.onFailure { error ->
+                failures.add(error)
+                AppLog.put(
+                    "恢复备份回滚条目失败: ${entry.targetPath}\n" +
+                        (error.localizedMessage ?: "未知错误"),
+                    error
+                )
             }
-        }.onFailure {
-            AppLog.put("恢复备份回滚失败\n${it.localizedMessage}", it)
         }
-        clear()
-        AppLog.put("恢复备份已回滚: $reason")
+        if (failures.isEmpty()) {
+            clear()
+            AppLog.put("恢复备份已回滚: $reason")
+        } else {
+            state.status = STATUS_CRASHED
+            kotlin.runCatching { writeState(state) }
+                .onFailure { AppLog.put("保留恢复回滚日志失败", it) }
+            AppLog.put("恢复备份回滚未完成，将在下次启动重试: $reason")
+        }
     }
 
     private fun readState(): State? {

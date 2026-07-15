@@ -83,6 +83,19 @@ class ACache private constructor(cacheDir: File, max_size: Long, max_count: Int)
 
     }
 
+    /**
+     * Resolves the file used by [key] without updating its LRU timestamp.
+     *
+     * Configuration owners use this when they need transactional file IO or
+     * restore snapshots while keeping ACache's key-to-file mapping centralized.
+     */
+    internal fun peekFile(key: String): File? = mCache?.newFile(key)
+
+    /** Removes stale LRU bookkeeping after an owner deleted a cache file transactionally. */
+    internal fun forgetFile(key: String, removedSize: Long) {
+        mCache?.forget(key, removedSize)
+    }
+
     // =======================================
     // ============ String数据 读写 ==============
     // =======================================
@@ -660,7 +673,9 @@ class ACache private constructor(cacheDir: File, max_size: Long, max_count: Int)
                 try {
                     var size = 0
                     var count = 0
-                    val cachedFiles = cacheDir.listFiles()
+                    val cachedFiles = cacheDir.listFiles { file ->
+                        !file.name.endsWith(".staging") && !file.name.endsWith(".backup")
+                    }
                     if (cachedFiles != null) {
                         for (cachedFile in cachedFiles) {
                             size += calculateSize(cachedFile).toInt()
@@ -684,6 +699,7 @@ class ACache private constructor(cacheDir: File, max_size: Long, max_count: Int)
                 var curCacheCount = cacheCount.get()
                 while (curCacheCount + 1 > countLimit) {
                     val freedSize = removeNext()
+                    if (freedSize < 0L) break
                     cacheSize.addAndGet(-freedSize)
 
                     curCacheCount = cacheCount.addAndGet(-1)
@@ -694,6 +710,7 @@ class ACache private constructor(cacheDir: File, max_size: Long, max_count: Int)
                 var curCacheSize = cacheSize.get()
                 while (curCacheSize + valueSize > sizeLimit) {
                     val freedSize = removeNext()
+                    if (freedSize < 0L) break
                     curCacheSize = cacheSize.addAndGet(-freedSize)
                 }
                 cacheSize.addAndGet(valueSize)
@@ -721,8 +738,26 @@ class ACache private constructor(cacheDir: File, max_size: Long, max_count: Int)
         }
 
         fun remove(key: String): Boolean {
-            val image = get(key)
-            return image.delete()
+            val file = newFile(key)
+            val fileSize = file.length()
+            val removed = !file.exists() || file.delete()
+            if (removed) {
+                forget(file, fileSize)
+            }
+            return removed
+        }
+
+        fun forget(key: String, removedSize: Long) {
+            forget(newFile(key), removedSize)
+        }
+
+        private fun forget(file: File, removedSize: Long) {
+            synchronized(lastUsageDates) {
+                if (lastUsageDates.remove(file) != null) {
+                    cacheCount.updateAndGet { (it - 1).coerceAtLeast(0) }
+                    cacheSize.updateAndGet { (it - removedSize).coerceAtLeast(0L) }
+                }
+            }
         }
 
         fun clear() {
@@ -747,7 +782,9 @@ class ACache private constructor(cacheDir: File, max_size: Long, max_count: Int)
         private fun removeNext(): Long {
             try {
                 if (lastUsageDates.isEmpty()) {
-                    return 0
+                    cacheSize.set(0)
+                    cacheCount.set(0)
+                    return -1
                 }
 
                 var oldestUsage: Long? = null
@@ -770,8 +807,10 @@ class ACache private constructor(cacheDir: File, max_size: Long, max_count: Int)
                 var fileSize: Long = 0
                 if (mostLongUsedFile != null) {
                     fileSize = calculateSize(mostLongUsedFile)
-                    if (mostLongUsedFile.delete()) {
+                    if (!mostLongUsedFile.exists() || mostLongUsedFile.delete()) {
                         lastUsageDates.remove(mostLongUsedFile)
+                    } else {
+                        return -1
                     }
                 }
                 return fileSize

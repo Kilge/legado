@@ -205,9 +205,14 @@ object Backup {
             FileUtils.createFileIfNotExist(backupPath + File.separator + ThemeConfig.configFileName)
                 .writeText(it)
         }
-        DirectLinkUpload.getConfig()?.let {
-            FileUtils.createFileIfNotExist(backupPath + File.separator + DirectLinkUpload.ruleFileName)
-                .writeText(GSON.toJson(it))
+        DirectLinkUpload.getConfig()?.let { rule ->
+            DirectLinkUpload.encodeRule(rule)
+                .onSuccess { json ->
+                    FileUtils.createFileIfNotExist(
+                        backupPath + File.separator + DirectLinkUpload.ruleFileName
+                    ).writeText(json)
+                }
+                .onFailure { AppLog.put("备份直链上传规则失败", it) }
         }
         BookCover.getConfig()?.let {
             FileUtils.createFileIfNotExist(backupPath + File.separator + BookCover.configFileName)
