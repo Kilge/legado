@@ -32,6 +32,16 @@ object ParagraphRuleProcessor {
     private const val CLICK_PREFIX = "paragraphRule:"
     private const val RULE_PREFIX = "rule:"
     private const val PROCESS_CACHE_MAX_SIZE = 32
+    private const val PARAGRAPH_ANCHOR_MIN_CONTAINMENT_LENGTH = 13
+    private const val PARAGRAPH_ANCHOR_GRAM_HASH_BASE = 1_000_003L
+    private const val PARAGRAPH_ANCHOR_GRAM_INDEX_BUDGET = 32_768
+    private val pclickAttributeRegex = Regex("""("pclick"\s*:\s*")((?:\\.|[^"\\])*)(")""")
+    private val pclickImageRegex = Regex(
+        """<img\b[^>]*(?:"pclick"\s*:\s*"((?:\\.|[^"\\])*)"|data-legado-pclick\s*=\s*"([^"]*)")[^>]*>"""
+    )
+    private val paragraphImageRegex = Regex("""<img\b[^>]*>""", RegexOption.IGNORE_CASE)
+    private val paragraphHtmlTagRegex = Regex("""<[^>]+>""")
+    private val paragraphWhitespaceRegex = Regex("""\s+""")
     private val processCache = object : LinkedHashMap<String, BookContent>(PROCESS_CACHE_MAX_SIZE, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, BookContent>?): Boolean {
             return size > PROCESS_CACHE_MAX_SIZE
@@ -74,7 +84,8 @@ object ParagraphRuleProcessor {
         if (book.isEpub || content.textList.isEmpty()) return content
         val rules = appDb.paragraphRuleDao.enabledRulesForBook(book.bookUrl)
         if (rules.isEmpty()) return content
-        val cacheKey = processCacheKey(book, chapter, content, rules)
+        val ruleStates = rules.map { RuleState(it, readVars(it.id)) }
+        val cacheKey = processCacheKey(book, chapter, content, ruleStates)
         synchronized(processCache) {
             processCache[cacheKey]?.let { return it }
         }
@@ -182,7 +193,7 @@ object ParagraphRuleProcessor {
         if (!isParagraphClick(click)) return false
         val (ruleId, js) = parseClick(click) ?: return false
         val rule = appDb.paragraphRuleDao.get(ruleId) ?: return false
-        val ctx = buildCtx(rule, book, chapter, result, emptyList())
+        val ctx = buildCtx(rule, book, chapter, result, emptyList(), readVars(rule.id))
         val scope = buildScope(rule, book, chapter, result, ctx, coroutineContext, browserCallback)
         val script = buildString {
             append(jsCompatPrelude())
@@ -203,7 +214,7 @@ object ParagraphRuleProcessor {
     ): ChapterResult {
         val paragraphs = parseParagraphs(current.paragraphs)
         if (paragraphs.isEmpty()) return current
-        val ctx = buildCtx(rule, book, chapter, current.content, paragraphs)
+        val ctx = buildCtx(rule, book, chapter, current.content, paragraphs, readVars(rule.id))
         val scope = buildScope(rule, book, chapter, current.content, ctx, coroutineContext, null)
         val script = buildRuleScript(rule, ctx)
         val jsResult = RhinoScriptEngine.eval(script, scope, coroutineContext)
@@ -220,7 +231,7 @@ object ParagraphRuleProcessor {
     ): String {
         val paragraphs = parseContent(content)
         if (paragraphs.isEmpty()) return content
-        val ctx = buildCtx(rule, book, chapter, content, paragraphs)
+        val ctx = buildCtx(rule, book, chapter, content, paragraphs, readVars(rule.id))
         val scope = buildScope(rule, book, chapter, content, ctx, coroutineContext, null)
         val script = buildRuleScript(rule, ctx)
         val jsResult = RhinoScriptEngine.eval(script, scope, coroutineContext)
@@ -301,7 +312,8 @@ object ParagraphRuleProcessor {
         book: Book,
         chapter: BookChapter,
         content: String,
-        paragraphs: List<ParagraphItem>
+        paragraphs: List<ParagraphItem>,
+        vars: MutableMap<String, String>
     ): Map<String, Any?> {
         val chapterRequestUrl = chapterRequestUrl(chapter)
         return linkedMapOf(
@@ -349,7 +361,7 @@ object ParagraphRuleProcessor {
                 "order" to rule.order,
                 "updateTime" to rule.updateTime
             ),
-            "vars" to readVars(rule.id)
+            "vars" to vars
         )
     }
 
@@ -384,7 +396,7 @@ object ParagraphRuleProcessor {
             bindings["result"] = content
             bindings["rule"] = rule
             bindings["ruleId"] = rule.id
-            bindings["vars"] = readVars(rule.id)
+            bindings["vars"] = ctx["vars"]
             bindings["ctx"] = ctx
             bindings["baseUrl"] = chapterRequestUrl(chapter)
         }
@@ -612,8 +624,7 @@ object ParagraphRuleProcessor {
     }
 
     private fun wrapPclicks(ruleId: Long, text: String): String {
-        val regex = Regex("""("pclick"\s*:\s*")((?:\\.|[^"\\])*)(")""")
-        return dedupeParagraphRuleImages(regex.replace(text) { match ->
+        return dedupeParagraphRuleImages(pclickAttributeRegex.replace(text) { match ->
             val raw = match.groupValues[2]
             val decoded = kotlin.runCatching { GSON.fromJson("\"$raw\"", String::class.java) }.getOrNull() ?: raw
             if (isParagraphClick(decoded)) {
@@ -632,9 +643,8 @@ object ParagraphRuleProcessor {
 
     private fun dedupeParagraphRuleImages(text: String): String {
         if (!text.contains("pclick") && !text.contains("data-legado-pclick")) return text
-        val regex = Regex("""<img\b[^>]*(?:"pclick"\s*:\s*"((?:\\.|[^"\\])*)"|data-legado-pclick\s*=\s*"([^"]*)")[^>]*>""")
         val seen = hashSetOf<String>()
-        return regex.replace(text) { match ->
+        return pclickImageRegex.replace(text) { match ->
             val key = match.groupValues.getOrNull(1)?.ifBlank { match.groupValues.getOrNull(2).orEmpty() }.orEmpty()
             if (key.isNotBlank() && !seen.add(key)) "" else match.value
         }
@@ -681,37 +691,39 @@ object ParagraphRuleProcessor {
         book: Book,
         chapter: BookChapter,
         content: BookContent,
-        rules: List<ParagraphRule>
+        ruleStates: List<RuleState>
     ): String {
-        val rulesKey = rules.joinToString("|") { stableKey(it) }
-        val varsKey = rules.joinToString("|") { rule ->
-            appDb.paragraphRuleDao.vars(rule.id).joinToString("&") { "${it.name}=${it.value}" }
+        val rulesKey = ruleStates.joinToString("|") { (rule, vars) ->
+            val varsKey = MD5Utils.md5Encode16(GSON.toJson(vars))
+            "${stableKey(rule)}:$varsKey"
         }
         val contentKey = MD5Utils.md5Encode16(content.textList.joinToString("\u0001"))
-        return "${book.bookUrl}|${chapter.index}|${chapter.url}|$rulesKey|$varsKey|$contentKey"
+        return "${book.bookUrl}|${chapter.index}|${chapter.url}|$rulesKey|$contentKey"
     }
 
     private fun List<Int>.normalizedSourceIndexes(size: Int): List<Int> {
         return List(size) { index -> getOrElse(index) { -1 } }
     }
 
-    private fun mapSourceIndexes(
+    internal fun mapSourceIndexes(
         newParagraphs: List<String>,
         oldParagraphs: List<String>,
         oldSourceIndexes: List<Int>
     ): List<Int> {
-        val used = hashSetOf<Int>()
-        return newParagraphs.mapIndexed { index, paragraph ->
+        val newAnchors = newParagraphs.map(::normalizeParagraphAnchor)
+        val oldAnchors = oldParagraphs.map(::normalizeParagraphAnchor)
+        val oldAnchorIndex = ParagraphAnchorIndex(oldAnchors)
+        val used = UsedParagraphIndexes(oldParagraphs.size)
+        return newParagraphs.mapIndexed { index, _ ->
             val direct = oldSourceIndexes.getOrElse(index) { -1 }
-            if (direct >= 0 && index < oldParagraphs.size && sameParagraphAnchor(paragraph, oldParagraphs[index])) {
-                used.add(index)
+            val anchor = newAnchors[index]
+            if (direct >= 0 && index < oldAnchors.size && sameParagraphAnchor(anchor, oldAnchors[index])) {
+                used.markUsed(index)
                 direct
             } else {
-                val matchIndex = oldParagraphs.indices.firstOrNull { oldIndex ->
-                    oldIndex !in used && sameParagraphAnchor(paragraph, oldParagraphs[oldIndex])
-                }
-                if (matchIndex != null) {
-                    used.add(matchIndex)
+                val matchIndex = oldAnchorIndex.findFirstUnused(anchor, used)
+                if (matchIndex >= 0) {
+                    used.markUsed(matchIndex)
                     oldSourceIndexes.getOrElse(matchIndex) { -1 }
                 } else {
                     -1
@@ -721,24 +733,199 @@ object ParagraphRuleProcessor {
     }
 
     private fun sameParagraphAnchor(left: String, right: String): Boolean {
-        val a = normalizeParagraphAnchor(left)
-        val b = normalizeParagraphAnchor(right)
-        if (a.isBlank() || b.isBlank()) return false
-        return a == b || (a.length > 12 && b.contains(a)) || (b.length > 12 && a.contains(b))
+        if (left.isBlank() || right.isBlank()) return false
+        return left == right ||
+            (left.length >= PARAGRAPH_ANCHOR_MIN_CONTAINMENT_LENGTH && right.contains(left)) ||
+            (right.length >= PARAGRAPH_ANCHOR_MIN_CONTAINMENT_LENGTH && left.contains(right))
     }
 
     private fun normalizeParagraphAnchor(text: String): String {
         return text
-            .replace(Regex("""<img\b[^>]*>""", RegexOption.IGNORE_CASE), "")
-            .replace(Regex("""<[^>]+>"""), "")
-            .replace(Regex("""\s+"""), "")
+            .replace(paragraphImageRegex, "")
+            .replace(paragraphHtmlTagRegex, "")
+            .replace(paragraphWhitespaceRegex, "")
             .replace("\u3000", "")
             .trim()
+    }
+
+    private class ParagraphAnchorIndex(
+        private val anchors: List<String>
+    ) {
+        private var exactAnchors: Map<String, List<Int>>? = null
+        private var firstGramAnchors: Map<Long, List<Int>>? = null
+        private var allGramAnchors: Map<Long, List<Int>>? = null
+        private var containmentIndexAvailable = false
+
+        fun findFirstUnused(anchor: String, used: UsedParagraphIndexes): Int {
+            if (anchor.isBlank()) return -1
+            ensureIndexes()
+            var best = firstMatchingCandidate(exactAnchors?.get(anchor), anchor, used, Int.MAX_VALUE)
+            if (anchor.length < PARAGRAPH_ANCHOR_MIN_CONTAINMENT_LENGTH) {
+                return best.takeUnless { it == Int.MAX_VALUE } ?: -1
+            }
+            if (!containmentIndexAvailable || anchor.gramCount() > PARAGRAPH_ANCHOR_GRAM_INDEX_BUDGET) {
+                best = firstMatchingLinear(anchor, used, best)
+                return best.takeUnless { it == Int.MAX_VALUE } ?: -1
+            }
+
+            val firstGramHash = firstParagraphAnchorGramHash(anchor)
+            best = firstMatchingCandidate(allGramAnchors?.get(firstGramHash), anchor, used, best)
+            val seenGramHashes = hashSetOf<Long>()
+            forEachParagraphAnchorGramHash(anchor) { gramHash ->
+                if (seenGramHashes.add(gramHash)) {
+                    best = firstMatchingCandidate(firstGramAnchors?.get(gramHash), anchor, used, best)
+                }
+            }
+            return best.takeUnless { it == Int.MAX_VALUE } ?: -1
+        }
+
+        private fun ensureIndexes() {
+            if (exactAnchors != null) return
+            val exact = hashMapOf<String, MutableList<Int>>()
+            var gramCount = 0L
+            anchors.forEachIndexed { index, anchor ->
+                if (anchor.isNotBlank()) {
+                    exact.getOrPut(anchor) { arrayListOf() }.add(index)
+                    gramCount += anchor.gramCount()
+                }
+            }
+            exactAnchors = exact
+            if (gramCount > PARAGRAPH_ANCHOR_GRAM_INDEX_BUDGET) return
+
+            val firstGram = hashMapOf<Long, MutableList<Int>>()
+            val allGrams = hashMapOf<Long, MutableList<Int>>()
+            anchors.forEachIndexed { index, anchor ->
+                if (anchor.length < PARAGRAPH_ANCHOR_MIN_CONTAINMENT_LENGTH) return@forEachIndexed
+                firstGram.getOrPut(firstParagraphAnchorGramHash(anchor)) { arrayListOf() }.add(index)
+                val seenGramHashes = hashSetOf<Long>()
+                forEachParagraphAnchorGramHash(anchor) { gramHash ->
+                    if (seenGramHashes.add(gramHash)) {
+                        allGrams.getOrPut(gramHash) { arrayListOf() }.add(index)
+                    }
+                }
+            }
+            firstGramAnchors = firstGram
+            allGramAnchors = allGrams
+            containmentIndexAvailable = true
+        }
+
+        private fun firstMatchingLinear(
+            anchor: String,
+            used: UsedParagraphIndexes,
+            currentBest: Int
+        ): Int {
+            var index = used.nextUnusedAtOrAfter(0)
+            while (index < currentBest && index < anchors.size) {
+                if (sameParagraphAnchor(anchor, anchors[index])) return index
+                index = used.nextUnusedAtOrAfter(index + 1)
+            }
+            return currentBest
+        }
+
+        private fun firstMatchingCandidate(
+            candidates: List<Int>?,
+            anchor: String,
+            used: UsedParagraphIndexes,
+            currentBest: Int
+        ): Int {
+            if (candidates.isNullOrEmpty()) return currentBest
+            var best = currentBest
+            var position = 0
+            while (position < candidates.size) {
+                val listedIndex = candidates[position]
+                if (listedIndex >= best) break
+                val unusedIndex = used.nextUnusedAtOrAfter(listedIndex)
+                if (unusedIndex >= best || unusedIndex >= anchors.size) break
+                if (unusedIndex != listedIndex) {
+                    position = candidates.lowerBound(unusedIndex, position + 1)
+                    continue
+                }
+                if (sameParagraphAnchor(anchor, anchors[listedIndex])) {
+                    best = listedIndex
+                }
+                position++
+            }
+            return best
+        }
+    }
+
+    private class UsedParagraphIndexes(size: Int) {
+        private val next = IntArray(size + 1) { it }
+
+        fun markUsed(index: Int) {
+            if (index !in 0 until next.lastIndex) return
+            if (find(index) == index) {
+                next[index] = find(index + 1)
+            }
+        }
+
+        fun nextUnusedAtOrAfter(index: Int): Int {
+            return find(index.coerceIn(0, next.lastIndex))
+        }
+
+        private fun find(index: Int): Int {
+            var root = index
+            while (next[root] != root) root = next[root]
+            var current = index
+            while (next[current] != current) {
+                val parent = next[current]
+                next[current] = root
+                current = parent
+            }
+            return root
+        }
+    }
+
+    private fun List<Int>.lowerBound(target: Int, fromIndex: Int): Int {
+        var low = fromIndex.coerceAtMost(size)
+        var high = size
+        while (low < high) {
+            val middle = (low + high).ushr(1)
+            if (this[middle] < target) {
+                low = middle + 1
+            } else {
+                high = middle
+            }
+        }
+        return low
+    }
+
+    private fun firstParagraphAnchorGramHash(anchor: String): Long {
+        var hash = 0L
+        repeat(PARAGRAPH_ANCHOR_MIN_CONTAINMENT_LENGTH) { index ->
+            hash = hash * PARAGRAPH_ANCHOR_GRAM_HASH_BASE + anchor[index].code + 1L
+        }
+        return hash
+    }
+
+    private fun String.gramCount(): Int {
+        return (length - PARAGRAPH_ANCHOR_MIN_CONTAINMENT_LENGTH + 1).coerceAtLeast(0)
+    }
+
+    private inline fun forEachParagraphAnchorGramHash(anchor: String, action: (Long) -> Unit) {
+        if (anchor.length < PARAGRAPH_ANCHOR_MIN_CONTAINMENT_LENGTH) return
+        var highestPlace = 1L
+        repeat(PARAGRAPH_ANCHOR_MIN_CONTAINMENT_LENGTH - 1) {
+            highestPlace *= PARAGRAPH_ANCHOR_GRAM_HASH_BASE
+        }
+        var hash = firstParagraphAnchorGramHash(anchor)
+        action(hash)
+        for (index in PARAGRAPH_ANCHOR_MIN_CONTAINMENT_LENGTH until anchor.length) {
+            val outgoing = anchor[index - PARAGRAPH_ANCHOR_MIN_CONTAINMENT_LENGTH].code + 1L
+            val incoming = anchor[index].code + 1L
+            hash = (hash - outgoing * highestPlace) * PARAGRAPH_ANCHOR_GRAM_HASH_BASE + incoming
+            action(hash)
+        }
     }
 
     private data class ChapterResult(
         val content: String,
         val paragraphs: List<String>,
         val sourceIndexes: List<Int>
+    )
+
+    private data class RuleState(
+        val rule: ParagraphRule,
+        val vars: MutableMap<String, String>
     )
 }
