@@ -12,12 +12,12 @@ import io.legado.app.data.entities.ParagraphRule
 import io.legado.app.data.entities.ParagraphRuleVar
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.CacheManager
-import io.legado.app.help.coroutine.ActivelyCancelException
 import io.legado.app.help.http.CookieStore
 import io.legado.app.model.Debug
 import io.legado.app.utils.GSON
 import io.legado.app.utils.MD5Utils
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.withTimeout
 import org.mozilla.javascript.NativeArray
@@ -96,8 +96,8 @@ object ParagraphRuleProcessor {
             }.onFailure {
                 hasFailure = true
                 when (it) {
-                    is ActivelyCancelException -> throw it
                     is TimeoutCancellationException -> AppLog.put("ParagraphRule:${rule.id} script timeout")
+                    is CancellationException -> throw it
                     else -> AppLog.put("ParagraphRule:${rule.id} script error: ${it.localizedMessage ?: it}", it)
                 }
             }.getOrDefault(result)
@@ -133,8 +133,8 @@ object ParagraphRuleProcessor {
                 }
             }.onFailure {
                 when (it) {
-                    is ActivelyCancelException -> throw it
                     is TimeoutCancellationException -> AppLog.put("ParagraphRule:${rule.id} script timeout")
+                    is CancellationException -> throw it
                     else -> AppLog.put("ParagraphRule:${rule.id} script error: ${it.localizedMessage ?: it}", it)
                 }
             }.getOrDefault(result)

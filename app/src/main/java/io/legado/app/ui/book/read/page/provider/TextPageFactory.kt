@@ -6,6 +6,19 @@ import io.legado.app.ui.book.read.page.api.PageFactory
 import io.legado.app.ui.book.read.page.entities.TextChapter
 import io.legado.app.ui.book.read.page.entities.TextPage
 
+internal fun canEnterNextTextChapter(
+    hasCurrentChapter: Boolean,
+    isScroll: Boolean,
+    hasNextChapter: Boolean,
+    isNextChapterCompleted: Boolean
+): Boolean {
+    return if (!hasCurrentChapter || isScroll) {
+        hasNextChapter && (!isScroll || isNextChapterCompleted)
+    } else {
+        true
+    }
+}
+
 class TextPageFactory(dataSource: DataSource) : PageFactory<TextPage>(dataSource) {
 
     private val useDoublePageSpread: Boolean
@@ -52,7 +65,14 @@ class TextPageFactory(dataSource: DataSource) : PageFactory<TextPage>(dataSource
         return if (hasNext()) {
             val pageIndex = pageIndex
             if (currentChapter == null || currentChapter?.isLastIndex(pageIndex) == true) {
-                if ((currentChapter == null || isScroll) && nextChapter == null) {
+                val next = nextChapter
+                if (!canEnterNextTextChapter(
+                        hasCurrentChapter = currentChapter != null,
+                        isScroll = isScroll,
+                        hasNextChapter = next != null,
+                        isNextChapterCompleted = next?.isCompleted == true
+                    )
+                ) {
                     return@with false
                 }
                 ReadBook.moveToNextChapter(upContent, false)
