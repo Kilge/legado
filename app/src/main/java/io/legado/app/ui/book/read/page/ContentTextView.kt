@@ -43,6 +43,9 @@ import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.toastOnUi
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.max
 import kotlin.math.min
 
@@ -50,6 +53,12 @@ import kotlin.math.min
  * 阅读内容视图
  */
 class ContentTextView(context: Context, attrs: AttributeSet?) : View(context, attrs) {
+
+    private data class RenderSnapshot(
+        val generation: Long,
+        val pages: List<TextPage>
+    )
+
     var selectAble = AppConfig.textSelectAble
     val selectedPaint by lazy {
         Paint().apply {
@@ -77,7 +86,9 @@ class ContentTextView(context: Context, attrs: AttributeSet?) : View(context, at
     private var scrollFollowBackgroundDrawable: ScrollFollowBackgroundDrawable? = null
     private var autoPager: AutoPager? = null
     private var isScroll = false
-    private val renderRunnable by lazy { Runnable { preRenderPage() } }
+    private val renderPending = AtomicBoolean(false)
+    private val renderGeneration = AtomicLong(0L)
+    private val pendingRenderSnapshot = AtomicReference<RenderSnapshot?>(null)
     private var lastClickTime = 0L
     private var doubleClick = false
     private var nativeSelectedText: String? = null
@@ -156,7 +167,9 @@ class ContentTextView(context: Context, attrs: AttributeSet?) : View(context, at
                 drawPageInBounds(canvas, it, halfWidth, relativeOffset, halfWidth, width.toFloat())
             }
         } else {
-            textPage.draw(this, canvas, relativeOffset)
+            if (!callBack.isScroll || pageIntersectsViewport(relativeOffset, textPage.height)) {
+                textPage.draw(this, canvas, relativeOffset)
+            }
         }
         if (callBack.isScroll) {
             if (!pageFactory.hasNext()) {
@@ -165,16 +178,22 @@ class ContentTextView(context: Context, attrs: AttributeSet?) : View(context, at
             }
             val textPage1 = relativePage(1)
             relativeOffset += textPage.height
-            textPage1.draw(this, canvas, relativeOffset)
+            if (pageIntersectsViewport(relativeOffset, textPage1.height)) {
+                textPage1.draw(this, canvas, relativeOffset)
+            }
             if (pageFactory.hasNextPlus()) {
                 relativeOffset += textPage1.height
-                if (relativeOffset < ChapterProvider.visibleHeight) {
-                    val textPage2 = relativePage(2)
+                val textPage2 = relativePage(2)
+                if (pageIntersectsViewport(relativeOffset, textPage2.height)) {
                     textPage2.draw(this, canvas, relativeOffset)
                 }
             }
         }
         nativeSelectionRect?.let { rect -> drawSelectedRect(canvas, rect) }
+    }
+
+    private fun pageIntersectsViewport(offset: Float, pageHeight: Float): Boolean {
+        return offset < visibleRect.bottom && offset + pageHeight > visibleRect.top
     }
 
     fun drawSelectedRect(canvas: Canvas, rect: RectF) {
@@ -254,30 +273,51 @@ class ContentTextView(context: Context, attrs: AttributeSet?) : View(context, at
     }
 
     fun submitRenderTask() {
-        renderThread.submit(renderRunnable)
+        val generation = renderGeneration.incrementAndGet()
+        pendingRenderSnapshot.set(captureRenderSnapshot(generation))
+        scheduleRenderTask()
     }
 
-    private fun preRenderPage() {
-        val view = this
-        var invalidate = false
+    private fun captureRenderSnapshot(generation: Long): RenderSnapshot {
+        val pages = ArrayList<TextPage>(4)
+        fun addPage(page: TextPage) {
+            if (pages.none { it === page }) pages.add(page)
+        }
         pageFactory.run {
-            if (hasPrev() && prevPage.render(view)) {
-                invalidate = true
+            if (hasPrev()) addPage(prevPage)
+            addPage(curPage)
+            if (isScroll && hasNext()) addPage(nextPage)
+            if (isScroll && hasNextPlus() && relativeOffset(2) < ChapterProvider.visibleHeight) {
+                addPage(nextPlusPage)
             }
-            if (curPage.render(view)) {
-                invalidate = true
-            }
-            if (hasNext() && nextPage.render(view) && callBack.isScroll) {
-                invalidate = true
-            }
-            if (hasNextPlus() && nextPlusPage.render(view) && callBack.isScroll
-                && relativeOffset(2) < ChapterProvider.visibleHeight
-            ) {
-                invalidate = true
-            }
-            if (invalidate) {
-                postInvalidate()
-                pageDelegate?.postInvalidate()
+        }
+        return RenderSnapshot(generation, pages)
+    }
+
+    private fun scheduleRenderTask() {
+        if (!renderPending.compareAndSet(false, true)) return
+        renderThread.submit {
+            try {
+                while (true) {
+                    val snapshot = pendingRenderSnapshot.getAndSet(null) ?: break
+                    var invalidate = false
+                    for (page in snapshot.pages) {
+                        if (snapshot.generation != renderGeneration.get()) break
+                        invalidate = page.render(this) || invalidate
+                        if (snapshot.generation != renderGeneration.get()) break
+                    }
+                    if (invalidate && snapshot.generation == renderGeneration.get()) {
+                        post {
+                            if (snapshot.generation == renderGeneration.get()) {
+                                invalidate()
+                                pageDelegate?.postInvalidate()
+                            }
+                        }
+                    }
+                }
+            } finally {
+                renderPending.set(false)
+                if (pendingRenderSnapshot.get() != null) scheduleRenderTask()
             }
         }
     }
@@ -1044,7 +1084,8 @@ class ContentTextView(context: Context, attrs: AttributeSet?) : View(context, at
     }
 
     override fun canScrollVertically(direction: Int): Boolean {
-        return callBack.isScroll && pageFactory.hasNext()
+        if (!callBack.isScroll) return false
+        return if (direction < 0) pageFactory.hasPrev() else pageFactory.hasNext()
     }
 
     override fun dispatchTouchEvent(event: MotionEvent): Boolean {

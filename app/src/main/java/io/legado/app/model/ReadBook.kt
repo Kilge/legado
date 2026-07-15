@@ -59,7 +59,6 @@ import kotlinx.coroutines.withContext
 import splitties.init.appCtx
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
-import kotlin.math.max
 import kotlin.math.min
 
 
@@ -1289,10 +1288,10 @@ object ReadBook : CoroutineScope by MainScope() {
                             }
                             available = true
                         }
-                        if (upContent && isScroll) {
-                            if (max(index - 3, 0) < durPageIndex) {
-                                callBack?.upContent(offset, false)
-                            }
+                        if (upContent && isScroll && available &&
+                            index > durPageIndex && index <= durPageIndex + 2
+                        ) {
+                            callBack?.upContent(offset, false)
                         }
                         callBack?.onLayoutPageCompleted(index, page)
                     }
@@ -1520,10 +1519,10 @@ object ReadBook : CoroutineScope by MainScope() {
                             }
                             available = true
                         }
-                        if (upContent && isScroll) {
-                            if (max(index - 3, 0) < durPageIndex) {
-                                callBack?.upContent(offset, false)
-                            }
+                        if (upContent && isScroll && available &&
+                            index > durPageIndex && index <= durPageIndex + 2
+                        ) {
+                            callBack?.upContent(offset, false)
                         }
                         callBack?.onLayoutPageCompleted(index, page)
                     }

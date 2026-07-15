@@ -72,6 +72,7 @@ class ReadView(context: Context, attrs: AttributeSet) :
     val defaultAnimationSpeed = 300
     private var pressDown = false
     private var isMove = false
+    private var ignoreMandatoryGestureTouch = false
 
     //起始点
     var startX: Float = 0f
@@ -178,17 +179,20 @@ class ReadView(context: Context, attrs: AttributeSet) :
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: MotionEvent): Boolean {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            val insets = this.rootWindowInsets.getInsetsIgnoringVisibility(
-                WindowInsets.Type.mandatorySystemGestures()
-            )
-            val height = activity?.windowManager?.currentWindowMetrics?.bounds?.height()
-            if (height != null) {
-                if (event.y > height.minus(insets.bottom)
-                    && event.action != MotionEvent.ACTION_UP
-                    && event.action != MotionEvent.ACTION_CANCEL
+            if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+                val bottomInset = rootWindowInsets
+                    ?.getInsetsIgnoringVisibility(WindowInsets.Type.mandatorySystemGestures())
+                    ?.bottom
+                    ?: 0
+                ignoreMandatoryGestureTouch = bottomInset > 0 && event.y > height - bottomInset
+                if (ignoreMandatoryGestureTouch) return true
+            } else if (ignoreMandatoryGestureTouch) {
+                if (event.actionMasked == MotionEvent.ACTION_UP ||
+                    event.actionMasked == MotionEvent.ACTION_CANCEL
                 ) {
-                    return true
+                    ignoreMandatoryGestureTouch = false
                 }
+                return true
             }
         }
 

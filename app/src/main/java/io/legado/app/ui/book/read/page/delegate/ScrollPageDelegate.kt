@@ -23,6 +23,7 @@ class ScrollPageDelegate(readView: ReadView) : PageDelegate(readView) {
 
     override fun onAnimStart(animationSpeed: Int) {
         readView.onScrollAnimStart()
+        mVelocity.computeCurrentVelocity(velocityDuration)
         //惯性滚动
         fling(
             0, touchY.toInt(), 0, mVelocity.yVelocity.toInt(),
@@ -59,6 +60,7 @@ class ScrollPageDelegate(readView: ReadView) : PageDelegate(readView) {
             }
 
             MotionEvent.ACTION_CANCEL, MotionEvent.ACTION_UP -> {
+                mVelocity.addMovement(event)
                 onAnimStart(readView.defaultAnimationSpeed)
             }
         }
@@ -79,7 +81,6 @@ class ScrollPageDelegate(readView: ReadView) : PageDelegate(readView) {
 
     private fun onScroll(event: MotionEvent) {
         mVelocity.addMovement(event)
-        mVelocity.computeCurrentVelocity(velocityDuration)
         //取最后添加(即最新的)一个触摸点来计算滚动位置
         //多点触控时即最后按下的手指产生的事件点
         val pointX = event.getX(event.pointerCount - 1)
