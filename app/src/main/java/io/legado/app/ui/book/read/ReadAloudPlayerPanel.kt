@@ -509,7 +509,16 @@ class ReadAloudPlayerPanel @JvmOverloads constructor(
     }
 
     fun onTtsProgress(chapterStart: Int) {
-        lastChapterStart = chapterStart.coerceAtLeast(0)
+        val normalizedStart = chapterStart.coerceAtLeast(0)
+        val playbackCueEnd = playbackCueChapterPosition + playbackCueText.length.coerceAtLeast(1)
+        if (lastChapterStart == normalizedStart ||
+            (playbackCueIndex >= 0 && playbackCueChapterPosition >= 0 &&
+                    normalizedStart in playbackCueChapterPosition..playbackCueEnd)
+        ) {
+            lastChapterStart = normalizedStart
+            return
+        }
+        lastChapterStart = normalizedStart
         refresh()
     }
 
@@ -574,6 +583,9 @@ class ReadAloudPlayerPanel @JvmOverloads constructor(
             roleDetailKey = nextKey
             roleDetailCollapsed = true
             roleDetailClosed = false
+        }
+        if (roleState != state) {
+            chapterModelCache = null
         }
         roleState = state
         roleStatusText = buildRoleStatusText(state)

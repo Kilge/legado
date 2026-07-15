@@ -5083,18 +5083,20 @@ class ReadBookActivity : BaseReadBookActivity(),
             if (!isCurrentReadAloudProgress(progress)) return@observeEvent
             val chapterStart = progress.chapterPosition
             readAloudPlayerPanel.onTtsProgress(chapterStart)
-            lifecycleScope.launch(IO) {
-                if (BaseReadAloudService.isPlay() &&
-                    !ReadBook.isReadAloudUserNavigationActive() &&
-                    isCurrentReadAloudProgress(progress)
-                ) {
-                    ReadBook.curTextChapter?.let { textChapter ->
-                        ReadBook.durChapterPos = chapterStart
-                        val pageIndex = ReadBook.durPageIndex
-                        val aloudSpanStart = chapterStart - textChapter.getReadLength(pageIndex)
-                        textChapter.getPage(pageIndex)
-                            ?.upPageAloudSpan(aloudSpanStart)
+            if (BaseReadAloudService.isPlay() &&
+                !ReadBook.isReadAloudUserNavigationActive() &&
+                isCurrentReadAloudProgress(progress)
+            ) {
+                ReadBook.curTextChapter?.let { textChapter ->
+                    val previousPageIndex = ReadBook.durPageIndex
+                    ReadBook.durChapterPos = chapterStart
+                    val pageIndex = ReadBook.durPageIndex
+                    val aloudSpanStart = chapterStart - textChapter.getReadLength(pageIndex)
+                    textChapter.getPage(pageIndex)?.upPageAloudSpan(aloudSpanStart)
+                    if (pageIndex != previousPageIndex) {
                         upContent()
+                    } else {
+                        readView.curPage.invalidateContentView()
                     }
                 }
             }

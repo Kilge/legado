@@ -1097,20 +1097,24 @@ class HttpReadAloudService : BaseReadAloudService(),
             if (speakTextLength <= 0) {
                 return@launch
             }
-            val sleep = exoPlayer.duration / speakTextLength
-            val start = speakTextLength * exoPlayer.currentPosition / exoPlayer.duration
-            for (i in start..speakTextLength) {
+            while (true) {
                 if (cueIndex != nowSpeak || contentList.getOrNull(cueIndex) != cueText) {
                     return@launch
                 }
-                if (pageIndex + 1 < textChapter.pageSize
-                    && readAloudNumber + cueStartOffset + i > textChapter.getReadLength(pageIndex + 1)
+                val duration = exoPlayer.duration
+                if (duration <= 0L) return@launch
+                val position = (speakTextLength * exoPlayer.currentPosition / duration)
+                    .coerceIn(0L, speakTextLength.toLong())
+                while (pageIndex + 1 < textChapter.pageSize &&
+                    readAloudNumber + cueStartOffset + position >
+                    textChapter.getReadLength(pageIndex + 1)
                 ) {
                     pageIndex++
                     ReadBook.moveToNextPage(fromReadAloud = true)
-                    upTtsProgress(readAloudNumber + cueStartOffset + i.toInt())
+                    upTtsProgress(readAloudNumber + cueStartOffset + position.toInt())
                 }
-                delay(sleep)
+                if (position >= speakTextLength) break
+                delay(100L)
             }
         }
     }
