@@ -2,6 +2,7 @@ package io.legado.app.ui.main.explore
 
 import android.content.Context
 import android.content.Intent
+import android.database.sqlite.SQLiteBlobTooBigException
 import android.graphics.Color
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.ColorDrawable
@@ -192,6 +193,8 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
     private var discoverLoadJob: Job? = null
     private var discoverActionJob: Job? = null
     private var suiteLoadJob: Job? = null
+    @Volatile
+    private var suiteSnapshotSaveVersion = 0L
     private val discoverSources = mutableListOf<BookSourcePart>()
     private val discoverAllTagItems = mutableListOf<DiscoverTagItem>()
     private val discoverTagItems = mutableListOf<DiscoverTagItem>()
@@ -717,31 +720,50 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
                 snapshotWidgets.any { it.id == key }
             }
         )
-        DiscoverySuitePageSnapshotStore.put(snapshot)
-        saveSuiteSnapshotCacheAsync(snapshot)
+        saveSuiteSnapshotCacheAsync(snapshot, ++suiteSnapshotSaveVersion)
     }
 
     private fun readSuiteSnapshotCache(
         suiteId: String,
         signature: String
     ): DiscoverySuitePageSnapshot? {
-        val raw = appDb.cacheDao.get(suiteSnapshotCacheKey(suiteId, signature), System.currentTimeMillis())
-            ?: return null
-        return GSON.fromJsonObject<DiscoverySuitePageSnapshot>(raw)
+        val key = suiteSnapshotCacheKey(suiteId, signature)
+        val raw = readBoundedDiscoveryCache(
+            key = key,
+            cacheName = "套件发现缓存"
+        ) ?: return null
+        val snapshot = GSON.fromJsonObject<DiscoverySuitePageSnapshot>(raw)
             .getOrNull()
             ?.takeIf { it.suiteId == suiteId && it.signature == signature }
+            ?.compactForCache()
+            ?.takeIf { it.hasBooks() }
+        if (snapshot == null) {
+            appDb.cacheDao.deleteIfValueMatches(key, raw)
+            AppLog.put("套件发现缓存内容无效，已清理并重新加载")
+        }
+        return snapshot
     }
 
-    private fun saveSuiteSnapshotCacheAsync(snapshot: DiscoverySuitePageSnapshot) {
+    private fun saveSuiteSnapshotCacheAsync(
+        snapshot: DiscoverySuitePageSnapshot,
+        saveVersion: Long
+    ) {
         if (snapshot.widgetBooks.isEmpty() && snapshot.rankedWidgetBooks.isEmpty()) return
         viewLifecycleOwner.lifecycleScope.launch(IO) {
             runCatching {
-                appDb.cacheDao.insert(
-                    Cache(
-                        key = suiteSnapshotCacheKey(snapshot.suiteId, snapshot.signature),
-                        value = GSON.toJson(snapshot),
-                        deadline = System.currentTimeMillis() + DISCOVERY_CACHE_TTL_MS
-                    )
+                val compactSnapshot = snapshot.compactForCache()
+                if (!compactSnapshot.hasBooks()) return@runCatching
+                val value = DiscoveryCachePolicy.toBoundedJson(compactSnapshot)
+                if (value == null) {
+                    AppLog.put("套件发现缓存超过安全大小，跳过内存和磁盘快照")
+                    return@runCatching
+                }
+                if (saveVersion != suiteSnapshotSaveVersion) return@runCatching
+                DiscoverySuitePageSnapshotStore.put(compactSnapshot)
+                writeBoundedDiscoveryCache(
+                    key = suiteSnapshotCacheKey(compactSnapshot.suiteId, compactSnapshot.signature),
+                    value = value,
+                    cacheName = "套件发现缓存"
                 )
             }.onFailure {
                 AppLog.put("套件发现缓存写入失败", it)
@@ -1834,12 +1856,24 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
         sourceUrl: String,
         tagUrl: String
     ): ModernDiscoverResultCache? {
-        val raw = appDb.cacheDao.get(modernDiscoverCacheKey(sourceUrl, tagUrl), System.currentTimeMillis())
-            ?: return null
-        return GSON.fromJsonObject<ModernDiscoverResultCache>(raw)
+        val key = modernDiscoverCacheKey(sourceUrl, tagUrl)
+        val raw = readBoundedDiscoveryCache(
+            key = key,
+            cacheName = "发现页面缓存"
+        ) ?: return null
+        val cache = GSON.fromJsonObject<ModernDiscoverResultCache>(raw)
             .getOrNull()
             ?.takeIf { it.sourceUrl == sourceUrl && it.tagUrl == tagUrl }
             ?.takeIf { it.books.isNotEmpty() }
+            ?.let { parsed ->
+                parsed.copy(books = parsed.books.mapNotNull(DiscoveryCachePolicy::compact))
+            }
+            ?.takeIf { it.books.isNotEmpty() }
+        if (cache == null) {
+            appDb.cacheDao.deleteIfValueMatches(key, raw)
+            AppLog.put("发现页面缓存内容无效，已清理并重新加载")
+        }
+        return cache
     }
 
     private fun saveModernDiscoverCacheAsync(
@@ -1853,19 +1887,25 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
         val snapshot = ModernDiscoverResultCache(
             sourceUrl = sourceUrl,
             tagUrl = tagUrl,
-            books = books.take(DISCOVERY_MODERN_CACHE_BOOK_LIMIT),
+            books = books.take(DISCOVERY_MODERN_CACHE_BOOK_LIMIT)
+                .mapNotNull(DiscoveryCachePolicy::compact),
             nextPage = nextPage.coerceAtLeast(2),
             hasMore = hasMore,
             savedAt = System.currentTimeMillis()
         )
+        val key = modernDiscoverCacheKey(sourceUrl, tagUrl)
+        if (snapshot.books.isEmpty()) return
         viewLifecycleOwner.lifecycleScope.launch(IO) {
             runCatching {
-                appDb.cacheDao.insert(
-                    Cache(
-                        key = modernDiscoverCacheKey(sourceUrl, tagUrl),
-                        value = GSON.toJson(snapshot),
-                        deadline = System.currentTimeMillis() + DISCOVERY_CACHE_TTL_MS
-                    )
+                val value = DiscoveryCachePolicy.toBoundedJson(snapshot)
+                if (value == null) {
+                    AppLog.put("发现页面缓存超过安全大小，跳过磁盘缓存")
+                    return@runCatching
+                }
+                writeBoundedDiscoveryCache(
+                    key = key,
+                    value = value,
+                    cacheName = "发现页面缓存"
                 )
             }.onFailure {
                 AppLog.put("发现页面缓存写入失败", it)
@@ -1875,6 +1915,54 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
 
     private fun modernDiscoverCacheKey(sourceUrl: String, tagUrl: String): String {
         return "$DISCOVERY_MODERN_CACHE_PREFIX${MD5Utils.md5Encode16("$sourceUrl\u001F$tagUrl")}"
+    }
+
+    private fun readBoundedDiscoveryCache(key: String, cacheName: String): String? {
+        val now = System.currentTimeMillis()
+        return try {
+            val result = appDb.cacheDao.getBoundedValue(
+                key = key,
+                now = now,
+                maxBytes = DiscoveryCachePolicy.MAX_SQLITE_VALUE_BYTES
+            ) ?: return null
+            if (!DiscoveryCachePolicy.canRead(result.byteCount)) {
+                appDb.cacheDao.deleteIfValueOversized(
+                    key,
+                    DiscoveryCachePolicy.MAX_SQLITE_VALUE_BYTES
+                )
+                AppLog.put("$cacheName 已超过安全大小并清理：${result.byteCount} 字节")
+                return null
+            }
+            if (result.value == null) {
+                appDb.cacheDao.deleteIfValueMatches(key, null)
+                AppLog.put("$cacheName 内容为空，已清理并重新加载")
+                return null
+            }
+            result.value
+        } catch (e: SQLiteBlobTooBigException) {
+            runCatching {
+                appDb.cacheDao.deleteIfValueOversized(
+                    key,
+                    DiscoveryCachePolicy.MAX_SQLITE_VALUE_BYTES
+                )
+            }
+            AppLog.put("$cacheName 行过大，已清理并重新加载", e)
+            null
+        }
+    }
+
+    private fun writeBoundedDiscoveryCache(key: String, value: String, cacheName: String) {
+        if (!DiscoveryCachePolicy.canStore(value)) {
+            AppLog.put("$cacheName 超过安全大小，跳过磁盘缓存")
+            return
+        }
+        appDb.cacheDao.insert(
+            Cache(
+                key = key,
+                value = value,
+                deadline = System.currentTimeMillis() + DISCOVERY_CACHE_TTL_MS
+            )
+        )
     }
 
     private fun bindDiscoverSourceSelector() {
@@ -3828,8 +3916,39 @@ private data class DiscoverySuitePageSnapshot(
     val widgetSignatures: Map<String, String>
 )
 
+private fun DiscoverySuitePageSnapshot.compactForCache(): DiscoverySuitePageSnapshot {
+    val incompleteWidgetIds = hashSetOf<String>()
+    val compactWidgetBooks = linkedMapOf<String, List<SearchBook>>()
+    widgetBooks.forEach { (widgetId, books) ->
+        val compactBooks = books.mapNotNull(DiscoveryCachePolicy::compact)
+        if (compactBooks.size != books.size) incompleteWidgetIds += widgetId
+        if (compactBooks.isNotEmpty()) compactWidgetBooks[widgetId] = compactBooks
+    }
+    val compactRankedWidgetBooks = linkedMapOf<String, Map<String, List<SearchBook>>>()
+    rankedWidgetBooks.forEach { (widgetId, rankedBooks) ->
+        val compactRankedBooks = linkedMapOf<String, List<SearchBook>>()
+        rankedBooks.forEach { (rank, books) ->
+            val compactBooks = books.mapNotNull(DiscoveryCachePolicy::compact)
+            if (compactBooks.size != books.size) incompleteWidgetIds += widgetId
+            if (compactBooks.isNotEmpty()) compactRankedBooks[rank] = compactBooks
+        }
+        if (compactRankedBooks.isNotEmpty()) {
+            compactRankedWidgetBooks[widgetId] = compactRankedBooks
+        }
+    }
+    return copy(
+        widgetBooks = compactWidgetBooks,
+        rankedWidgetBooks = compactRankedWidgetBooks,
+        widgetSignatures = widgetSignatures.filterKeys { it !in incompleteWidgetIds }
+    )
+}
+
+private fun DiscoverySuitePageSnapshot.hasBooks(): Boolean {
+    return widgetBooks.isNotEmpty() || rankedWidgetBooks.isNotEmpty()
+}
+
 private object DiscoverySuitePageSnapshotStore {
-    private const val MAX_SNAPSHOTS = 4
+    private const val MAX_SNAPSHOTS = 2
     private val snapshots = object : LinkedHashMap<String, DiscoverySuitePageSnapshot>(
         MAX_SNAPSHOTS,
         0.75f,
@@ -3852,6 +3971,7 @@ private object DiscoverySuitePageSnapshotStore {
         if (snapshot.suiteId.isBlank()) return
         snapshots[snapshot.suiteId] = snapshot
     }
+
 }
 
 private const val DISCOVERY_SUITE_SNAPSHOT_RANDOM_LIMIT = 36
