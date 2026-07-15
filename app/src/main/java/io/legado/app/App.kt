@@ -124,6 +124,7 @@ class App : Application() {
                 val clearTime = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(1)
                 appDb.searchBookDao.clearExpired(clearTime)
             }
+            appDb.searchBookDao.clearUnsafeRows()
             RuleBigDataHelp.clearInvalid()
             BookHelp.clearInvalidCache()
             Backup.clearCache()
