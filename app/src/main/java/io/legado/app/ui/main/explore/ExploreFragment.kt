@@ -133,6 +133,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Dispatchers.Main
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -149,6 +150,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.random.Random
 
 /**
@@ -193,8 +195,6 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
     private var discoverLoadJob: Job? = null
     private var discoverActionJob: Job? = null
     private var suiteLoadJob: Job? = null
-    @Volatile
-    private var suiteSnapshotSaveVersion = 0L
     private val discoverSources = mutableListOf<BookSourcePart>()
     private val discoverAllTagItems = mutableListOf<DiscoverTagItem>()
     private val discoverTagItems = mutableListOf<DiscoverTagItem>()
@@ -720,7 +720,7 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
                 snapshotWidgets.any { it.id == key }
             }
         )
-        saveSuiteSnapshotCacheAsync(snapshot, ++suiteSnapshotSaveVersion)
+        saveSuiteSnapshotCacheAsync(snapshot, DiscoveryCacheWriteScope.nextSuiteSaveVersion())
     }
 
     private fun readSuiteSnapshotCache(
@@ -749,7 +749,7 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
         saveVersion: Long
     ) {
         if (snapshot.widgetBooks.isEmpty() && snapshot.rankedWidgetBooks.isEmpty()) return
-        viewLifecycleOwner.lifecycleScope.launch(IO) {
+        DiscoveryCacheWriteScope.scope.launch {
             runCatching {
                 val compactSnapshot = snapshot.compactForCache()
                 if (!compactSnapshot.hasBooks()) return@runCatching
@@ -758,7 +758,7 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
                     AppLog.put("套件发现缓存超过安全大小，跳过内存和磁盘快照")
                     return@runCatching
                 }
-                if (saveVersion != suiteSnapshotSaveVersion) return@runCatching
+                if (!DiscoveryCacheWriteScope.isLatestSuiteSave(saveVersion)) return@runCatching
                 DiscoverySuitePageSnapshotStore.put(compactSnapshot)
                 writeBoundedDiscoveryCache(
                     key = suiteSnapshotCacheKey(compactSnapshot.suiteId, compactSnapshot.signature),
@@ -3972,6 +3972,15 @@ private object DiscoverySuitePageSnapshotStore {
         snapshots[snapshot.suiteId] = snapshot
     }
 
+}
+
+private object DiscoveryCacheWriteScope {
+    val scope = CoroutineScope(SupervisorJob() + IO)
+    private val suiteSaveVersion = AtomicLong(0L)
+
+    fun nextSuiteSaveVersion(): Long = suiteSaveVersion.incrementAndGet()
+
+    fun isLatestSuiteSave(version: Long): Boolean = suiteSaveVersion.get() == version
 }
 
 private const val DISCOVERY_SUITE_SNAPSHOT_RANDOM_LIMIT = 36
