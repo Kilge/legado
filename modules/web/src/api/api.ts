@@ -11,7 +11,7 @@ import type {
   SeachBook,
 } from '@/book'
 import type { Source } from '@/source'
-import { getRelayAuthorization } from './relay'
+import { getRelayAuthorization, getRelayBootstrap } from './relay'
 
 export type LeagdoApiResponse<T> = {
   isSuccess: boolean
@@ -101,6 +101,18 @@ const search = (
   onReceive: (data: SeachBook[]) => void,
   onFinish: () => void,
 ) => {
+  const httpUrl = new URL('searchBook', legado_http_entry_point)
+  const relayAuthorization = getRelayAuthorization(httpUrl)
+  if (getRelayBootstrap()) {
+    void streamRelaySearch(
+      httpUrl,
+      relayAuthorization,
+      searchKey,
+      onReceive,
+      onFinish,
+    )
+    return
+  }
   const socket = new WebSocket(
     new URL('searchBook', legado_webSocket_entry_point),
   )
@@ -119,6 +131,56 @@ const search = (
   }
 
   socket.onclose = () => {
+    onFinish()
+  }
+}
+
+type RelaySearchEvent = {
+  type: 'results' | 'finish' | 'error'
+  books?: SeachBook[]
+  message?: string
+}
+
+const streamRelaySearch = async (
+  url: URL,
+  authorization: string | null,
+  searchKey: string,
+  onReceive: (data: SeachBook[]) => void,
+  onFinish: () => void,
+) => {
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/x-ndjson',
+        ...(authorization ? { Authorization: authorization } : {}),
+      },
+      body: JSON.stringify({ key: searchKey }),
+    })
+    if (!response.ok || !response.body) throw new Error(`search_${response.status}`)
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let pending = ''
+    while (true) {
+      const { done, value } = await reader.read()
+      pending += decoder.decode(value, { stream: !done })
+      const lines = pending.split('\n')
+      pending = lines.pop() ?? ''
+      for (const line of lines) {
+        if (!line.trim()) continue
+        const event = JSON.parse(line) as RelaySearchEvent
+        if (event.type === 'results' && Array.isArray(event.books)) {
+          onReceive(event.books)
+        }
+        if (event.type === 'error') throw new Error(event.message || 'search_failed')
+      }
+      if (done) break
+    }
+  } catch (error) {
+    wsOnError?.call({} as WebSocket, new Event(String(error)))
+  } finally {
     onFinish()
   }
 }
