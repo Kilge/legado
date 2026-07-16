@@ -1,6 +1,5 @@
 package io.legado.app.service.relay
 
-import android.text.TextUtils
 import com.script.rhino.runScriptWithContext
 import io.legado.app.api.ReturnData
 import io.legado.app.data.appDb
@@ -59,7 +58,7 @@ internal object RelayParagraphActions {
             } else emptyMap()
             val click = options["pclick"]?.takeIf(String::isNotBlank)
                 ?: options["click"]?.takeIf(String::isNotBlank)
-                ?: return@replace "<span class=\"legado-paragraph-bubble legado-paragraph-bubble-disabled\">${TextUtils.htmlEncode(count)}</span>"
+                ?: return@replace "<span class=\"legado-paragraph-bubble legado-paragraph-bubble-disabled\">${escapeHtml(count)}</span>"
             val id = newId()
             synchronized(actions) {
                 actions[id] = Action(
@@ -71,7 +70,7 @@ internal object RelayParagraphActions {
                     createdAt = System.currentTimeMillis()
                 )
             }
-            "<span class=\"legado-paragraph-bubble\" data-legado-action=\"$id\" data-legado-count=\"${TextUtils.htmlEncode(count)}\">${TextUtils.htmlEncode(count)}</span>"
+            "<span class=\"legado-paragraph-bubble\" data-legado-action=\"$id\" data-legado-count=\"${escapeHtml(count)}\">${escapeHtml(count)}</span>"
         }
     }
 
@@ -128,6 +127,19 @@ internal object RelayParagraphActions {
     }
 
     private fun newId(): String = ByteArray(18).also(random::nextBytes).toByteString().base64Url().trimEnd('=')
+
+    private fun escapeHtml(value: String): String = buildString(value.length) {
+        value.forEach { char ->
+            append(when (char) {
+                '&' -> "&amp;"
+                '<' -> "&lt;"
+                '>' -> "&gt;"
+                '"' -> "&quot;"
+                '\'' -> "&#39;"
+                else -> char
+            })
+        }
+    }
 
     private fun prune() {
         val deadline = System.currentTimeMillis() - ACTION_TTL_MILLIS
