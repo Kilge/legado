@@ -86,6 +86,10 @@ const props = defineProps<{
 const imgPatternStr = '<img[^>]*src=[\'"]([^\'"]*(?:[\'"][^>]+\\})?)[\'"][^>]*>'
 const imgPattern = lazyRegex(imgPatternStr)
 const imgPatternAll = lazyRegex(imgPatternStr, 'g')
+const paragraphBubblePatternAll = lazyRegex(
+  '<span[^>]*class=[\'\"][^\'\"]*legado-paragraph-bubble[^\'\"]*[\'\"][^>]*>.*?</span>',
+  'gi',
+)
 const imgDataUrlPattern = lazyRegex('data:image[^;]+;base64,[^,]{39,}')
 
 const replaceImage = (content: string) => {
@@ -213,7 +217,9 @@ const handleImgLoadError = (event: Event) => {
 const calculateWordCount = (paragraph: string) => {
   //内嵌图片文字为1
   const imagePlaceHolder = ' '
-  return paragraph.replace(imgPatternAll(), imagePlaceHolder).length
+  return paragraph
+    .replace(imgPatternAll(), imagePlaceHolder)
+    .replace(paragraphBubblePatternAll(), imagePlaceHolder).length
 }
 const chapterPos = computed(() => {
   let pos = -1
