@@ -4,8 +4,23 @@ import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
 import org.junit.Test
+import okhttp3.HttpUrl.Companion.toHttpUrl
 
 class RelayProtocolTest {
+    @Test
+    fun secureWebSocketUsesHttpsUpgradeUrl() {
+        val config = RelayConfig(
+            workerUrl = "https://relay.example/".toHttpUrl(),
+            deviceName = "test",
+            identity = RelayIdentity("ABEiM0RVZneImaq7zN3u_w", ByteArray(32)),
+            deviceHandle = "ABEiM0RVZneImaq7zN3u_w.AAAAAAAAAAAAAAAAAAAAAA"
+        )
+
+        assertEquals("https", config.socketUrl.scheme)
+        assertEquals("/v1/device/connect", config.socketUrl.encodedPath)
+        assertEquals(config.deviceHandle, config.socketUrl.queryParameter("deviceHandle"))
+    }
+
     @Test
     fun binaryFrameRoundTrips() {
         val frame = RelayProtocol.BinaryFrame(

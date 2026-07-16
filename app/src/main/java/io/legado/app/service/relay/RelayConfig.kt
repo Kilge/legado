@@ -13,9 +13,9 @@ internal data class RelayConfig(
     val identity: RelayIdentity,
     val deviceHandle: String?
 ) {
+    /** OkHttp performs a secure WebSocket upgrade for an HTTPS request URL. */
     val socketUrl: HttpUrl
         get() = workerUrl.newBuilder()
-            .scheme("wss")
             .addPathSegments("v1/device/connect")
             .addQueryParameter("deviceHandle", requireDeviceHandle())
             .build()
