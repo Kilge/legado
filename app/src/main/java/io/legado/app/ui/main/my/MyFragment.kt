@@ -30,6 +30,7 @@ import io.legado.app.ui.book.toc.rule.TxtTocRuleActivity
 import io.legado.app.ui.config.ConfigActivity
 import io.legado.app.ui.config.ConfigTag
 import io.legado.app.ui.config.AppearanceKitActivity
+import io.legado.app.ui.config.RelaySettingsActivity
 import io.legado.app.ui.dict.rule.DictRuleActivity
 import io.legado.app.ui.file.FileManageActivity
 import io.legado.app.ui.main.MainFragmentInterface
@@ -294,6 +295,8 @@ class MyFragment() : BaseFragment(R.layout.fragment_my_config),
                 putExtra("configTag", ConfigTag.BACKUP_CONFIG)
             }
 
+            "publicWebRelay" -> startActivity<RelaySettingsActivity>()
+
             "cacheManage" -> startActivity<CacheManageActivity>()
             "theme_setting" -> startActivity<ConfigActivity> {
                 putExtra("configTag", ConfigTag.THEME_CONFIG)
@@ -347,6 +350,11 @@ class MyFragment() : BaseFragment(R.layout.fragment_my_config),
                 rows = listOf(
                     actionRow("web_dav_setting", R.string.backup_restore, R.string.web_dav_set_import_old),
                     actionRow("cacheManage", R.string.cache_manage_title, R.string.cache_manage_summary),
+                    actionRow(
+                        "publicWebRelay",
+                        R.string.public_web_relay,
+                        R.string.public_web_relay_summary
+                    ),
                     MySettingsRowModel(
                         key = PreferKey.webService,
                         title = getString(R.string.web_service),

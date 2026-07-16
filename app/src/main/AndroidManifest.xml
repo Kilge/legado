@@ -22,11 +22,14 @@
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
     <application
         android:name=".App"
         android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
         android:icon="@drawable/ic_launcher_agent"
         android:label="${app_name}"
         android:networkSecurityConfig="@xml/network_security_config"
@@ -237,6 +240,10 @@
         <activity
             android:name=".ui.config.ConfigActivity"
             android:launchMode="standard" />
+        <activity
+            android:name=".ui.config.RelaySettingsActivity"
+            android:exported="false"
+            android:launchMode="singleTop" />
         <activity
             android:name=".ui.book.read.config.ParagraphRuleManageActivity"
             android:launchMode="standard" />
@@ -632,6 +639,14 @@
         <service
             android:name=".service.WebService"
             android:foregroundServiceType="dataSync" />
+        <service
+            android:name=".service.relay.RelayService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="User-enabled encrypted reverse tunnel for personal remote Web access" />
+        </service>
         <service
             android:name=".service.WebTileService"
             android:exported="true"
