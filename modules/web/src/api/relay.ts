@@ -1,4 +1,5 @@
-const RELAY_PATH_PATTERN = /^\/d\/([A-Za-z0-9_-]{16,128})(?:\/|$)/
+const RELAY_PATH_PATTERN =
+  /^\/d\/([A-Za-z0-9_-]{22,64}\.[A-Za-z0-9_-]{22})(?:\/|$)/
 const RELAY_TOKEN_KEY = 'legado_relay_token'
 const RELAY_TOKEN_PATTERN = /^[A-Za-z0-9_-]{16,64}\.[A-Za-z0-9_-]{32,64}$/
 
