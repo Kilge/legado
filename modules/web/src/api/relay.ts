@@ -64,6 +64,7 @@ const storeRelayToken = (token: string) => {
 
 const currentRelay = parseRelayUrl(location.href)
 const fragmentToken = currentRelay ? readTokenFromHash() : null
+let inMemoryRelayToken = fragmentToken
 if (fragmentToken) storeRelayToken(fragmentToken)
 
 export const getRelayBootstrap = () => currentRelay
@@ -74,10 +75,11 @@ export const getRelayBootstrapForUrl = (input: string | URL) =>
 export const getRelayToken = (): string | null => {
   try {
     const token = sessionStorage.getItem(RELAY_TOKEN_KEY)
-    return token && RELAY_TOKEN_PATTERN.test(token) ? token : null
+    if (token && RELAY_TOKEN_PATTERN.test(token)) return token
   } catch {
-    return null
+    // Fall back to the capability retained in module memory.
   }
+  return inMemoryRelayToken
 }
 
 export const isCurrentRelayRequest = (input: string | URL): boolean => {
@@ -100,17 +102,20 @@ export const initializeRelaySession = async (): Promise<void> => {
   const token = getRelayToken()
   if (!token) return
 
+  const abortController = new AbortController()
+  const timeout = window.setTimeout(() => abortController.abort(), 10_000)
   const response = await fetch(new URL('_session', currentRelay.httpBase), {
     method: 'POST',
     credentials: 'same-origin',
     cache: 'no-store',
     referrerPolicy: 'no-referrer',
+    signal: abortController.signal,
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify({ token }),
-  })
+  }).finally(() => window.clearTimeout(timeout))
 
   if (!response.ok) {
     throw new Error(`Relay session exchange failed: ${response.status}`)
@@ -121,4 +126,5 @@ export const initializeRelaySession = async (): Promise<void> => {
   } catch {
     // The HttpOnly session cookie is authoritative after a successful exchange.
   }
+  inMemoryRelayToken = null
 }
