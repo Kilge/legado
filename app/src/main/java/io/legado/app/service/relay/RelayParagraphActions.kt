@@ -6,11 +6,14 @@ import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.help.book.ParagraphRuleProcessor
+import io.legado.app.help.http.BackstageWebView
+import io.legado.app.help.webView.WebViewPool
 import io.legado.app.ui.login.SourceLoginJsExtensions
 import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonObject
 import okio.ByteString.Companion.toByteString
 import org.jsoup.Jsoup
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import java.security.SecureRandom
 import java.util.LinkedHashMap
 
@@ -30,6 +33,14 @@ internal object RelayParagraphActions {
         val html: String?,
         val preloadJs: String?,
         val config: String?
+    )
+
+    private data class CapturedBrowser(
+        val url: String,
+        val html: String?,
+        val preloadJs: String?,
+        val config: String?,
+        val sourceKey: String
     )
 
     private data class ActionRequest(val actionId: String = "", val bookUrl: String = "", val chapterIndex: Int = -1)
@@ -86,7 +97,7 @@ internal object RelayParagraphActions {
             ?: return ReturnData().setErrorMsg("未找到书籍")
         val chapter = appDb.bookChapterDao.getChapter(action.bookUrl, action.chapterIndex)
             ?: return ReturnData().setErrorMsg("未找到章节")
-        var browser: BrowserResult? = null
+        var browser: CapturedBrowser? = null
         return runCatching {
             if (action.paragraphRule) {
                 ParagraphRuleProcessor.evalClick(
@@ -96,7 +107,7 @@ internal object RelayParagraphActions {
                     action.source,
                     object : ParagraphRuleProcessor.BrowserCallback {
                         override fun showBrowser(url: String, html: String?, preloadJs: String?, config: String?, sourceKey: String?): Boolean {
-                            browser = BrowserResult(url = url, html = html, preloadJs = preloadJs, config = config)
+                            browser = CapturedBrowser(url, html, preloadJs, config, sourceKey.orEmpty())
                             return true
                         }
                     }
@@ -104,14 +115,15 @@ internal object RelayParagraphActions {
             } else {
                 val source = appDb.bookSourceDao.getBookSource(book.origin)
                     ?: error("未找到书源")
-                val java = SourceLoginJsExtensions(null, source, callback = object : SourceLoginJsExtensions.Callback {
+                val sourceCallback = object : SourceLoginJsExtensions.Callback {
                     override fun upUiData(data: Map<String, Any?>?) = Unit
                     override fun reUiView(deltaUp: Boolean) = Unit
                     override fun showBrowser(url: String, html: String?, preloadJs: String?, config: String?): Boolean {
-                        browser = BrowserResult(url = url, html = html, preloadJs = preloadJs, config = config)
+                        browser = CapturedBrowser(url, html, preloadJs, config, source.getKey())
                         return true
                     }
-                })
+                }
+                val java = SourceLoginJsExtensions(null, source, callback = sourceCallback)
                 runScriptWithContext {
                     source.evalJS(action.click) {
                         put("java", java)
@@ -121,12 +133,65 @@ internal object RelayParagraphActions {
                     }
                 }
             }
-            browser?.let { ReturnData().setData(it) }
+            browser?.let { ReturnData().setData(materialize(it)) }
                 ?: ReturnData().setErrorMsg("此段评动作没有打开可显示内容")
         }.getOrElse { ReturnData().setErrorMsg(it.localizedMessage ?: "段评动作执行失败") }
     }
 
     private fun newId(): String = ByteArray(18).also(random::nextBytes).toByteString().base64Url().trimEnd('=')
+
+    private suspend fun materialize(browser: CapturedBrowser): BrowserResult {
+        val url = browser.url.trim()
+        validateBrowserUrl(url)
+        val script = buildString {
+            if (!browser.preloadJs.isNullOrBlank()) append(browser.preloadJs).append('\n')
+            append(";document.documentElement.outerHTML")
+        }
+        val response = BackstageWebView(
+            url = url,
+            html = browser.html,
+            tag = browser.sourceKey,
+            javaScript = script,
+            delayTime = 500L,
+            timeout = 20_000L,
+            isRule = true,
+            poolScope = WebViewPool.Scope.GLOBAL
+        ).getStrResponse()
+        val rendered = requireNotNull(response.body) { "段评页面为空" }
+        require(rendered.toByteArray(Charsets.UTF_8).size <= 2 * 1024 * 1024) { "段评页面过大" }
+        val document = Jsoup.parse(rendered, response.url)
+        document.select("[src]").forEach { element ->
+            element.absUrl("src").takeIf(String::isNotBlank)?.let { element.attr("src", it) }
+        }
+        document.select("a[href]").forEach { element ->
+            element.absUrl("href").takeIf(String::isNotBlank)?.let { element.attr("href", it) }
+        }
+        return BrowserResult(
+            url = response.url,
+            html = document.outerHtml(),
+            preloadJs = null,
+            config = browser.config
+        )
+    }
+
+    private fun validateBrowserUrl(value: String) {
+        val url = value.toHttpUrlOrNull() ?: throw IllegalArgumentException("段评地址无效")
+        require(url.scheme == "http" || url.scheme == "https") { "不支持的段评地址" }
+        val host = url.host.lowercase()
+        require(host != "localhost" && !host.endsWith(".local") && !isPrivateAddress(host)) {
+            "不允许访问本机或局域网地址"
+        }
+    }
+
+    private fun isPrivateAddress(host: String): Boolean {
+        if (host == "::1" || host.startsWith("fe80:") || host.startsWith("fc") || host.startsWith("fd")) return true
+        val parts = host.split('.').mapNotNull(String::toIntOrNull)
+        if (parts.size != 4 || parts.any { it !in 0..255 }) return false
+        return parts[0] == 10 || parts[0] == 127 || parts[0] == 0 ||
+            (parts[0] == 169 && parts[1] == 254) ||
+            (parts[0] == 172 && parts[1] in 16..31) ||
+            (parts[0] == 192 && parts[1] == 168)
+    }
 
     private fun escapeHtml(value: String): String = buildString(value.length) {
         value.forEach { char ->
