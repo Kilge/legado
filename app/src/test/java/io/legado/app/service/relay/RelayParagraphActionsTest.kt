@@ -2,11 +2,20 @@ package io.legado.app.service.relay
 
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
+import io.legado.app.ui.login.SourceLoginJsExtensions
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class RelayParagraphActionsTest {
+    @Test
+    fun sourceLoginBridgeExposesAjaxToRhino() {
+        val methods = SourceLoginJsExtensions::class.java.methods.map { it.name }.toSet()
+        assertTrue(methods.contains("ajax"))
+        assertTrue(methods.contains("ajaxAll"))
+        assertTrue(methods.contains("showBrowser"))
+    }
+
     @Test
     fun decorateReplacesVirtualImageWithOpaqueAction() {
         val content = "正文<img src='dp:18,{&quot;click&quot;:&quot;showCmt(1,2,3,4)&quot;}'>结尾"

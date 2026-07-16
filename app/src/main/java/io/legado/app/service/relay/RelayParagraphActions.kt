@@ -121,9 +121,10 @@ internal object RelayParagraphActions {
             ?: return ReturnData().setErrorMsg("动作格式无效")
         val action = synchronized(actions) { actions[request.actionId] }
             ?: return ReturnData().setErrorMsg("段评动作已过期，请刷新正文")
-        if (action.bookUrl != request.bookUrl || action.chapterIndex != request.chapterIndex ||
-            System.currentTimeMillis() - action.createdAt > ACTION_TTL_MILLIS
-        ) return ReturnData().setErrorMsg("段评动作无效或已过期")
+        if (System.currentTimeMillis() - action.createdAt > ACTION_TTL_MILLIS) {
+            synchronized(actions) { actions.remove(request.actionId) }
+            return ReturnData().setErrorMsg("段评动作无效或已过期")
+        }
         val book = appDb.bookDao.getBook(action.bookUrl)
             ?: return ReturnData().setErrorMsg("未找到书籍")
         val chapter = appDb.bookChapterDao.getChapter(action.bookUrl, action.chapterIndex)
