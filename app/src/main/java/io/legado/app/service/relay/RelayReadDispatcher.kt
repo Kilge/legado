@@ -2,10 +2,15 @@ package io.legado.app.service.relay
 
 import io.legado.app.api.ReturnData
 import io.legado.app.api.controller.BookController
+import io.legado.app.data.entities.SearchBook
+import io.legado.app.help.config.AppConfig
+import io.legado.app.model.webBook.SearchModel
+import io.legado.app.ui.book.search.SearchScope
 import android.graphics.Bitmap
 import io.legado.app.utils.GSON
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -53,7 +58,12 @@ internal class RelayReadDispatcher(
         credit: RelayCreditWindow
     ) = coroutineScope {
         val requestId = requireNotNull(request.requestId)
-        val parameters = parseParameters(requireNotNull(request.path))
+        val requestPath = requireNotNull(request.path)
+        if (requestPath.substringBefore('?') == "/searchBook") {
+            dispatchSearch(request, epoch, credit)
+            return@coroutineScope
+        }
+        val parameters = parseParameters(requestPath)
         val result = withTimeout(RelayProtocol.RESPONSE_START_TIMEOUT_MILLIS) {
             withContext(Dispatchers.IO) {
                 when (request.path.substringBefore('?')) {
@@ -127,6 +137,87 @@ internal class RelayReadDispatcher(
             RelayControlMessage(type = "http_response_end", requestId = requestId, epoch = epoch)
         )) { "Unable to queue response end" }
     }
+
+    private suspend fun kotlinx.coroutines.CoroutineScope.dispatchSearch(
+        request: RelayControlMessage,
+        epoch: Long,
+        credit: RelayCreditWindow
+    ) {
+        val requestId = requireNotNull(request.requestId)
+        val body = requireNotNull(request.bodyBase64).decodeBase64()?.utf8()
+            ?: throw IllegalArgumentException("Invalid search body")
+        val key = GSON.fromJson(body, SearchRequest::class.java).key.trim()
+        require(key.isNotEmpty() && key.length <= 100 && key.none { it.code < 0x20 || it.code == 0x7f }) {
+            "Invalid search key"
+        }
+        check(sendControl(
+            RelayControlMessage(
+                type = "http_response",
+                requestId = requestId,
+                epoch = epoch,
+                status = 200,
+                headers = mapOf(
+                    "content-type" to "application/x-ndjson; charset=utf-8",
+                    "cache-control" to "private, no-store"
+                )
+            )
+        )) { "Unable to queue response metadata" }
+
+        val events = Channel<String>(capacity = 4, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+        val model = SearchModel(this, object : SearchModel.CallBack {
+            override fun getSearchScope(): SearchScope = SearchScope(AppConfig.searchScope)
+            override fun onSearchStart() = Unit
+            override fun onSearchSuccess(searchBooks: List<SearchBook>) {
+                events.trySend(GSON.toJson(SearchEvent("results", searchBooks)))
+            }
+            override fun onSearchFinish(isEmpty: Boolean, hasMore: Boolean) {
+                events.trySend(GSON.toJson(SearchEvent("finish", emptyList(), hasMore)))
+                events.close()
+            }
+            override fun onSearchCancel(exception: Throwable?) {
+                events.trySend(GSON.toJson(SearchEvent("error", emptyList(), false, exception?.localizedMessage)))
+                events.close()
+            }
+        })
+        var sequence = 0
+        var total = 0L
+        try {
+            model.search(System.currentTimeMillis(), key)
+            for (event in events) {
+                val bytes = (event + "\n").toByteArray(Charsets.UTF_8)
+                var offset = 0
+                while (offset < bytes.size) {
+                    val permitted = credit.take(minOf(RelayProtocol.MAX_CHUNK_BYTES, bytes.size - offset))
+                    total += permitted
+                    check(total <= RelayProtocol.MAX_BODY_BYTES) { "Search response is too large" }
+                    check(sendBinary(
+                        RelayProtocol.BinaryFrame(
+                            RelayProtocol.BinaryType.HttpResponseChunk,
+                            flags = 0,
+                            requestId = requestId,
+                            sequence = sequence++,
+                            payload = bytes.copyOfRange(offset, offset + permitted)
+                        )
+                    )) { "Unable to queue search response" }
+                    offset += permitted
+                }
+            }
+        } finally {
+            model.close()
+            events.close()
+        }
+        check(sendControl(RelayControlMessage(type = "http_response_end", requestId = requestId, epoch = epoch))) {
+            "Unable to queue response end"
+        }
+    }
+
+    private data class SearchRequest(val key: String = "")
+    private data class SearchEvent(
+        val type: String,
+        val books: List<SearchBook>,
+        val hasMore: Boolean = false,
+        val message: String? = null
+    )
 
     private fun parseParameters(target: String): Map<String, List<String>> {
         val url = ("https://relay.invalid" + target).toHttpUrlOrNull()

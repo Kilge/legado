@@ -109,6 +109,7 @@ class SearchModel(private val scope: CoroutineScope, private val callBack: CallB
                 if (it == null) callBack.onSearchFinish(searchBooks.isEmpty(), hasMore)
             }.catch {
                 AppLog.put("书源搜索出错\n${it.localizedMessage}", it)
+                callBack.onSearchCancel(it)
             }.collect()
         }
     }
