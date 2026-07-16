@@ -70,6 +70,12 @@ internal class RelayReadDispatcher(
                     "/getBookshelf" -> BookController.bookshelf
                     "/getChapterList" -> BookController.getChapterList(parameters)
                     "/getBookContent" -> BookController.getBookContent(parameters)
+                    "/getBookContentEx" -> BookController.getRelayBookContent(parameters)
+                    "/paragraph/action" -> {
+                        val body = requireNotNull(request.bodyBase64).decodeBase64()?.utf8()
+                            ?: throw IllegalArgumentException("Invalid request body")
+                        RelayParagraphActions.execute(body)
+                    }
                     "/getReadConfig" -> BookController.getWebReadConfig()
                     "/getBookCover" -> BookController.getRelayBookCover(parameters)
                     "/saveBookProgress" -> {

@@ -104,11 +104,11 @@ class SourceLoginJsExtensions(
 
     @JvmOverloads
     fun showBrowser(url: String, html: String? = null, preloadJs: String? = null, config: String? = null) {
-        val activity = activityRef.get() ?: return
         val source = getSource() ?: return
         if (callbackRef.get()?.showBrowser(url, html, preloadJs, config) == true) {
             return
         }
+        val activity = activityRef.get() ?: return
         activity.runOnUiThread {
             if (activity.isFinishing || activity.isDestroyed) return@runOnUiThread
             // 从弹出菜单等瞬时上下文触发时活动可能不在 STARTED，提交 DialogFragment 事务会异常退出；
