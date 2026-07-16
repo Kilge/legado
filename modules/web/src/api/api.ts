@@ -87,13 +87,35 @@ const getChapterList = (/** @type {string} */ bookUrl: string) =>
 const getBookContent = (
   /** @type {string} */ bookUrl: string,
   /** @type {number} */ chapterIndex: number,
-) =>
-  ajax.get<LeagdoApiResponse<string>>(
-    'getBookContent?url=' +
+) => {
+  const path = getRelayBootstrap() ? 'getBookContentEx' : 'getBookContent'
+  return ajax.get<LeagdoApiResponse<string>>(
+    path + '?url=' +
       encodeURIComponent(bookUrl) +
       '&index=' +
       chapterIndex,
   )
+}
+
+export type ParagraphBrowserResult = {
+  type: 'browser_panel'
+  title: string
+  url: string
+  html?: string | null
+  preloadJs?: string | null
+  config?: string | null
+}
+
+const executeParagraphAction = (
+  actionId: string,
+  bookUrl: string,
+  chapterIndex: number,
+) =>
+  ajax.post<LeagdoApiResponse<ParagraphBrowserResult>>('paragraph/action', {
+    actionId,
+    bookUrl,
+    chapterIndex,
+  })
 
 // webSocket
 const search = (
@@ -287,6 +309,7 @@ export default {
   getBookShelf,
   getChapterList,
   getBookContent,
+  executeParagraphAction,
   search,
   saveBook,
   deleteBook,

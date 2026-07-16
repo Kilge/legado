@@ -17,9 +17,35 @@
       v-else
       :style="{ fontFamily, fontSize }"
       v-html="sanitizeContent(para)"
+      @click="handleContentClick"
       @error.capture="handleImgLoadError"
     />
   </div>
+  <Teleport to="body">
+    <aside
+      v-if="browserPanel"
+      class="paragraph-browser-panel"
+      :class="{ fullscreen: browserPanelFullscreen }"
+    >
+      <header>
+        <strong>{{ browserPanel.title || '段评' }}</strong>
+        <div>
+          <button type="button" @click="browserPanelFullscreen = !browserPanelFullscreen">
+            {{ browserPanelFullscreen ? '缩小' : '全屏' }}
+          </button>
+          <button type="button" @click="browserPanel = null">关闭</button>
+        </div>
+      </header>
+      <div v-if="browserPanel.html" class="paragraph-browser-html" v-html="safeBrowserHtml" />
+      <iframe
+        v-else-if="browserPanel.url"
+        :src="browserPanel.url"
+        sandbox="allow-forms allow-popups allow-scripts"
+        referrerpolicy="no-referrer"
+      />
+      <div v-else class="paragraph-browser-empty">没有可显示的段评内容</div>
+    </aside>
+  </Teleport>
 </template>
 
 <script setup lang="ts">
@@ -29,12 +55,24 @@ import jump from '@/plugins/jump'
 import type { webReadConfig } from '@/web'
 import DOMPurify from 'dompurify'
 import { getRelayBootstrap } from '@/api/relay'
+import type { ParagraphBrowserResult } from '@/api/api'
 
 const store = useBookStore()
 const readWidth = computed(() => store.config.readWidth)
 const lineImgWidth = computed(() => store.config.fontSize * 2)
 const bookUrl = computed(() => store.readingBook.bookUrl)
 const relayMode = getRelayBootstrap() !== null
+const browserPanel = ref<ParagraphBrowserResult | null>(null)
+const browserPanelFullscreen = ref(false)
+const safeBrowserHtml = computed(() =>
+  browserPanel.value?.html
+    ? DOMPurify.sanitize(browserPanel.value.html, {
+        USE_PROFILES: { html: true },
+        FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form'],
+        FORBID_ATTR: ['style'],
+      })
+    : '',
+)
 
 const props = defineProps<{
   chapterIndex: number
@@ -102,11 +140,31 @@ const sanitizeContent = (content: string) =>
             'img',
           ],
       ALLOWED_ATTR: relayMode
-        ? ['class']
+        ? ['class', 'data-legado-action', 'data-legado-count']
         : ['class', 'src', 'alt', 'title', 'width', 'height', 'loading'],
       ALLOW_DATA_ATTR: false,
     }),
   )
+
+const handleContentClick = async (event: MouseEvent) => {
+  const target = event.target instanceof Element
+    ? event.target.closest<HTMLElement>('.legado-paragraph-bubble[data-legado-action]')
+    : null
+  const actionId = target?.dataset.legadoAction
+  if (!relayMode || !actionId) return
+  event.preventDefault()
+  const response = await API.executeParagraphAction(
+    actionId,
+    bookUrl.value,
+    props.chapterIndex,
+  )
+  if (response.data.isSuccess) {
+    browserPanel.value = response.data.data
+    browserPanelFullscreen.value = false
+  } else {
+    window.alert(response.data.errorMsg || '段评加载失败')
+  }
+}
 
 const getImageSrc = (content: string) => {
   const src = content.match(imgPattern())![1] //reg tested in template
@@ -235,6 +293,68 @@ p {
   :deep(img) {
     height: 1em;
   }
+}
+
+:global(.legado-paragraph-bubble) {
+  display: inline-flex;
+  min-width: 1.75em;
+  height: 1.45em;
+  align-items: center;
+  justify-content: center;
+  margin: 0 0.18em;
+  padding: 0 0.48em;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 14%, transparent);
+  font-size: 0.72em;
+  line-height: 1;
+  cursor: pointer;
+  vertical-align: 0.08em;
+}
+
+.paragraph-browser-panel {
+  position: fixed;
+  z-index: 3000;
+  top: 0;
+  right: 0;
+  width: min(520px, 94vw);
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--el-bg-color, #fff);
+  color: var(--el-text-color-primary, #202124);
+  box-shadow: -12px 0 32px rgb(0 0 0 / 20%);
+}
+
+.paragraph-browser-panel.fullscreen {
+  width: 100vw;
+}
+
+.paragraph-browser-panel header {
+  min-height: 54px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--el-border-color, #ddd);
+}
+
+.paragraph-browser-panel header button {
+  margin-left: 8px;
+}
+
+.paragraph-browser-panel iframe,
+.paragraph-browser-html {
+  width: 100%;
+  flex: 1;
+  border: 0;
+  overflow: auto;
+}
+
+.paragraph-browser-html,
+.paragraph-browser-empty {
+  box-sizing: border-box;
+  padding: 16px;
 }
 
 .full {
