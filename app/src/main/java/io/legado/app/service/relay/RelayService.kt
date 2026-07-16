@@ -7,6 +7,7 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
+import android.os.PowerManager
 import androidx.core.content.ContextCompat
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.lifecycleScope
@@ -69,6 +70,7 @@ class RelayService : BaseService() {
     private var callbackRegistered = false
     private var testOnly = false
     private var startGeneration = 0L
+    private var wakeLock: PowerManager.WakeLock? = null
 
     private val networkCallback = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) = updateNetwork()
@@ -116,6 +118,7 @@ class RelayService : BaseService() {
             ACTION_TEST -> testOnly = true
             else -> testOnly = false
         }
+        if (testOnly) releaseWakeLock() else acquireWakeLock()
         startRelay()
         return if (testOnly) START_NOT_STICKY else START_STICKY
     }
@@ -128,6 +131,7 @@ class RelayService : BaseService() {
         stateJob?.cancel()
         relayClient?.stop()
         relayClient = null
+        releaseWakeLock()
         if (callbackRegistered) runCatching { connectivityManager.unregisterNetworkCallback(networkCallback) }
         callbackRegistered = false
         if (!defaultSharedPreferences.getBoolean(PreferKey.publicWebRelayEnabled, false) && !testOnly) {
@@ -217,5 +221,22 @@ class RelayService : BaseService() {
         val network = connectivityManager.activeNetwork ?: return false
         val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
         return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+    }
+
+    private fun acquireWakeLock() {
+        if (wakeLock?.isHeld == true) return
+        val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+        wakeLock = powerManager.newWakeLock(
+            PowerManager.PARTIAL_WAKE_LOCK,
+            "$packageName:publicWebRelay"
+        ).apply {
+            setReferenceCounted(false)
+            acquire()
+        }
+    }
+
+    private fun releaseWakeLock() {
+        wakeLock?.let { lock -> if (lock.isHeld) lock.release() }
+        wakeLock = null
     }
 }
