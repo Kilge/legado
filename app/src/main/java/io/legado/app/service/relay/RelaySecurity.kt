@@ -78,9 +78,14 @@ internal class RelaySecretStore(private val context: Context) {
     }
 
     private fun encrypt(secret: ByteArray): String {
-        val iv = ByteArray(IV_BYTES).also(random::nextBytes)
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-        cipher.init(Cipher.ENCRYPT_MODE, getOrCreateKey(), GCMParameterSpec(128, iv))
+        // AndroidKeyStore rejects caller-supplied IVs for encryption when the key requires
+        // randomized encryption. Let the provider generate the nonce, then persist it beside
+        // the ciphertext for decryption.
+        cipher.init(Cipher.ENCRYPT_MODE, getOrCreateKey())
+        val iv = requireNotNull(cipher.iv).also {
+            require(it.size == IV_BYTES) { "Invalid generated secret IV" }
+        }
         val encrypted = cipher.doFinal(secret)
         val blob = ByteArray(2 + iv.size + encrypted.size)
         blob[0] = BLOB_VERSION
