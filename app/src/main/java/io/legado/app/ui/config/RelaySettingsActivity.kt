@@ -1,6 +1,8 @@
 package io.legado.app.ui.config
 
 import android.os.Bundle
+import android.content.Intent
+import android.provider.Settings
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
@@ -115,6 +117,8 @@ class RelaySettingsActivity : BaseActivity<ViewBinding>() {
                     initialWorkerUrl = prefs.getString(PreferKey.publicWebRelayWorkerUrl, "").orEmpty(),
                     initialDeviceName = prefs.getString(PreferKey.publicWebRelayDeviceName, "").orEmpty(),
                     initialEnabled = prefs.getBoolean(PreferKey.publicWebRelayEnabled, false),
+                    initialPermanentShare = prefs.getBoolean(PreferKey.publicWebRelayPermanentShare, false),
+                    initialShareProgressSync = prefs.getBoolean(PreferKey.publicWebRelayShareProgressSync, false),
                     deviceId = identityId,
                     secureStorageSupported = RelaySecretStore.isSupported,
                     onBack = ::finish,
@@ -126,10 +130,27 @@ class RelaySettingsActivity : BaseActivity<ViewBinding>() {
                     onShareQr = { shareWithQr(it, getString(R.string.public_web_relay_share_qr)) },
                     onRevokeShare = ::revokeShare,
                     onTest = ::testConnection,
+                    onShareOptionsChange = { permanent, progressSync ->
+                        prefs.edit()
+                            .putBoolean(PreferKey.publicWebRelayPermanentShare, permanent)
+                            .putBoolean(PreferKey.publicWebRelayShareProgressSync, progressSync)
+                            .apply()
+                    },
+                    onOpenBatterySettings = ::openBatterySettings,
                 )
             }
         }
         (binding.root as FrameLayout).addView(composeView)
+    }
+
+    private fun openBatterySettings() {
+        runCatching {
+            startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+        }.onFailure {
+            startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                data = android.net.Uri.parse("package:$packageName")
+            })
+        }
     }
 
     private fun saveInputs(workerUrl: String, deviceName: String) {
@@ -278,6 +299,8 @@ private fun RelaySettingsScreen(
     initialWorkerUrl: String,
     initialDeviceName: String,
     initialEnabled: Boolean,
+    initialPermanentShare: Boolean,
+    initialShareProgressSync: Boolean,
     deviceId: String,
     secureStorageSupported: Boolean,
     onBack: () -> Unit,
@@ -288,7 +311,9 @@ private fun RelaySettingsScreen(
     onCopyShare: (String) -> Unit,
     onShareQr: (String) -> Unit,
     onRevokeShare: (String, (Boolean, String) -> Unit) -> Unit,
-    onTest: (String, String) -> Unit
+    onTest: (String, String) -> Unit,
+    onShareOptionsChange: (Boolean, Boolean) -> Unit,
+    onOpenBatterySettings: () -> Unit
 ) {
     val palette = rememberAppManagementPalette()
     val connectionState by RelayStateRepository.state.collectAsStateWithLifecycle()
@@ -298,8 +323,8 @@ private fun RelaySettingsScreen(
     var adminToken by remember { mutableStateOf("") }
     var shareUrl by remember { mutableStateOf("") }
     var shareId by remember { mutableStateOf("") }
-    var permanentShare by rememberSaveable { mutableStateOf(false) }
-    var shareProgressSync by rememberSaveable { mutableStateOf(false) }
+    var permanentShare by rememberSaveable { mutableStateOf(initialPermanentShare) }
+    var shareProgressSync by rememberSaveable { mutableStateOf(initialShareProgressSync) }
     var operationMessage by remember { mutableStateOf("") }
     val stateText = relayStateText(connectionState)
     val invalidAdminTokenMessage = stringResource(R.string.public_web_relay_admin_token_invalid)
@@ -450,15 +475,28 @@ private fun RelaySettingsScreen(
                         RelayOptionSwitch(
                             title = stringResource(R.string.public_web_relay_permanent_share),
                             checked = permanentShare,
-                            onCheckedChange = { permanentShare = it },
+                            onCheckedChange = {
+                                permanentShare = it
+                                onShareOptionsChange(permanentShare, shareProgressSync)
+                            },
                             palette = palette
                         )
                         RelayOptionSwitch(
                             title = stringResource(R.string.public_web_relay_progress_sync),
                             summary = stringResource(R.string.public_web_relay_progress_sync_summary),
                             checked = shareProgressSync,
-                            onCheckedChange = { shareProgressSync = it },
+                            onCheckedChange = {
+                                shareProgressSync = it
+                                onShareOptionsChange(permanentShare, shareProgressSync)
+                            },
                             palette = palette
+                        )
+                        Text(
+                            text = stringResource(R.string.public_web_relay_share_options_new_link),
+                            color = palette.settings.secondaryText,
+                            fontSize = 12.sp,
+                            lineHeight = 17.sp,
+                            modifier = Modifier.padding(top = 6.dp)
                         )
                         Row(
                             modifier = Modifier
@@ -555,6 +593,20 @@ private fun RelaySettingsScreen(
                                 modifier = Modifier.padding(top = 10.dp)
                             )
                         }
+                        Text(
+                            text = stringResource(R.string.public_web_relay_vivo_background_hint),
+                            color = palette.settings.secondaryText,
+                            fontSize = 13.sp,
+                            lineHeight = 19.sp,
+                            modifier = Modifier.padding(top = 10.dp)
+                        )
+                        LegadoMiuixActionButton(
+                            text = stringResource(R.string.public_web_relay_open_battery_settings),
+                            palette = palette.miuix,
+                            onClick = onOpenBatterySettings,
+                            modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+                            cornerRadius = palette.miuix.actionRadius
+                        )
                     }
                 }
             }
