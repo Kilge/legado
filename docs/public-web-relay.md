@@ -1,5 +1,11 @@
 # Legado public Web relay
 
+The Cloudflare Worker and Durable Object implementation is maintained in the
+separate private repository
+[`Rimchars/legado-cloudflare-relay`](https://github.com/Rimchars/legado-cloudflare-relay).
+This app repository contains the Android client, Web UI compatibility layer and
+the shared security contract only.
+
 This document defines the security and compatibility boundary for the optional
 Cloudflare relay. The feature is disabled by default and must not change the
 existing LAN Web service when it is disabled.
