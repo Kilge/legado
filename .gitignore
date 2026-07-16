@@ -18,6 +18,7 @@ node_modules/
 /app/gradle.properties
 package-lock.json
 !cloudflare/download-gate/package-lock.json
+!cloudflare/legado-relay/package-lock.json
 cloudflare/**/.dev.vars
 cloudflare/**/.wrangler/
 .idea/

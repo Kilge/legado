@@ -1,0 +1,23 @@
+name = "legado-relay"
+main = "src/index.ts"
+compatibility_date = "2026-07-16"
+workers_dev = false
+preview_urls = false
+
+[assets]
+directory = "../../app/src/main/assets/web/vue"
+binding = "ASSETS"
+run_worker_first = true
+
+[[durable_objects.bindings]]
+name = "DEVICE_OBJECT"
+class_name = "DeviceObject"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["DeviceObject"]
+
+# RELAY_ADMIN_TOKEN is intentionally a Wrangler secret, never a [vars] value.
+# Configure it with: npx wrangler secret put RELAY_ADMIN_TOKEN
+# RELAY_CREDENTIAL_KEY is a separate 32-byte base64url Wrangler secret.
+# RELAY_ROUTE_KEY is another independent 32-byte base64url Wrangler secret.
