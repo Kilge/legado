@@ -39,6 +39,14 @@ class RelaySecurityBoundaryTest {
     }
 
     @Test
+    fun searchAndParagraphActionsRequireBoundedJsonBodies() {
+        assertNull(validateJsonPost("/searchBook", "{\"key\":\"test\"}"))
+        assertNull(validateJsonPost("/paragraph/action", "{\"actionId\":\"id\",\"bookUrl\":\"book\",\"chapterIndex\":1}"))
+        assertEquals("invalid_body", validate("POST", "/searchBook"))
+        assertEquals("invalid_body", validate("POST", "/paragraph/action"))
+    }
+
+    @Test
     fun traversalAndHopByHopHeadersAreRejected() {
         assertEquals("invalid_path", validate("GET", "/getBookshelf/%2e%2e/saveBook"))
         assertEquals("invalid_path", validate("GET", "/getBookshelf//saveBook"))
@@ -117,6 +125,21 @@ class RelaySecurityBoundaryTest {
                 method = method,
                 path = path,
                 contentLength = 0
+            )
+        )
+    }
+
+    private fun validateJsonPost(path: String, json: String): String? {
+        val body = json.encodeUtf8()
+        return RelayReadAllowlist.validate(
+            RelayControlMessage(
+                type = "http_request",
+                requestId = 1,
+                method = "POST",
+                path = path,
+                contentLength = body.size.toLong(),
+                bodyBase64 = body.base64Url(),
+                headers = mapOf("content-type" to "application/json")
             )
         )
     }
