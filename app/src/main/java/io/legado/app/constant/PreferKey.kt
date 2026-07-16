@@ -167,6 +167,8 @@ object PreferKey {
     const val publicWebRelayPairedWorkerUrl = "publicWebRelayPairedWorkerUrl"
     const val publicWebRelayPermanentShare = "publicWebRelayPermanentShare"
     const val publicWebRelayShareProgressSync = "publicWebRelayShareProgressSync"
+    const val publicWebRelayShareSearch = "publicWebRelayShareSearch"
+    const val publicWebRelayShareParagraphComments = "publicWebRelayShareParagraphComments"
     const val webDavUrl = "web_dav_url"
     const val webDavAccount = "web_dav_account"
     const val webDavPassword = "web_dav_password"

@@ -2437,6 +2437,10 @@ Selected text or question:
     <string name="public_web_relay_permanent_share">永久地址（可随时撤销）</string>
     <string name="public_web_relay_progress_sync">同步阅读进度</string>
     <string name="public_web_relay_progress_sync_summary">允许此地址把 Web 阅读位置写回 App</string>
+    <string name="public_web_relay_search">允许搜索书籍</string>
+    <string name="public_web_relay_search_summary">允许此地址调用 App 中启用的书源进行搜索</string>
+    <string name="public_web_relay_paragraph_comments">允许查看段评</string>
+    <string name="public_web_relay_paragraph_comments_summary">允许此地址显示正文段评气泡并执行只读段评操作</string>
     <string name="public_web_relay_share_options_new_link">永久和进度权限只对新创建的地址生效；已有地址请撤销后重新创建。</string>
     <string name="public_web_relay_vivo_background_hint">vivo/OriginOS 请在系统中允许“后台高耗电”、自启动和后台联网，否则息屏后系统可能冻结公网连接。</string>
     <string name="public_web_relay_open_battery_settings">打开电池优化设置</string>

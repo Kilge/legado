@@ -15,6 +15,8 @@ internal data class RelayShareResult(
     val shareUrl: String,
     val expiresAt: Long,
     val allowProgress: Boolean = false,
+    val allowSearch: Boolean = false,
+    val allowParagraphComments: Boolean = false,
     val permanent: Boolean = false
 )
 
@@ -63,7 +65,9 @@ internal class RelayControlClient(
     fun createReadShare(
         expiresInSeconds: Int = 7 * 24 * 60 * 60,
         permanent: Boolean = false,
-        allowProgress: Boolean = false
+        allowProgress: Boolean = false,
+        allowSearch: Boolean = true,
+        allowParagraphComments: Boolean = true
     ): RelayShareResult {
         require(permanent || expiresInSeconds in 60..2_592_000)
         val path = "/v1/device/share"
@@ -72,7 +76,9 @@ internal class RelayControlClient(
                 "scope" to "read",
                 "expiresInSeconds" to expiresInSeconds,
                 "permanent" to permanent,
-                "allowProgress" to allowProgress
+                "allowProgress" to allowProgress,
+                "allowSearch" to allowSearch,
+                "allowParagraphComments" to allowParagraphComments
             )
         ).toByteArray(Charsets.UTF_8)
         val proof = RelayAuthenticator.createControlProof(config.identity, "POST", path, bodyBytes)
@@ -96,7 +102,9 @@ internal class RelayControlClient(
                 token?.matches(Regex("^[A-Za-z0-9_-]{16,64}\\.[A-Za-z0-9_-]{24,64}$")) == true &&
                 token?.substringBefore('.') == parsed.id &&
                 parsed.expiresAt > System.currentTimeMillis() / 1000L &&
-                parsed.permanent == permanent && parsed.allowProgress == allowProgress
+                parsed.permanent == permanent && parsed.allowProgress == allowProgress &&
+                parsed.allowSearch == allowSearch &&
+                parsed.allowParagraphComments == allowParagraphComments
         ) {
             "Worker returned an invalid share link"
         }
