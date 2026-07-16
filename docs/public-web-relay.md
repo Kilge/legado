@@ -42,11 +42,13 @@ Read scope initially includes the Web assets and these API paths:
 - `/getChapterList`
 - `/getBookContent`
 - `/getReadConfig`
-- `/cover`
-- `/image`
 
 Source login data, imports, saves, deletes, progress writes, uploads and the
 debug/search WebSockets are excluded until separately implemented and tested.
+The legacy `/cover` and `/image` proxy routes are also excluded because their
+caller-controlled `path` parameters are not an authorization boundary. Remote
+images require a later opaque resource token bound to an already authorized
+book or chapter.
 
 ## Tunnel protocol v1
 
