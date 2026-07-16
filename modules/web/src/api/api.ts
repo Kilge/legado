@@ -11,6 +11,7 @@ import type {
   SeachBook,
 } from '@/book'
 import type { Source } from '@/source'
+import { getRelayAuthorization } from './relay'
 
 export type LeagdoApiResponse<T> = {
   isSuccess: boolean
@@ -62,11 +63,18 @@ const saveBookProgress = (bookProgress: BookProgress) =>
 /**主要在直接关闭浏览器情况下可靠发送书籍进度 */
 const saveBookProgressWithBeacon = (bookProgress: BookProgress) => {
   if (!bookProgress) return
-  // 常规请求可能会被取消 使用Fetch keep-alive 或者 navigator.sendBeacon
-  navigator.sendBeacon(
-    new URL('saveBookProgress', legado_http_entry_point),
-    JSON.stringify(bookProgress),
-  )
+  const url = new URL('saveBookProgress', legado_http_entry_point)
+  const authorization = getRelayAuthorization(url)
+  void fetch(url, {
+    method: 'POST',
+    body: JSON.stringify(bookProgress),
+    keepalive: true,
+    credentials: 'same-origin',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(authorization ? { Authorization: authorization } : {}),
+    },
+  })
 }
 
 const getBookShelf = () => ajax.get<LeagdoApiResponse<Book[]>>('getBookshelf')
