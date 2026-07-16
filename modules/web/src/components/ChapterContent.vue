@@ -8,12 +8,17 @@
   >
     <img
       class="full"
-      v-if="/^\s*<img[^>]*src[^>]+>$/.test(String(para))"
+      v-if="!relayMode && /^\s*<img[^>]*src[^>]+>$/.test(String(para))"
       :src="getImageSrc(para)"
       @error.once="proxyImage"
       loading="lazy"
     />
-    <p v-else :style="{ fontFamily, fontSize }" v-html="replaceImage(para)" @error.capture="handleImgLoadError" />
+    <p
+      v-else
+      :style="{ fontFamily, fontSize }"
+      v-html="sanitizeContent(para)"
+      @error.capture="handleImgLoadError"
+    />
   </div>
 </template>
 
@@ -22,11 +27,14 @@ import { isLegadoUrl, lazyRegex } from '@/utils/utils'
 import API from '@api'
 import jump from '@/plugins/jump'
 import type { webReadConfig } from '@/web'
+import DOMPurify from 'dompurify'
+import { getRelayBootstrap } from '@/api/relay'
 
 const store = useBookStore()
 const readWidth = computed(() => store.config.readWidth)
 const lineImgWidth = computed(() => store.config.fontSize * 2)
 const bookUrl = computed(() => store.readingBook.bookUrl)
+const relayMode = getRelayBootstrap() !== null
 
 const props = defineProps<{
   chapterIndex: number
@@ -60,18 +68,54 @@ const replaceImage = (content: string) => {
   })
 }
 
+const sanitizeContent = (content: string) =>
+  String(
+    DOMPurify.sanitize(replaceImage(content), {
+      ALLOWED_TAGS: relayMode
+        ? [
+            'br',
+            'b',
+            'strong',
+            'i',
+            'em',
+            'u',
+            's',
+            'del',
+            'span',
+            'ruby',
+            'rt',
+            'rp',
+          ]
+        : [
+            'br',
+            'b',
+            'strong',
+            'i',
+            'em',
+            'u',
+            's',
+            'del',
+            'span',
+            'ruby',
+            'rt',
+            'rp',
+            'img',
+          ],
+      ALLOWED_ATTR: relayMode
+        ? ['class']
+        : ['class', 'src', 'alt', 'title', 'width', 'height', 'loading'],
+      ALLOW_DATA_ATTR: false,
+    }),
+  )
+
 const getImageSrc = (content: string) => {
   const src = content.match(imgPattern())![1] //reg tested in template
   const dataUrl = src.match(imgDataUrlPattern())
   if (dataUrl) {
-      return dataUrl[0] //现成的base64图片，去掉阅读格式后缀
+    return dataUrl[0] //现成的base64图片，去掉阅读格式后缀
   }
   if (isLegadoUrl(src))
-    return API.getProxyImageUrl(
-      bookUrl.value,
-      src,
-      readWidth.value,
-    )
+    return API.getProxyImageUrl(bookUrl.value, src, readWidth.value)
   return src
 }
 const proxyImage = (event: Event) => {
@@ -81,9 +125,9 @@ const proxyImage = (event: Event) => {
     event.target.src 返回 http://example.com/test
     (event.target as HTMLImageElement)?.getAttribute("src")  返回/test
   */
-  const src = (event.target as HTMLImageElement)?.getAttribute("src")
+  const src = (event.target as HTMLImageElement)?.getAttribute('src')
   if (src != null && src.length > 0) {
-    (event.target as HTMLImageElement).src = API.getProxyImageUrl(
+    ;(event.target as HTMLImageElement).src = API.getProxyImageUrl(
       bookUrl.value,
       src,
       readWidth.value,
@@ -97,16 +141,12 @@ const proxyImage = (event: Event) => {
 const handleImgLoadError = (event: Event) => {
   const target = event.target
   if (target instanceof HTMLImageElement) {
-    const srcUrl = target.getAttribute("src")
+    const srcUrl = target.getAttribute('src')
     console.log(
-      "[ChapterContent]: IMG Load Error, replace src:",
+      '[ChapterContent]: IMG Load Error, replace src:',
       srcUrl,
-      "=>",
-      API.getProxyImageUrl(
-        bookUrl.value,
-        srcUrl ?? "",
-        readWidth.value,
-      )
+      '=>',
+      API.getProxyImageUrl(bookUrl.value, srcUrl ?? '', readWidth.value),
     )
     proxyImage(event)
   }
