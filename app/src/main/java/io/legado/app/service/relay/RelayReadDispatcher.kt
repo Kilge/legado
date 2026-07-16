@@ -8,6 +8,7 @@ import io.legado.app.model.webBook.SearchModel
 import io.legado.app.ui.book.search.SearchScope
 import android.graphics.Bitmap
 import io.legado.app.utils.GSON
+import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.BufferOverflow
@@ -52,6 +53,7 @@ internal class RelayReadDispatcher(
     private val sendControl: (RelayControlMessage) -> Boolean,
     private val sendBinary: (RelayProtocol.BinaryFrame) -> Boolean
 ) {
+    private val streamGson = Gson()
     suspend fun dispatch(
         request: RelayControlMessage,
         epoch: Long,
@@ -174,14 +176,14 @@ internal class RelayReadDispatcher(
             override fun getSearchScope(): SearchScope = SearchScope(AppConfig.searchScope)
             override fun onSearchStart() = Unit
             override fun onSearchSuccess(searchBooks: List<SearchBook>) {
-                events.trySend(GSON.toJson(SearchEvent("results", searchBooks)))
+                events.trySend(streamGson.toJson(SearchEvent("results", searchBooks)))
             }
             override fun onSearchFinish(isEmpty: Boolean, hasMore: Boolean) {
-                events.trySend(GSON.toJson(SearchEvent("finish", emptyList(), hasMore)))
+                events.trySend(streamGson.toJson(SearchEvent("finish", emptyList(), hasMore)))
                 events.close()
             }
             override fun onSearchCancel(exception: Throwable?) {
-                events.trySend(GSON.toJson(SearchEvent("error", emptyList(), false, exception?.localizedMessage)))
+                events.trySend(streamGson.toJson(SearchEvent("error", emptyList(), false, exception?.localizedMessage)))
                 events.close()
             }
         })

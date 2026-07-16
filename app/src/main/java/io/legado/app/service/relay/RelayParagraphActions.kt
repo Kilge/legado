@@ -2,6 +2,7 @@ package io.legado.app.service.relay
 
 import com.script.rhino.runScriptWithContext
 import io.legado.app.api.ReturnData
+import io.legado.app.constant.AppPattern
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
@@ -12,6 +13,7 @@ import io.legado.app.ui.login.SourceLoginJsExtensions
 import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonObject
 import okio.ByteString.Companion.toByteString
+import okio.ByteString.Companion.decodeBase64
 import org.jsoup.Jsoup
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import java.security.SecureRandom
@@ -22,6 +24,8 @@ internal object RelayParagraphActions {
     private const val ACTION_TTL_MILLIS = 30 * 60 * 1000L
     private val random = SecureRandom()
     private val imageRegex = Regex("<img\\b[^>]*>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
+    private val singleQuotedSrcRegex = Regex("""src\s*=\s*'([^']*(?:'[^>]+\})?)'""", RegexOption.IGNORE_CASE)
+    private val svgTextRegex = Regex("<text\\b[^>]*>([^<]+)</text>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
     private val actions = object : LinkedHashMap<String, Action>(MAX_ACTIONS, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Action>?): Boolean = size > MAX_ACTIONS
     }
@@ -56,20 +60,23 @@ internal object RelayParagraphActions {
     fun decorate(book: Book, chapter: BookChapter, content: String): String {
         prune()
         return imageRegex.replace(content) { match ->
-            val element = Jsoup.parseBodyFragment(match.value).selectFirst("img") ?: return@replace match.value
-            val src = element.attr("src").trim()
-            if (!src.startsWith("dp:", true) && !src.startsWith("bubble://paragraph", true)) return@replace match.value
-            val comma = src.indexOf(',')
-            val count = when {
-                src.startsWith("dp:", true) -> src.substring(3, if (comma >= 0) comma else src.length).trim()
-                else -> element.attr("data-count").ifBlank { "•" }
-            }.take(16)
-            val options = if (comma >= 0) {
-                GSON.fromJsonObject<Map<String, String>>(src.substring(comma + 1)).getOrNull().orEmpty()
+            val src = extractSource(match.value) ?: return@replace match.value
+            val optionStart = src.lastIndexOf(",{")
+            val renderSource = if (optionStart >= 0) src.substring(0, optionStart) else src
+            val options = if (optionStart >= 0) {
+                val optionJson = Jsoup.parse(src.substring(optionStart + 1)).text()
+                GSON.fromJsonObject<Map<String, String>>(optionJson).getOrNull().orEmpty()
             } else emptyMap()
             val click = options["pclick"]?.takeIf(String::isNotBlank)
                 ?: options["click"]?.takeIf(String::isNotBlank)
-                ?: return@replace "<span class=\"legado-paragraph-bubble legado-paragraph-bubble-disabled\">${escapeHtml(count)}</span>"
+            val virtualSource = renderSource.startsWith("dp:", true) || renderSource.startsWith("bubble://paragraph", true)
+            val commentClick = click?.contains("showCmt(", true) == true || click?.contains("showComment(", true) == true
+            val textStyle = options["style"]?.equals("text", true) == true || options["type"]?.equals("qd", true) == true
+            if (!virtualSource && !commentClick && !textStyle) return@replace match.value
+            val count = extractDisplayText(renderSource, options).take(16)
+            if (click.isNullOrBlank()) {
+                return@replace "<span class=\"legado-paragraph-bubble legado-paragraph-bubble-disabled\">${escapeHtml(count)}</span>"
+            }
             val id = newId()
             synchronized(actions) {
                 actions[id] = Action(
@@ -83,6 +90,30 @@ internal object RelayParagraphActions {
             }
             "<span class=\"legado-paragraph-bubble\" data-legado-action=\"$id\" data-legado-count=\"${escapeHtml(count)}\">${escapeHtml(count)}</span>"
         }
+    }
+
+    private fun extractSource(tag: String): String? {
+        val matcher = AppPattern.imgPattern.matcher(tag)
+        if (matcher.find()) return matcher.group(1)?.trim()
+        singleQuotedSrcRegex.find(tag)?.groupValues?.getOrNull(1)?.trim()?.let { return it }
+        return Jsoup.parseBodyFragment(tag).selectFirst("img")?.attr("src")?.trim()?.takeIf(String::isNotBlank)
+    }
+
+    private fun extractDisplayText(source: String, options: Map<String, String>): String {
+        listOf("displayText", "num", "count", "text", "label").forEach { key ->
+            options[key]?.trim()?.takeIf(String::isNotBlank)?.let { return it }
+        }
+        if (source.startsWith("dp:", true)) {
+            source.substring(3).substringBefore(',').trim().takeIf(String::isNotBlank)?.let { return it }
+        }
+        if (source.startsWith("data:image/svg+xml;base64,", true)) {
+            val encoded = source.substringAfter("base64,").substringBefore(",{")
+            val svg = encoded.decodeBase64()?.utf8().orEmpty()
+            svgTextRegex.find(svg)?.groupValues?.getOrNull(1)?.let { text ->
+                Jsoup.parse(text).text().trim().takeIf(String::isNotBlank)?.let { return it }
+            }
+        }
+        return "•"
     }
 
     suspend fun execute(body: String): ReturnData {

@@ -13,7 +13,6 @@ import io.legado.app.help.AppCloudStorage
 import io.legado.app.help.CacheManager
 import io.legado.app.help.book.BookHelp
 import io.legado.app.help.book.ContentProcessor
-import io.legado.app.help.book.ParagraphRuleProcessor
 import io.legado.app.service.relay.RelayParagraphActions
 import io.legado.app.help.book.isLocal
 import io.legado.app.help.config.AppConfig
@@ -246,8 +245,7 @@ object BookController {
         if (!base.isSuccess) return base
         val content = base.data as? String ?: return ReturnData().setErrorMsg("正文格式无效")
         return runCatching {
-            val processed = runBlocking { ParagraphRuleProcessor.process(book, chapter, content) }
-            ReturnData().setData(RelayParagraphActions.decorate(book, chapter, processed))
+            ReturnData().setData(RelayParagraphActions.decorate(book, chapter, content))
         }.getOrElse { ReturnData().setErrorMsg(it.localizedMessage ?: "段评处理失败") }
     }
 

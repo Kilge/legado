@@ -18,7 +18,7 @@ class RelayParagraphActionsTest {
         )
 
         assertTrue(decorated.contains("legado-paragraph-bubble"))
-        assertTrue(decorated.contains("data-legado-count=\"18\""))
+        assertTrue(decorated, decorated.contains("data-legado-count=\"18\""))
         assertTrue(decorated.contains(Regex("data-legado-action=\"[A-Za-z0-9_-]{24}\"")))
         assertFalse(decorated.contains("showCmt"))
         assertFalse(decorated.contains("dp:18"))
@@ -34,5 +34,22 @@ class RelayParagraphActionsTest {
         )
         assertTrue(decorated.contains("https://example.com/a.png"))
         assertFalse(decorated.contains("data-legado-action"))
+    }
+
+    @Test
+    fun decorateSupportsBookSourceSvgCommentBubble() {
+        val svg = "PHN2Zz48dGV4dD41PC90ZXh0Pjwvc3ZnPg=="
+        val content = "<img src=\"data:image/svg+xml;base64,$svg,{\"style\":\"text\",\"type\":\"qd\",\"click\":\"showCmt(1,2,3,4)\"}\">"
+
+        val decorated = RelayParagraphActions.decorate(
+            Book(bookUrl = "book", origin = "source"),
+            BookChapter(url = "chapter", bookUrl = "book", index = 2, title = "title"),
+            content
+        )
+
+        assertTrue(decorated.contains("data-legado-count=\"5\""))
+        assertTrue(decorated.contains("data-legado-action="))
+        assertFalse(decorated.contains("legado-paragraph-bubble-disabled"))
+        assertFalse(decorated.contains("showCmt"))
     }
 }
