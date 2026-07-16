@@ -2433,7 +2433,10 @@ Selected text or question:
     <string name="public_web_relay_admin_token_invalid">管理员令牌至少需要 32 个字符</string>
     <string name="public_web_relay_pair">配对此设备</string>
     <string name="public_web_relay_paired">设备配对成功</string>
-    <string name="public_web_relay_create_share">创建 7 天只读链接</string>
+    <string name="public_web_relay_create_share">创建访问地址</string>
+    <string name="public_web_relay_permanent_share">永久地址（可随时撤销）</string>
+    <string name="public_web_relay_progress_sync">同步阅读进度</string>
+    <string name="public_web_relay_progress_sync_summary">允许此地址把 Web 阅读位置写回 App</string>
     <string name="public_web_relay_share_created">只读分享链接已创建</string>
     <string name="public_web_relay_copy_share">复制分享链接</string>
     <string name="public_web_relay_share_qr">分享二维码</string>

@@ -12,7 +12,7 @@
             class="cover"
             :src="getCover(book)"
             :key="book.coverUrl"
-            @error.once="proxyImage"
+            @error.once="proxyImage($event, book)"
             alt=""
             loading="lazy"
           />
@@ -63,12 +63,15 @@ const props = defineProps<{
 const emit = defineEmits(['bookClick'])
 const handleClick = (book: Book | SeachBook) => emit('bookClick', book)
 const getCover = ({ bookUrl, coverUrl }: Book | SeachBook) => {
+  if (!props.isSearch && (coverUrl === undefined || isLegadoUrl(coverUrl))) {
+    return API.getBookCoverUrl(bookUrl)
+  }
   if (coverUrl === undefined) return API.getProxyCoverUrl(bookUrl)
-  return isLegadoUrl(coverUrl) ? API.getProxyCoverUrl(coverUrl) : coverUrl
+  return coverUrl
 }
-const proxyImage = (evt: Event) => {
+const proxyImage = (evt: Event, book: Book | SeachBook) => {
   const target = evt.target as HTMLImageElement
-  target.src = API.getProxyCoverUrl(target.src)
+  if (!props.isSearch) target.src = API.getBookCoverUrl(book.bookUrl)
 }
 
 const subJustify = computed(() =>

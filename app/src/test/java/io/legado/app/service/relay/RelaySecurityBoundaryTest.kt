@@ -5,6 +5,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.random.Random
+import okio.ByteString.Companion.encodeUtf8
 
 class RelaySecurityBoundaryTest {
     @Test
@@ -16,6 +17,25 @@ class RelaySecurityBoundaryTest {
         assertEquals("path_not_allowed", validate("GET", "/saveBook"))
         assertEquals("path_not_allowed", validate("GET", "/cover?path=file%3A%2F%2F%2Fdata%2Fsecret"))
         assertEquals("path_not_allowed", validate("GET", "/image?path=content%3A%2F%2Fprivate"))
+    }
+
+    @Test
+    fun progressWriteRequiresExactJsonBody() {
+        val body = "{\"name\":\"book\",\"author\":\"author\"}".encodeUtf8()
+        assertNull(
+            RelayReadAllowlist.validate(
+                RelayControlMessage(
+                    type = "http_request",
+                    requestId = 1,
+                    method = "POST",
+                    path = "/saveBookProgress",
+                    contentLength = body.size.toLong(),
+                    bodyBase64 = body.base64Url(),
+                    headers = mapOf("content-type" to "application/json")
+                )
+            )
+        )
+        assertEquals("invalid_body", validate("POST", "/saveBookProgress"))
     }
 
     @Test

@@ -2,6 +2,7 @@ package io.legado.app.service.relay
 
 import io.legado.app.api.ReturnData
 import io.legado.app.api.controller.BookController
+import android.graphics.Bitmap
 import io.legado.app.utils.GSON
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
@@ -13,6 +14,7 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import java.io.OutputStreamWriter
 import java.io.PipedInputStream
 import java.io.PipedOutputStream
+import okio.ByteString.Companion.decodeBase64
 
 internal class RelayCreditWindow {
     private val grants = Channel<Int>(capacity = 16)
@@ -59,17 +61,27 @@ internal class RelayReadDispatcher(
                     "/getChapterList" -> BookController.getChapterList(parameters)
                     "/getBookContent" -> BookController.getBookContent(parameters)
                     "/getReadConfig" -> BookController.getWebReadConfig()
+                    "/getBookCover" -> BookController.getRelayBookCover(parameters)
+                    "/saveBookProgress" -> {
+                        val body = requireNotNull(request.bodyBase64).decodeBase64()?.utf8()
+                            ?: throw IllegalArgumentException("Invalid request body")
+                        BookController.saveBookProgress(body)
+                    }
                     else -> ReturnData().setErrorMsg("Route is not available")
                 }
             }
         }
+        val bitmap = result.data as? Bitmap
         check(sendControl(
             RelayControlMessage(
                 type = "http_response",
                 requestId = requestId,
                 epoch = epoch,
                 status = 200,
-                headers = mapOf("content-type" to "application/json; charset=utf-8")
+                headers = mapOf(
+                    "content-type" to if (bitmap != null) "image/png" else "application/json; charset=utf-8",
+                    "cache-control" to if (bitmap != null) "private, max-age=86400" else "private, no-store"
+                )
             )
         )) { "Unable to queue response metadata" }
 
@@ -77,7 +89,11 @@ internal class RelayReadDispatcher(
         val output = PipedOutputStream(input)
         val producer = launch(Dispatchers.IO) {
             output.use { stream ->
-                OutputStreamWriter(stream, Charsets.UTF_8).use { writer -> GSON.toJson(result, writer) }
+                if (bitmap != null) {
+                    check(bitmap.compress(Bitmap.CompressFormat.PNG, 90, stream)) { "Unable to encode cover" }
+                } else {
+                    OutputStreamWriter(stream, Charsets.UTF_8).use { writer -> GSON.toJson(result, writer) }
+                }
             }
         }
         input.use { stream ->

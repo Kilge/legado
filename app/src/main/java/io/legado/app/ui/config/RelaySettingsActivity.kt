@@ -63,6 +63,7 @@ import io.legado.app.service.relay.RelayService
 import io.legado.app.service.relay.RelayShareResult
 import io.legado.app.service.relay.RelayStateRepository
 import io.legado.app.ui.widget.compose.AppManagementCard
+import io.legado.app.ui.widget.compose.AppManagementPalette
 import io.legado.app.ui.widget.compose.AppSettingSectionTitle
 import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
 import io.legado.app.ui.widget.compose.LegadoMiuixSwitch
@@ -232,6 +233,8 @@ class RelaySettingsActivity : BaseActivity<ViewBinding>() {
     private fun createShare(
         workerUrl: String,
         deviceName: String,
+        permanent: Boolean,
+        allowProgress: Boolean,
         onResult: (RelayShareResult?, String) -> Unit
     ) {
         saveInputs(workerUrl, deviceName)
@@ -241,7 +244,7 @@ class RelaySettingsActivity : BaseActivity<ViewBinding>() {
                     val config = RelayConfig.load(this@RelaySettingsActivity).getOrThrow()
                     RelayControlClient(config).let { client ->
                         try {
-                            client.createReadShare()
+                            client.createReadShare(permanent = permanent, allowProgress = allowProgress)
                         } finally {
                             client.close()
                         }
@@ -281,7 +284,7 @@ private fun RelaySettingsScreen(
     onEnabledChange: (Boolean, String, String) -> Boolean,
     onReconnect: (String, String) -> Unit,
     onProvision: (String, String, String, (Boolean, String) -> Unit) -> Unit,
-    onCreateShare: (String, String, (RelayShareResult?, String) -> Unit) -> Unit,
+    onCreateShare: (String, String, Boolean, Boolean, (RelayShareResult?, String) -> Unit) -> Unit,
     onCopyShare: (String) -> Unit,
     onShareQr: (String) -> Unit,
     onRevokeShare: (String, (Boolean, String) -> Unit) -> Unit,
@@ -295,6 +298,8 @@ private fun RelaySettingsScreen(
     var adminToken by remember { mutableStateOf("") }
     var shareUrl by remember { mutableStateOf("") }
     var shareId by remember { mutableStateOf("") }
+    var permanentShare by rememberSaveable { mutableStateOf(false) }
+    var shareProgressSync by rememberSaveable { mutableStateOf(false) }
     var operationMessage by remember { mutableStateOf("") }
     val stateText = relayStateText(connectionState)
     val invalidAdminTokenMessage = stringResource(R.string.public_web_relay_admin_token_invalid)
@@ -442,6 +447,19 @@ private fun RelaySettingsScreen(
                             stringResource(R.string.public_web_relay_device_id),
                             deviceId.ifBlank { stringResource(R.string.public_web_relay_unavailable) }
                         )
+                        RelayOptionSwitch(
+                            title = stringResource(R.string.public_web_relay_permanent_share),
+                            checked = permanentShare,
+                            onCheckedChange = { permanentShare = it },
+                            palette = palette
+                        )
+                        RelayOptionSwitch(
+                            title = stringResource(R.string.public_web_relay_progress_sync),
+                            summary = stringResource(R.string.public_web_relay_progress_sync_summary),
+                            checked = shareProgressSync,
+                            onCheckedChange = { shareProgressSync = it },
+                            palette = palette
+                        )
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -459,7 +477,12 @@ private fun RelaySettingsScreen(
                                 text = stringResource(R.string.public_web_relay_create_share),
                                 palette = palette.miuix,
                                 onClick = {
-                                    onCreateShare(workerUrl, deviceName) { share, message ->
+                                    onCreateShare(
+                                        workerUrl,
+                                        deviceName,
+                                        permanentShare,
+                                        shareProgressSync
+                                    ) { share, message ->
                                         shareUrl = share?.shareUrl.orEmpty()
                                         shareId = share?.id.orEmpty()
                                         operationMessage = message
@@ -609,6 +632,38 @@ private fun RelayTextField(
         ),
         modifier = Modifier.fillMaxWidth()
     )
+}
+
+@Composable
+private fun RelayOptionSwitch(
+    title: String,
+    summary: String? = null,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    palette: AppManagementPalette
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(text = title, color = palette.settings.primaryText, fontSize = 14.sp)
+            summary?.let {
+                Text(
+                    text = it,
+                    color = palette.settings.secondaryText,
+                    fontSize = 12.sp,
+                    lineHeight = 17.sp,
+                    modifier = Modifier.padding(top = 2.dp)
+                )
+            }
+        }
+        LegadoMiuixSwitch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            palette = palette.miuix
+        )
+    }
 }
 
 @Composable

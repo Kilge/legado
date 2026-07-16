@@ -93,6 +93,15 @@ object BookController {
         }
     }
 
+    /** Resolve a cover only through an existing bookshelf entry; never accepts a raw file path. */
+    fun getRelayBookCover(parameters: Map<String, List<String>>): ReturnData {
+        val bookUrl = parameters["url"]?.firstOrNull()
+            ?: return ReturnData().setErrorMsg("bookUrl为空")
+        val book = appDb.bookDao.getBook(bookUrl)
+            ?: return ReturnData().setErrorMsg("bookUrl不对")
+        return getCover(mapOf("path" to listOf(book.getDisplayCover().orEmpty())))
+    }
+
     /**
      * 获取正文图片
      */

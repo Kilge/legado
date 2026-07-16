@@ -88,6 +88,7 @@ internal data class RelayControlMessage(
     val method: String? = null,
     val path: String? = null,
     val contentLength: Long? = null,
+    val bodyBase64: String? = null,
     val headers: Map<String, String>? = null,
     val status: Int? = null,
     val bytes: Int? = null,

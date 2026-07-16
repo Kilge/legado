@@ -188,6 +188,12 @@ const getProxyCoverUrl = (coverUrl: string) => {
     legado_http_entry_point,
   ).toString()
 }
+
+const getBookCoverUrl = (bookUrl: string) =>
+  new URL(
+    'getBookCover?url=' + encodeURIComponent(bookUrl),
+    legado_http_entry_point,
+  ).toString()
 /**
  * 从阅读获取需要特定处理的图片
  * @param {string} bookUrl
@@ -230,5 +236,6 @@ export default {
   debug,
 
   getProxyCoverUrl,
+  getBookCoverUrl,
   getProxyImageUrl,
 }

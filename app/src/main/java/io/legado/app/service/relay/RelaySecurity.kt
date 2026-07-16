@@ -217,13 +217,14 @@ internal object RelayReadAllowlist {
         "/getChapterList",
         "/getBookContent",
         "/getReadConfig"
+        , "/getBookCover"
     )
+    private const val PROGRESS_PATH = "/saveBookProgress"
     private val allowedHeaders = setOf(
         "accept", "accept-language", "if-modified-since", "if-none-match", "range", "user-agent"
     )
 
     fun validate(message: RelayControlMessage): String? {
-        if (message.method != "GET") return "method_not_allowed"
         val rawPath = message.path ?: return "invalid_path"
         if (rawPath.length !in 1..2048 || rawPath.any { it.code < 0x20 || it.code == 0x7f }) {
             return "invalid_path"
@@ -233,13 +234,30 @@ internal object RelayReadAllowlist {
         if (!rawPath.startsWith('/') || '#' in rawPath || '\\' in pathOnly || "//" in pathOnly ||
             "%2e" in lowerPath || "%2f" in lowerPath || "%5c" in lowerPath
         ) return "invalid_path"
-        if (pathOnly !in paths) return "path_not_allowed"
-        if ((message.contentLength ?: 0L) != 0L) return "body_not_allowed"
+        val method = message.method
+        if (method != "GET" && !(method == "POST" && pathOnly == PROGRESS_PATH)) {
+            return if (method == "POST") "method_not_allowed" else "path_not_allowed"
+        }
+        val isRead = method == "GET" && pathOnly in paths
+        val isProgressWrite = method == "POST" && pathOnly == PROGRESS_PATH && rawPath == PROGRESS_PATH
+        if (!isRead && !isProgressWrite) return "path_not_allowed"
+        val body = message.bodyBase64?.decodeBase64()?.toByteArray() ?: ByteArray(0)
+        val declaredLength = message.contentLength ?: 0L
+        if (isRead && (declaredLength != 0L || body.isNotEmpty())) return "body_not_allowed"
+        if (isProgressWrite && (body.isEmpty() || body.size > 16 * 1024 || declaredLength != body.size.toLong())) {
+            return "invalid_body"
+        }
         val headers = message.headers.orEmpty()
         if (headers.size > 32) return "headers_too_large"
         for ((name, value) in headers) {
             if (name.length !in 1..64 || value.length > 4096) return "headers_too_large"
-            if (name.lowercase() !in allowedHeaders) return "forbidden_header"
+            val normalizedName = name.lowercase()
+            if (normalizedName !in allowedHeaders && !(isProgressWrite && normalizedName == "content-type")) {
+                return "forbidden_header"
+            }
+            if (normalizedName == "content-type" && value.substringBefore(';').trim() != "application/json") {
+                return "invalid_content_type"
+            }
             if (name.any { it.code <= 0x20 || it.code >= 0x7f } ||
                 value.any { it == '\r' || it == '\n' || it.code == 0 }
             ) return "invalid_header"

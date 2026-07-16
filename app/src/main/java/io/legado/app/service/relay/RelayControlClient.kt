@@ -13,7 +13,9 @@ import java.util.concurrent.TimeUnit
 internal data class RelayShareResult(
     val id: String,
     val shareUrl: String,
-    val expiresAt: Long
+    val expiresAt: Long,
+    val allowProgress: Boolean = false,
+    val permanent: Boolean = false
 )
 
 internal class RelayControlClient(
@@ -58,11 +60,20 @@ internal class RelayControlClient(
         }
     }
 
-    fun createReadShare(expiresInSeconds: Int = 7 * 24 * 60 * 60): RelayShareResult {
-        require(expiresInSeconds in 60..2_592_000)
+    fun createReadShare(
+        expiresInSeconds: Int = 7 * 24 * 60 * 60,
+        permanent: Boolean = false,
+        allowProgress: Boolean = false
+    ): RelayShareResult {
+        require(permanent || expiresInSeconds in 60..2_592_000)
         val path = "/v1/device/share"
         val bodyBytes = GSON.toJson(
-            mapOf("scope" to "read", "expiresInSeconds" to expiresInSeconds)
+            mapOf(
+                "scope" to "read",
+                "expiresInSeconds" to expiresInSeconds,
+                "permanent" to permanent,
+                "allowProgress" to allowProgress
+            )
         ).toByteArray(Charsets.UTF_8)
         val proof = RelayAuthenticator.createControlProof(config.identity, "POST", path, bodyBytes)
         val request = Request.Builder()
@@ -84,7 +95,8 @@ internal class RelayControlClient(
                 shareUrl.fragment?.startsWith("token=") == true &&
                 token?.matches(Regex("^[A-Za-z0-9_-]{16,64}\\.[A-Za-z0-9_-]{24,64}$")) == true &&
                 token?.substringBefore('.') == parsed.id &&
-                parsed.expiresAt > System.currentTimeMillis() / 1000L
+                parsed.expiresAt > System.currentTimeMillis() / 1000L &&
+                parsed.permanent == permanent && parsed.allowProgress == allowProgress
         ) {
             "Worker returned an invalid share link"
         }
