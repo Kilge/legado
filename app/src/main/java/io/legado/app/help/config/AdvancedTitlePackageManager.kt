@@ -28,8 +28,27 @@ object AdvancedTitlePackageManager {
     data class Config(
         val id: String,
         val name: String,
-        val updatedAt: Long = System.currentTimeMillis()
-    )
+        val updatedAt: Long = System.currentTimeMillis(),
+        val splitMode: Int? = null,
+        val delimiter: String? = null,
+        val regex: String? = null,
+        val heightFactor: Int? = null
+    ) {
+        fun splitRuleOrNull(): AdvancedTitleConfig.SplitRule? {
+            if (splitMode == null && delimiter == null && regex == null) return null
+            return AdvancedTitleConfig.SplitRule(
+                mode = if (splitMode == AdvancedTitleConfig.SPLIT_REGEX) {
+                    AdvancedTitleConfig.SPLIT_REGEX
+                } else {
+                    AdvancedTitleConfig.SPLIT_DELIMITER
+                },
+                delimiter = delimiter ?: " ",
+                regex = regex ?: AdvancedTitleConfig.DEFAULT_REGEX
+            )
+        }
+
+        fun normalizedHeightFactorOrNull(): Int? = heightFactor?.coerceIn(30, 120)
+    }
 
     data class Entry(
         val config: Config,
@@ -58,7 +77,11 @@ object AdvancedTitlePackageManager {
         config = Config(
             id = BUILTIN_ID,
             name = appCtx.getString(R.string.advanced_title_builtin),
-            updatedAt = 0L
+            updatedAt = 0L,
+            splitMode = AdvancedTitleConfig.SPLIT_DELIMITER,
+            delimiter = " ",
+            regex = AdvancedTitleConfig.DEFAULT_REGEX,
+            heightFactor = AdvancedTitleConfig.DEFAULT_HEIGHT_FACTOR
         ),
         isBuiltin = true
     )
@@ -112,7 +135,25 @@ object AdvancedTitlePackageManager {
         }
     }
 
-    fun addOrUpdate(name: String, json: String, oldEntry: Entry? = null): Entry =
+    fun readTemplate(id: String): String {
+        if (id == BUILTIN_ID) return builtinJson()
+        require(isValidId(id)) { "Invalid advanced title id" }
+        val parent = rootDir.apply { mkdirs() }.canonicalFile
+        val directory = File(parent, id).canonicalFile
+        require(directory.parentFile == parent) { "Advanced title directory escaped its root" }
+        val config = verifyInstalledDirectory(directory, expectedId = id)
+        return readTemplate(Entry(config, directory))
+    }
+
+    fun addOrUpdate(
+        name: String,
+        json: String,
+        oldEntry: Entry? = null,
+        splitRule: AdvancedTitleConfig.SplitRule? = oldEntry?.config?.splitRuleOrNull()
+            ?: AdvancedTitleConfig.globalRule,
+        heightFactor: Int? = oldEntry?.config?.normalizedHeightFactorOrNull()
+            ?: AdvancedTitleConfig.heightFactor
+    ): Entry =
         synchronized(mutationLock) {
         val normalizedName = normalizeName(name)
         validateJson(json)
@@ -132,7 +173,15 @@ object AdvancedTitlePackageManager {
         require(target.parentFile == parent) { "Advanced title directory escaped its root" }
         val staging = File(parent, ".$id.staging-${UUID.randomUUID()}")
         val backup = File(parent, ".$id.backup-${UUID.randomUUID()}")
-        val config = Config(id, normalizedName, System.currentTimeMillis())
+        val config = Config(
+            id = id,
+            name = normalizedName,
+            updatedAt = System.currentTimeMillis(),
+            splitMode = splitRule?.mode,
+            delimiter = splitRule?.delimiter,
+            regex = splitRule?.regex,
+            heightFactor = heightFactor?.coerceIn(30, 120)
+        )
         staging.mkdirs()
         File(staging, MANIFEST_FILE).writeText(GSON.toJson(config))
         lottieFile(staging).writeText(json)
@@ -153,6 +202,8 @@ object AdvancedTitlePackageManager {
         // uses the bounded file cache above, so chapter changes do not repeatedly parse prefs.
         AdvancedTitleConfig.lottieJson = json
         AdvancedTitleConfig.lottiePath = null
+        entry.config.splitRuleOrNull()?.let { AdvancedTitleConfig.globalRule = it }
+        entry.config.normalizedHeightFactorOrNull()?.let { AdvancedTitleConfig.heightFactor = it }
         invalidate()
     }
 
@@ -169,6 +220,11 @@ object AdvancedTitlePackageManager {
                 appCtx.putPrefString(PreferKey.advancedTitlePackage, BUILTIN_ID)
                 AdvancedTitleConfig.lottieJson = builtinJson()
                 AdvancedTitleConfig.lottiePath = null
+                val builtin = builtinEntry().config
+                builtin.splitRuleOrNull()?.let { AdvancedTitleConfig.globalRule = it }
+                builtin.normalizedHeightFactorOrNull()?.let {
+                    AdvancedTitleConfig.heightFactor = it
+                }
             }
             invalidate()
         }

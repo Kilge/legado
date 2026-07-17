@@ -1,15 +1,13 @@
 package io.legado.app.ui.config
 
-import android.app.Activity.RESULT_OK
-import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.view.View
 import android.view.ViewGroup
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
 import io.legado.app.base.BaseActivity
@@ -23,7 +21,6 @@ import io.legado.app.help.http.okHttpClient
 import io.legado.app.lib.dialogs.SelectItem
 import io.legado.app.ui.book.read.config.AdvancedTitleConfigDialog
 import io.legado.app.ui.book.read.page.LottieImageBitmapCache
-import io.legado.app.ui.code.CodeEditActivity
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.widget.compose.AppManagementMenuAction
 import io.legado.app.ui.widget.compose.ComposeConfirmDialog
@@ -41,7 +38,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-class AdvancedTitleManageActivity : BaseActivity<ActivityThemeManageBinding>() {
+class AdvancedTitleManageActivity : BaseActivity<ActivityThemeManageBinding>(),
+    AdvancedTitleConfigDialog.Host {
 
     override val binding by viewBinding(ActivityThemeManageBinding::inflate)
 
@@ -50,9 +48,6 @@ class AdvancedTitleManageActivity : BaseActivity<ActivityThemeManageBinding>() {
     private val loadingState = mutableStateOf(false)
     private var loadJob: Job? = null
     private var loadVersion: Int = 0
-    private var editingEntry: AdvancedTitlePackageManager.Entry? = null
-    private var editingName: String = ""
-    private var editorCursorPosition: Int = 0
     private val importFromNet by lazy { getString(R.string.advanced_title_import_from_net) }
 
     private val importJson = registerForActivityResult(HandleFileContract()) { result ->
@@ -86,15 +81,6 @@ class AdvancedTitleManageActivity : BaseActivity<ActivityThemeManageBinding>() {
             }
         }
     }
-
-    private val jsonEditor =
-        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-            if (result.resultCode != RESULT_OK) return@registerForActivityResult
-            val text = result.data?.getStringExtra("text") ?: return@registerForActivityResult
-            editorCursorPosition = result.data?.getIntExtra("cursorPosition", text.length)
-                ?: text.length
-            saveEditorResult(text)
-        }
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         binding.titleBar.title = getString(R.string.advanced_title_manage)
@@ -132,8 +118,8 @@ class AdvancedTitleManageActivity : BaseActivity<ActivityThemeManageBinding>() {
                             }
                         },
                         onApply = ::applyEntry,
+                        onEdit = ::editEntry,
                         onMoreActions = ::entryActions,
-                        onRuleSettings = ::showRuleSettings,
                         onImport = ::showImportPicker
                     )
                 }
@@ -166,11 +152,6 @@ class AdvancedTitleManageActivity : BaseActivity<ActivityThemeManageBinding>() {
     private fun entryActions(
         entry: AdvancedTitlePackageManager.Entry
     ): List<AppManagementMenuAction> = buildList {
-        add(AppManagementMenuAction(getString(R.string.advanced_title_apply)) { applyEntry(entry) })
-        if (!entry.isBuiltin) {
-            add(AppManagementMenuAction(getString(R.string.edit)) { editEntry(entry) })
-            add(AppManagementMenuAction(getString(R.string.advanced_title_rename)) { renameEntry(entry) })
-        }
         add(AppManagementMenuAction(getString(R.string.export_str)) { exportEntry(entry) })
         if (!entry.isBuiltin) {
             add(
@@ -180,11 +161,6 @@ class AdvancedTitleManageActivity : BaseActivity<ActivityThemeManageBinding>() {
                 ) { confirmDelete(entry) }
             )
         }
-    }
-
-    private fun showRuleSettings() {
-        AdvancedTitleConfigDialog.rulesOnly()
-            .show(supportFragmentManager, "advancedTitleRules")
     }
 
     private fun showImportPicker() {
@@ -265,69 +241,66 @@ class AdvancedTitleManageActivity : BaseActivity<ActivityThemeManageBinding>() {
             runCatching {
                 withContext(Dispatchers.IO) { AdvancedTitlePackageManager.readTemplate(entry) }
             }.onSuccess { json ->
-                editingEntry = entry
-                editingName = entry.name
-                openEditor(json)
+                if (supportFragmentManager.isStateSaved ||
+                    !lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) ||
+                    supportFragmentManager.findFragmentByTag("advancedTitleEdit") != null
+                ) return@onSuccess
+                AdvancedTitleConfigDialog.edit(
+                    entryId = entry.id,
+                    name = entry.name,
+                    json = json,
+                    splitRule = entry.config.splitRuleOrNull()
+                        ?: AdvancedTitleConfig.globalRule,
+                    heightFactor = entry.config.normalizedHeightFactorOrNull()
+                        ?: AdvancedTitleConfig.heightFactor
+                ).show(supportFragmentManager, "advancedTitleEdit")
             }.onFailure { toastOnUi(it.localizedMessage) }
         }
     }
 
-    private fun openEditor(json: String) {
-        jsonEditor.launch(Intent(this, CodeEditActivity::class.java).apply {
-            putExtra("text", json)
-            putExtra("title", getString(R.string.advanced_title_json_label))
-            putExtra("cursorPosition", editorCursorPosition.coerceIn(0, json.length))
-        })
+    override fun onAdvancedTitleSaved(
+        entryId: String,
+        name: String,
+        json: String,
+        splitRule: AdvancedTitleConfig.SplitRule,
+        heightFactor: Int
+    ) {
+        val entry = entriesState.value.firstOrNull { it.id == entryId }
+        if (entry == null || entry.isBuiltin) {
+            toastOnUi(R.string.error)
+            loadEntries()
+            return
+        }
+        saveEditedEntry(entry, name, json, splitRule, heightFactor)
     }
 
-    private fun saveEditorResult(json: String) {
-        val old = editingEntry ?: return
+    private fun saveEditedEntry(
+        old: AdvancedTitlePackageManager.Entry,
+        name: String,
+        json: String,
+        splitRule: AdvancedTitleConfig.SplitRule,
+        heightFactor: Int
+    ) {
         lifecycleScope.launch {
             runCatching {
                 withContext(Dispatchers.IO) {
-                    val updated = AdvancedTitlePackageManager.addOrUpdate(editingName, json, old)
+                    val updated = AdvancedTitlePackageManager.addOrUpdate(
+                        name = name,
+                        json = json,
+                        oldEntry = old,
+                        splitRule = splitRule,
+                        heightFactor = heightFactor
+                    )
                     val active = AdvancedTitlePackageManager.activeId() == updated.id
                     if (active) AdvancedTitlePackageManager.apply(updated)
                     updated to active
                 }
             }.onSuccess { (_, active) ->
                 if (active) notifyReader()
-                editingEntry = null
                 toastOnUi(R.string.success)
                 loadEntries()
             }.onFailure { toastOnUi(it.localizedMessage) }
         }
-    }
-
-    private fun renameEntry(entry: AdvancedTitlePackageManager.Entry) {
-        showDialogFragment(
-            ComposeTextInputDialog.create(
-                title = getString(R.string.advanced_title_rename),
-                hint = getString(R.string.advanced_title_name),
-                initialValue = entry.name,
-                positiveText = getString(R.string.ok),
-                negativeText = getString(R.string.cancel),
-                onPositive = { value ->
-                    lifecycleScope.launch {
-                        runCatching {
-                            val json = withContext(Dispatchers.IO) {
-                                AdvancedTitlePackageManager.readTemplate(entry)
-                            }
-                            withContext(Dispatchers.IO) {
-                                val updated = AdvancedTitlePackageManager.addOrUpdate(value, json, entry)
-                                val active = AdvancedTitlePackageManager.activeId() == updated.id
-                                if (active) AdvancedTitlePackageManager.apply(updated)
-                                active
-                            }
-                        }.onSuccess { active ->
-                            if (active) notifyReader()
-                            loadEntries()
-                        }
-                            .onFailure { toastOnUi(it.localizedMessage) }
-                    }
-                }
-            )
-        )
     }
 
     private fun exportEntry(entry: AdvancedTitlePackageManager.Entry) {

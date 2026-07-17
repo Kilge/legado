@@ -1,6 +1,8 @@
 package io.legado.app.ui.book.read.config
 
+import android.app.Activity.RESULT_OK
 import android.app.Dialog
+import android.content.Intent
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
@@ -9,20 +11,17 @@ import android.view.WindowManager
 import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.LinearLayout
-import android.widget.RadioButton
-import android.widget.RadioGroup
 import android.widget.ScrollView
 import android.widget.TextView
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.cardview.widget.CardView
 import androidx.core.content.ContextCompat
 import androidx.core.widget.doAfterTextChanged
 import androidx.fragment.app.DialogFragment
-import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
-import io.legado.app.constant.EventBus
-import io.legado.app.data.entities.Book
 import io.legado.app.help.config.AdvancedTitleConfig
+import io.legado.app.help.config.AdvancedTitlePackageManager
 import io.legado.app.lib.theme.applyUiBodyTypefaceDeep
 import io.legado.app.lib.theme.applyUiInputStyle
 import io.legado.app.lib.theme.applyUiLabelStyle
@@ -31,21 +30,60 @@ import io.legado.app.lib.theme.applyUiSubtleButtonStyle
 import io.legado.app.lib.theme.applyUiTitleTypeface
 import io.legado.app.lib.theme.dialogSurfaceBackground
 import io.legado.app.lib.theme.uiTypeface
-import io.legado.app.model.ReadBook
+import io.legado.app.ui.code.CodeEditActivity
 import io.legado.app.utils.dpToPx
-import io.legado.app.utils.postEvent
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import io.legado.app.utils.toastOnUi
 
 class AdvancedTitleConfigDialog : DialogFragment() {
 
     companion object {
-        fun rulesOnly() = AdvancedTitleConfigDialog()
+        private const val ARG_ENTRY_ID = "entryId"
+        private const val ARG_NAME = "name"
+        private const val ARG_SPLIT_MODE = "splitMode"
+        private const val ARG_DELIMITER = "delimiter"
+        private const val ARG_REGEX = "regex"
+        private const val ARG_HEIGHT_FACTOR = "heightFactor"
+
+        fun edit(
+            entryId: String,
+            name: String,
+            json: String,
+            splitRule: AdvancedTitleConfig.SplitRule,
+            heightFactor: Int
+        ) = AdvancedTitleConfigDialog().apply {
+            currentJson = json
+            arguments = Bundle().apply {
+                putString(ARG_ENTRY_ID, entryId)
+                putString(ARG_NAME, name)
+                putInt(ARG_SPLIT_MODE, splitRule.mode)
+                putString(ARG_DELIMITER, splitRule.delimiter)
+                putString(ARG_REGEX, splitRule.regex)
+                putInt(ARG_HEIGHT_FACTOR, heightFactor.coerceIn(30, 120))
+            }
+        }
     }
 
-    private val currentBook: Book?
-        get() = ReadBook.book
+    private var currentJson: String = ""
+    private var jsonCursorPosition: Int = 0
+
+    interface Host {
+        fun onAdvancedTitleSaved(
+            entryId: String,
+            name: String,
+            json: String,
+            splitRule: AdvancedTitleConfig.SplitRule,
+            heightFactor: Int
+        )
+    }
+
+    private val jsonEditor = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode != RESULT_OK) return@registerForActivityResult
+        val text = result.data?.getStringExtra("text") ?: return@registerForActivityResult
+        currentJson = text
+        jsonCursorPosition = result.data?.getIntExtra("cursorPosition", text.length) ?: text.length
+    }
 
     override fun onStart() {
         super.onStart()
@@ -61,10 +99,23 @@ class AdvancedTitleConfigDialog : DialogFragment() {
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
         val context = requireContext()
-        val book = currentBook
-        val globalRule = AdvancedTitleConfig.globalRule
-        val bookRule = AdvancedTitleConfig.bookRule(book)
-        val startRule = bookRule ?: globalRule
+        val args = requireArguments()
+        val entryId = args.getString(ARG_ENTRY_ID).orEmpty()
+        val initialName = args.getString(ARG_NAME).orEmpty()
+        val startRule = AdvancedTitleConfig.SplitRule(
+            mode = args.getInt(ARG_SPLIT_MODE, AdvancedTitleConfig.SPLIT_DELIMITER),
+            delimiter = args.getString(ARG_DELIMITER) ?: " ",
+            regex = args.getString(ARG_REGEX) ?: AdvancedTitleConfig.DEFAULT_REGEX
+        )
+        val initialHeightFactor = args.getInt(
+            ARG_HEIGHT_FACTOR,
+            AdvancedTitleConfig.DEFAULT_HEIGHT_FACTOR
+        )
+        if (currentJson.isBlank()) {
+            currentJson = runCatching {
+                AdvancedTitlePackageManager.readTemplate(entryId)
+            }.getOrDefault("")
+        }
         val emptyText = getString(R.string.empty)
 
         val root = LinearLayout(context).apply {
@@ -91,21 +142,10 @@ class AdvancedTitleConfigDialog : DialogFragment() {
             applyUiSubtleButtonStyle(context)
         }
 
-        val scopeGroup = RadioGroup(context).apply { orientation = RadioGroup.HORIZONTAL }
-        val globalButton = RadioButton(context).apply {
-            text = getString(R.string.advanced_title_scope_global)
-            id = View.generateViewId()
-            typeface = context.uiTypeface()
+        val nameEdit = edit(initialName).apply {
+            hint = getString(R.string.advanced_title_name)
+            isSingleLine = true
         }
-        val bookButton = RadioButton(context).apply {
-            text = getString(R.string.advanced_title_scope_book)
-            id = View.generateViewId()
-            isEnabled = book != null
-            typeface = context.uiTypeface()
-        }
-        scopeGroup.addView(globalButton)
-        scopeGroup.addView(bookButton)
-        scopeGroup.check(if (bookRule != null) bookButton.id else globalButton.id)
 
         val regexCheck = CheckBox(context).apply {
             text = getString(R.string.advanced_title_use_regex)
@@ -117,13 +157,16 @@ class AdvancedTitleConfigDialog : DialogFragment() {
             else startRule.delimiter
         )
         val sampleEdit = edit(getString(R.string.advanced_title_sample_default))
-        val heightEdit = edit(AdvancedTitleConfig.heightFactor.toString()).apply {
+        val heightEdit = edit(initialHeightFactor.coerceIn(30, 120).toString()).apply {
             hint = getString(R.string.advanced_title_height_factor_hint)
             inputType = android.text.InputType.TYPE_CLASS_NUMBER
         }
         val preview = TextView(context).apply {
             setPadding(0, 8.dpToPx(), 0, 0)
             applyUiSectionTitleStyle(context)
+        }
+        val openEditorButton = button(getString(R.string.advanced_title_open_editor)).apply {
+            setOnClickListener { openJsonEditor() }
         }
 
         fun buildRule() = AdvancedTitleConfig.SplitRule(
@@ -164,13 +207,13 @@ class AdvancedTitleConfigDialog : DialogFragment() {
         }
 
         root.addView(TextView(context).apply {
-            text = getString(R.string.advanced_title_rule_settings)
+            text = getString(R.string.advanced_title_edit_title)
             textSize = 18f
             applyUiTitleTypeface(context)
             setPadding(0, 2.dpToPx(), 0, 8.dpToPx())
         })
-        root.addView(label(getString(R.string.advanced_title_scope_label)))
-        root.addView(scopeGroup)
+        root.addView(label(getString(R.string.advanced_title_name)))
+        root.addView(nameEdit)
         root.addView(label(getString(R.string.advanced_title_rule_label)))
         root.addView(regexCheck)
         root.addView(ruleEdit)
@@ -179,6 +222,25 @@ class AdvancedTitleConfigDialog : DialogFragment() {
         root.addView(preview)
         root.addView(label(getString(R.string.advanced_title_height_factor_label)))
         root.addView(heightEdit)
+        root.addView(LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(label(getString(R.string.advanced_title_json_label)).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    0,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    1f
+                )
+            })
+            addView(openEditorButton)
+        })
+        root.addView(TextView(context).apply {
+            text = getString(R.string.advanced_title_json_hint)
+            textSize = 12f
+            typeface = context.uiTypeface()
+            setPadding(0, 4.dpToPx(), 0, 6.dpToPx())
+            setTextColor(ContextCompat.getColor(context, android.R.color.darker_gray))
+        })
         root.addView(View(context).apply {
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -190,20 +252,6 @@ class AdvancedTitleConfigDialog : DialogFragment() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(0, 12.dpToPx(), 0, 6.dpToPx())
-            addView(button(getString(R.string.restore_default)).apply {
-                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-                    .apply { marginEnd = 6.dpToPx() }
-                setOnClickListener {
-                    AdvancedTitleConfig.globalRule = AdvancedTitleConfig.SplitRule()
-                    AdvancedTitleConfig.heightFactor = AdvancedTitleConfig.DEFAULT_HEIGHT_FACTOR
-                    book?.let {
-                        AdvancedTitleConfig.setBookRule(it, null)
-                        lifecycleScope.launch { withContext(Dispatchers.IO) { it.save() } }
-                    }
-                    postEvent(EventBus.UP_CONFIG, arrayListOf(5, 8))
-                    dismissAllowingStateLoss()
-                }
-            })
             addView(button(getString(R.string.cancel)).apply {
                 layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
                 setOnClickListener { dismissAllowingStateLoss() }
@@ -212,20 +260,36 @@ class AdvancedTitleConfigDialog : DialogFragment() {
                 layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
                     .apply { marginStart = 6.dpToPx() }
                 setOnClickListener {
+                    val name = nameEdit.text?.toString()?.trim().orEmpty()
+                    if (name.isEmpty()) {
+                        context.toastOnUi(getString(R.string.advanced_title_name_required))
+                        return@setOnClickListener
+                    }
+                    val json = currentJson.trim()
+                    val jsonError = runCatching {
+                        AdvancedTitlePackageManager.validateJson(json)
+                    }.exceptionOrNull()
+                    if (jsonError != null) {
+                        context.toastOnUi(
+                            jsonError.localizedMessage
+                                ?: getString(R.string.advanced_title_invalid_json)
+                        )
+                        return@setOnClickListener
+                    }
                     val rule = buildRule()
-                    AdvancedTitleConfig.heightFactor = heightEdit.text?.toString()
+                    val heightFactor = heightEdit.text?.toString()
                         ?.trim()
                         ?.toIntOrNull()
                         ?.coerceIn(30, 120)
                         ?: AdvancedTitleConfig.DEFAULT_HEIGHT_FACTOR
-                    if (scopeGroup.checkedRadioButtonId == bookButton.id && book != null) {
-                        AdvancedTitleConfig.setBookRule(book, rule)
-                        lifecycleScope.launch { withContext(Dispatchers.IO) { book.save() } }
-                    } else {
-                        AdvancedTitleConfig.globalRule = rule
-                    }
-                    postEvent(EventBus.UP_CONFIG, arrayListOf(5, 8))
                     dismissAllowingStateLoss()
+                    (activity as? Host)?.onAdvancedTitleSaved(
+                        entryId,
+                        name,
+                        json,
+                        rule,
+                        heightFactor
+                    )
                 }
             })
         })
@@ -259,5 +323,13 @@ class AdvancedTitleConfigDialog : DialogFragment() {
         }
         container.applyUiBodyTypefaceDeep(context.uiTypeface())
         return AlertDialog.Builder(context).setView(container).create()
+    }
+
+    private fun openJsonEditor() {
+        jsonEditor.launch(Intent(requireContext(), CodeEditActivity::class.java).apply {
+            putExtra("text", currentJson)
+            putExtra("title", getString(R.string.advanced_title_json_label))
+            putExtra("cursorPosition", jsonCursorPosition.coerceIn(0, currentJson.length))
+        })
     }
 }

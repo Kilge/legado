@@ -66,8 +66,8 @@ internal fun AdvancedTitleManageScreen(
     loading: Boolean,
     previewProvider: suspend (AdvancedTitlePackageManager.Entry) -> String?,
     onApply: (AdvancedTitlePackageManager.Entry) -> Unit,
+    onEdit: (AdvancedTitlePackageManager.Entry) -> Unit,
     onMoreActions: (AdvancedTitlePackageManager.Entry) -> List<AppManagementMenuAction>,
-    onRuleSettings: () -> Unit,
     onImport: () -> Unit
 ) {
     val palette = rememberAppManagementPalette()
@@ -107,33 +107,22 @@ internal fun AdvancedTitleManageScreen(
                         palette = palette,
                         previewProvider = previewProvider,
                         onApply = { onApply(entry) },
+                        onEdit = { onEdit(entry) },
                         moreActions = onMoreActions(entry)
                     )
                 }
             }
 
-            Row(
+            LegadoMiuixActionButton(
+                text = LocalContext.current.getString(R.string.import_str),
+                palette = palette.miuix,
+                onClick = onImport,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                LegadoMiuixActionButton(
-                    text = LocalContext.current.getString(R.string.advanced_title_rule_settings),
-                    palette = palette.miuix,
-                    onClick = onRuleSettings,
-                    modifier = Modifier.weight(1f),
-                    minHeight = 48.dp
-                )
-                LegadoMiuixActionButton(
-                    text = LocalContext.current.getString(R.string.import_str),
-                    palette = palette.miuix,
-                    onClick = onImport,
-                    modifier = Modifier.weight(1f),
-                    minHeight = 48.dp,
-                    primary = true
-                )
-            }
+                minHeight = 48.dp,
+                primary = true
+            )
             Spacer(modifier = Modifier.windowInsetsPadding(WindowInsets.navigationBars))
         }
     }
@@ -146,6 +135,7 @@ private fun AdvancedTitleItem(
     palette: AppManagementPalette,
     previewProvider: suspend (AdvancedTitlePackageManager.Entry) -> String?,
     onApply: () -> Unit,
+    onEdit: () -> Unit,
     moreActions: List<AppManagementMenuAction>
 ) {
     AppManagementCard(
@@ -192,6 +182,15 @@ private fun AdvancedTitleItem(
                         enabled = !active,
                         onClick = onApply
                     )
+                    if (!entry.isBuiltin) {
+                        AdvancedTitleActionButton(
+                            text = LocalContext.current.getString(R.string.edit),
+                            palette = palette.miuix,
+                            accent = false,
+                            enabled = true,
+                            onClick = onEdit
+                        )
+                    }
                     AppManagementMoreActionButton(
                         actionsProvider = { moreActions },
                         palette = palette,
