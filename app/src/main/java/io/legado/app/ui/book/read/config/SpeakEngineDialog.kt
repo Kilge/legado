@@ -73,6 +73,7 @@ import io.legado.app.lib.theme.uiTypeface
 import io.legado.app.model.ReadAloud
 import io.legado.app.model.ReadBook
 import io.legado.app.ui.association.ImportHttpTtsDialog
+import io.legado.app.ui.association.showShibbolethDialog
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.login.SourceLoginActivity
 import io.legado.app.ui.widget.compose.showComposeConfirmDialog
@@ -81,6 +82,7 @@ import io.legado.app.utils.ACache
 import io.legado.app.utils.ColorUtils
 import io.legado.app.utils.FileUtils
 import io.legado.app.utils.GSON
+import io.legado.app.utils.ShibbolethCodec
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.fromJsonObject
 import io.legado.app.utils.isAbsUrl
@@ -117,14 +119,18 @@ class SpeakEngineDialog : BaseDialogFragment(0), SpeakEngineDialogActions {
 
     private val exportDirResult = registerForActivityResult(HandleFileContract()) {
         it.uri?.let { uri ->
+            val url = uri.toString()
             showComposeTextInputDialog(
                 title = getString(R.string.export_success),
                 hint = getString(R.string.path),
-                initialValue = uri.toString(),
-                message = DirectLinkUpload.getSummary().takeIf { uri.toString().isAbsUrl() },
+                initialValue = url,
+                message = DirectLinkUpload.getSummary().takeIf { url.isAbsUrl() },
                 readOnly = true,
                 positiveText = getString(R.string.copy_text),
-                onPositive = { requireContext().sendToClip(uri.toString()) }
+                neutralText = getString(R.string.shibboleth)
+                    .takeIf { ShibbolethCodec.canEncodeUrl(url) },
+                onPositive = { requireContext().sendToClip(url) },
+                onNeutral = { showShibbolethDialog(url, ShibbolethCodec.TTS_RULE) }
             )
         }
     }

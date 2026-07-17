@@ -56,7 +56,8 @@ object DirectLinkUploadRuleCodec {
             uploadUrl = requiredNonBlankString("uploadUrl"),
             downloadUrlRule = requiredNonBlankString("downloadUrlRule"),
             summary = optionalString("summary"),
-            compress = optionalBoolean("compress")
+            compress = optionalBoolean("compress"),
+            expiryDate = optionalNonNegativeInt("expiryDate")
         )
     }
 
@@ -81,7 +82,12 @@ object DirectLinkUploadRuleCodec {
             uploadUrl = uploadUrl,
             downloadUrlRule = downloadUrlRule,
             summary = summary,
-            compress = rule.compress
+            compress = rule.compress,
+            expiryDate = rule.expiryDate.also {
+                require(it >= 0) {
+                    "Direct link upload rule expiryDate must not be negative"
+                }
+            }
         )
     }
 
@@ -117,6 +123,25 @@ object DirectLinkUploadRuleCodec {
             throw IllegalArgumentException("Direct link upload rule $name must be a boolean")
         }
         return element.asBoolean
+    }
+
+    private fun JsonObject.optionalNonNegativeInt(name: String): Int {
+        val element = get(name)
+        if (element == null || element.isJsonNull) return 0
+        if (!element.isJsonPrimitive || !element.asJsonPrimitive.isNumber) {
+            throw IllegalArgumentException("Direct link upload rule $name must be an integer")
+        }
+        val decimal = runCatching { element.asBigDecimal }.getOrElse {
+            throw IllegalArgumentException("Direct link upload rule $name must be an integer")
+        }
+        if (decimal.stripTrailingZeros().scale() > 0 || decimal < java.math.BigDecimal.ZERO) {
+            throw IllegalArgumentException(
+                "Direct link upload rule $name must be a non-negative integer"
+            )
+        }
+        return runCatching { decimal.intValueExact() }.getOrElse {
+            throw IllegalArgumentException("Direct link upload rule $name is out of range")
+        }
     }
 
     private fun parse(json: String): JsonElement {

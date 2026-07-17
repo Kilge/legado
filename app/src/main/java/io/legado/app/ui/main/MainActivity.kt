@@ -47,6 +47,7 @@ import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentManager
 import androidx.fragment.app.FragmentStatePagerAdapter
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.Lifecycle
 import androidx.viewpager.widget.ViewPager
 import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.google.android.material.navigation.NavigationBarView
@@ -84,8 +85,11 @@ import io.legado.app.ui.about.ReadRecordWidgetStore
 import io.legado.app.ui.about.loadReadRecordAvatar
 import io.legado.app.ui.about.loadReadRecordCover
 import io.legado.app.ui.association.ImportBookSourceDialog
+import io.legado.app.ui.association.ImportDictRuleDialog
+import io.legado.app.ui.association.ImportHttpTtsDialog
 import io.legado.app.ui.association.ImportReplaceRuleDialog
 import io.legado.app.ui.association.ImportRssSourceDialog
+import io.legado.app.ui.association.ImportTxtTocRuleDialog
 import io.legado.app.ui.main.bookshelf.BaseBookshelfFragment
 import io.legado.app.ui.main.bookshelf.style1.BookshelfFragment1
 import io.legado.app.ui.main.bookshelf.style2.BookshelfFragment2
@@ -102,6 +106,9 @@ import io.legado.app.ui.widget.dialog.TextDialog
 import io.legado.app.ui.widget.text.BadgeView
 import io.legado.app.utils.isCreated
 import io.legado.app.utils.BitmapUtils
+import io.legado.app.utils.ShibbolethCodec
+import io.legado.app.utils.clearClip
+import io.legado.app.utils.getClipText
 import io.legado.app.utils.navigationBarHeight
 import io.legado.app.utils.observeEvent
 import io.legado.app.utils.getPrefInt
@@ -150,6 +157,9 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
     private val idReadRecord = 3
     private val idMy = 4
     private var exitTime: Long = 0
+    private var clipboardImportEnabled = false
+    private var rejectedShibbolethHash: Int? = null
+    private val shibbolethImportRunnable = Runnable { readShibbolethFromClipboard() }
     private var bookshelfReselected: Long = 0
     private var exploreReselected: Long = 0
     private var pagePosition = 0
@@ -318,6 +328,8 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
         lifecycleScope.launch {
             //隐私协议
             if (!privacyPolicy()) return@launch
+            clipboardImportEnabled = true
+            scheduleShibbolethImport(500L)
             //版本更新
             upVersion()
             //设置本地密码
@@ -346,6 +358,9 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
 
     override fun onResume() {
         super.onResume()
+        if (clipboardImportEnabled) {
+            scheduleShibbolethImport(500L)
+        }
         refreshMainThemeBackground()
         refreshBottomNavigationConfig()
         binding.root.post {
@@ -354,6 +369,63 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
         if (isSidebarMode()) {
             updateSideGoalHeader()
         }
+    }
+
+    override fun onPause() {
+        binding.root.removeCallbacks(shibbolethImportRunnable)
+        super.onPause()
+    }
+
+    private fun scheduleShibbolethImport(delayMillis: Long) {
+        binding.root.removeCallbacks(shibbolethImportRunnable)
+        binding.root.postDelayed(shibbolethImportRunnable, delayMillis)
+    }
+
+    private fun readShibbolethFromClipboard() {
+        if (!clipboardImportEnabled ||
+            !lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) ||
+            supportFragmentManager.isStateSaved
+        ) {
+            return
+        }
+        val text = getClipText()
+        if (!ShibbolethCodec.looksLikeCode(text)) {
+            rejectedShibbolethHash = null
+            return
+        }
+        val codeText = requireNotNull(text)
+        val payload = ShibbolethCodec.decode(codeText).getOrElse {
+            notifyRejectedShibboleth(codeText)
+            return
+        }
+        if (payload.isExpired()) {
+            rejectedShibbolethHash = null
+            clearClip()
+            toastOnUi(R.string.shibboleth_expired)
+            return
+        }
+        val dialog = when (payload.type) {
+            ShibbolethCodec.BOOK_SOURCE -> ImportBookSourceDialog(payload.url)
+            ShibbolethCodec.RSS_SOURCE -> ImportRssSourceDialog(payload.url)
+            ShibbolethCodec.DICT_RULE -> ImportDictRuleDialog(payload.url)
+            ShibbolethCodec.REPLACE_RULE -> ImportReplaceRuleDialog(payload.url)
+            ShibbolethCodec.TOC_RULE -> ImportTxtTocRuleDialog(payload.url)
+            ShibbolethCodec.TTS_RULE -> ImportHttpTtsDialog(payload.url)
+            else -> {
+                notifyRejectedShibboleth(codeText)
+                return
+            }
+        }
+        rejectedShibbolethHash = null
+        clearClip()
+        showDialogFragment(dialog)
+    }
+
+    private fun notifyRejectedShibboleth(text: String) {
+        val hash = text.hashCode()
+        if (rejectedShibbolethHash == hash) return
+        rejectedShibbolethHash = hash
+        toastOnUi(R.string.shibboleth_invalid)
     }
 
     override fun upBackgroundImage() {

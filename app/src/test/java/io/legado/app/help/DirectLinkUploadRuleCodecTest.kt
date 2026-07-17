@@ -32,7 +32,7 @@ class DirectLinkUploadRuleCodecTest {
         val encoded = DirectLinkUploadRuleCodec.encode(decoded).getOrThrow()
         val encodedObject = GSONStrict.fromJson(encoded, JsonObject::class.java)
         assertEquals(
-            setOf("uploadUrl", "downloadUrlRule", "summary", "compress"),
+            setOf("uploadUrl", "downloadUrlRule", "summary", "compress", "expiryDate"),
             encodedObject.keySet()
         )
         assertEquals(decoded, DirectLinkUploadRuleCodec.decode(encoded).getOrThrow())
@@ -51,6 +51,37 @@ class DirectLinkUploadRuleCodecTest {
         assertFalse(missing.compress)
         assertEquals("", explicitNull.summary)
         assertFalse(explicitNull.compress)
+    }
+
+    @Test
+    fun expiryDateDefaultsToPermanentAndRoundTrips() {
+        val legacy = DirectLinkUploadRuleCodec.decode(
+            """{"uploadUrl":"https://example.com","downloadUrlRule":"$.url","summary":"x"}"""
+        ).getOrThrow()
+        assertEquals(0, legacy.expiryDate)
+
+        val expiring = DirectLinkUpload.Rule(
+            uploadUrl = "https://example.com",
+            downloadUrlRule = "$.url",
+            summary = "x",
+            expiryDate = 30
+        )
+        val encoded = DirectLinkUploadRuleCodec.encode(expiring).getOrThrow()
+        assertEquals(30, DirectLinkUploadRuleCodec.decode(encoded).getOrThrow().expiryDate)
+    }
+
+    @Test
+    fun negativeOrFractionalExpiryDateIsRejected() {
+        assertTrue(
+            DirectLinkUploadRuleCodec.decode(
+                """{"uploadUrl":"https://example.com","downloadUrlRule":"$.url","summary":"x","expiryDate":-1}"""
+            ).isFailure
+        )
+        assertTrue(
+            DirectLinkUploadRuleCodec.decode(
+                """{"uploadUrl":"https://example.com","downloadUrlRule":"$.url","summary":"x","expiryDate":1.5}"""
+            ).isFailure
+        )
     }
 
     @Test

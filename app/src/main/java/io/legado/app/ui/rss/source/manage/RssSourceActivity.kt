@@ -20,6 +20,7 @@ import io.legado.app.data.entities.RssSource
 import io.legado.app.databinding.ActivityRssSourceBinding
 import io.legado.app.help.DirectLinkUpload
 import io.legado.app.ui.association.ImportRssSourceDialog
+import io.legado.app.ui.association.showShibbolethDialog
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.qrcode.QrCodeResult
 import io.legado.app.ui.rss.source.edit.RssSourceEditActivity
@@ -33,6 +34,7 @@ import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.ui.widget.compose.showComposeSuggestionTextInputDialog
 import io.legado.app.ui.widget.compose.showComposeTextInputDialog
 import io.legado.app.utils.ACache
+import io.legado.app.utils.ShibbolethCodec
 import io.legado.app.utils.isAbsUrl
 import io.legado.app.utils.launch
 import io.legado.app.utils.sendToClip
@@ -79,16 +81,20 @@ class RssSourceActivity : VMBaseActivity<ActivityRssSourceBinding, RssSourceView
     }
     private val exportResult = registerForActivityResult(HandleFileContract()) {
         it.uri?.let { uri ->
+            val url = uri.toString()
             showComposeConfirmDialog(
                 title = getString(R.string.export_success),
-                message = if (uri.toString().isAbsUrl()) {
-                    uri.toString() + "\n" + DirectLinkUpload.getSummary()
+                message = if (url.isAbsUrl()) {
+                    url + "\n" + DirectLinkUpload.getSummary()
                 } else {
-                    uri.toString()
+                    url
                 },
                 positiveText = getString(R.string.copy_text),
                 negativeText = getString(R.string.cancel),
-                onPositive = { sendToClip(uri.toString()) }
+                neutralText = getString(R.string.shibboleth)
+                    .takeIf { ShibbolethCodec.canEncodeUrl(url) },
+                onPositive = { sendToClip(url) },
+                onNeutral = { showShibbolethDialog(url, ShibbolethCodec.RSS_SOURCE) }
             )
         }
     }

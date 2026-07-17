@@ -315,7 +315,15 @@ private fun DirectLinkUploadContent(
                     if (downloadUrlRule.isBlank()) {
                         return@LegadoMiuixActionButton
                     }
-                    onSave(DirectLinkUpload.Rule(uploadUrl, downloadUrlRule, summary, compress))
+                    onSave(
+                        DirectLinkUpload.Rule(
+                            uploadUrl,
+                            downloadUrlRule,
+                            summary,
+                            compress,
+                            initialRule.expiryDate
+                        )
+                    )
                 },
                 primary = true,
                 cornerRadius = style.actionRadius

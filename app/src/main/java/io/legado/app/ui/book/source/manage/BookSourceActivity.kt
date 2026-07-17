@@ -54,6 +54,7 @@ import io.legado.app.help.config.LocalConfig
 import io.legado.app.model.CheckSource
 import io.legado.app.model.Debug
 import io.legado.app.ui.association.ImportBookSourceDialog
+import io.legado.app.ui.association.showShibbolethDialog
 import io.legado.app.ui.book.search.SearchActivity
 import io.legado.app.ui.book.search.SearchScope
 import io.legado.app.ui.book.source.debug.BookSourceDebugActivity
@@ -82,6 +83,7 @@ import io.legado.app.ui.widget.compose.showComposeTextInputDialog
 import io.legado.app.ui.widget.compose.toMiuixPalette
 import io.legado.app.utils.ACache
 import io.legado.app.utils.NetworkUtils
+import io.legado.app.utils.ShibbolethCodec
 import io.legado.app.utils.cnCompare
 import io.legado.app.utils.flowWithLifecycleAndDatabaseChange
 import io.legado.app.utils.isAbsUrl
@@ -147,19 +149,23 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
     }
     private val exportDir = registerForActivityResult(HandleFileContract()) {
         it.uri?.let { uri ->
+            val url = uri.toString()
             showComposeTextInputDialog(
                 title = getString(R.string.export_success),
                 hint = getString(R.string.path),
-                initialValue = uri.toString(),
-                message = if (uri.toString().isAbsUrl()) {
+                initialValue = url,
+                message = if (url.isAbsUrl()) {
                     DirectLinkUpload.getSummary()
                 } else {
                     null
                 },
                 readOnly = true,
+                neutralText = getString(R.string.shibboleth)
+                    .takeIf { ShibbolethCodec.canEncodeUrl(url) },
                 onPositive = {
-                    sendToClip(uri.toString())
-                }
+                    sendToClip(url)
+                },
+                onNeutral = { showShibbolethDialog(url, ShibbolethCodec.BOOK_SOURCE) }
             )
         }
     }

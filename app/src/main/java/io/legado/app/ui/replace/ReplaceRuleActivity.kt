@@ -24,6 +24,7 @@ import io.legado.app.help.DirectLinkUpload
 import io.legado.app.help.book.ContentProcessor
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.ui.association.ImportReplaceRuleDialog
+import io.legado.app.ui.association.showShibbolethDialog
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.qrcode.QrCodeResult
 import io.legado.app.ui.replace.edit.ReplaceEditActivity
@@ -39,6 +40,7 @@ import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.ui.widget.compose.showComposeTextInputDialog
 import io.legado.app.utils.ACache
 import io.legado.app.utils.GSON
+import io.legado.app.utils.ShibbolethCodec
 import io.legado.app.utils.isAbsUrl
 import io.legado.app.utils.launch
 import io.legado.app.utils.sendToClip
@@ -87,18 +89,22 @@ class ReplaceRuleActivity : VMBaseActivity<ActivityReplaceRuleBinding, ReplaceRu
     }
     private val exportResult = registerForActivityResult(HandleFileContract()) {
         it.uri?.let { uri ->
+            val url = uri.toString()
             showComposeConfirmDialog(
                 title = getString(R.string.export_success),
                 message = buildString {
-                    if (uri.toString().isAbsUrl()) {
+                    if (url.isAbsUrl()) {
                         append(DirectLinkUpload.getSummary())
                         append("\n")
                     }
-                    append(uri.toString())
+                    append(url)
                 },
                 positiveText = getString(R.string.copy_text),
                 negativeText = getString(R.string.cancel),
-                onPositive = { sendToClip(uri.toString()) }
+                neutralText = getString(R.string.shibboleth)
+                    .takeIf { ShibbolethCodec.canEncodeUrl(url) },
+                onPositive = { sendToClip(url) },
+                onNeutral = { showShibbolethDialog(url, ShibbolethCodec.REPLACE_RULE) }
             )
         }
     }

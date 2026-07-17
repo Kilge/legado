@@ -19,6 +19,7 @@ import io.legado.app.data.entities.TxtTocRule
 import io.legado.app.databinding.ActivityTxtTocRuleBinding
 import io.legado.app.help.DirectLinkUpload
 import io.legado.app.ui.association.ImportTxtTocRuleDialog
+import io.legado.app.ui.association.showShibbolethDialog
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.qrcode.QrCodeResult
 import io.legado.app.ui.widget.SelectActionBar
@@ -33,6 +34,7 @@ import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.ui.widget.compose.showComposeTextInputDialog
 import io.legado.app.utils.ACache
 import io.legado.app.utils.GSON
+import io.legado.app.utils.ShibbolethCodec
 import io.legado.app.utils.isAbsUrl
 import io.legado.app.utils.launch
 import io.legado.app.utils.sendToClip
@@ -80,7 +82,10 @@ class TxtTocRuleActivity : VMBaseActivity<ActivityTxtTocRuleBinding, TxtTocRuleV
                 message = summary,
                 positiveText = getString(R.string.copy_text),
                 negativeText = getString(R.string.cancel),
-                onPositive = { sendToClip(uriStr) }
+                neutralText = getString(R.string.shibboleth)
+                    .takeIf { ShibbolethCodec.canEncodeUrl(uriStr) },
+                onPositive = { sendToClip(uriStr) },
+                onNeutral = { showShibbolethDialog(uriStr, ShibbolethCodec.TOC_RULE) }
             )
         }
     }

@@ -227,6 +227,10 @@ object DirectLinkUpload {
         return safeString(getRule().summary)
     }
 
+    fun getExpiryDate(): Int {
+        return getRule().expiryDate
+    }
+
     private fun safeString(value: String?): String = value.orEmpty()
 
     private fun deleteConfigStorageUnlocked(target: File) {
@@ -240,6 +244,7 @@ object DirectLinkUpload {
         var downloadUrlRule: String, //下载链接规则
         var summary: String, //注释
         var compress: Boolean = false, //是否压缩
+        var expiryDate: Int = 0, //有效期天数，0 表示永久
     ) {
 
         override fun toString(): String {

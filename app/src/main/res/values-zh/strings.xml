@@ -2287,4 +2287,8 @@ bookUrl：%7$s
     <string name="paragraph_import_conflict_overwrite">覆盖现有规则</string>
     <string name="paragraph_import_conflict_overwrite_description">保留原 ID、排序和书籍绑定</string>
     <string name="paragraph_import_result">新增：%1$d\n覆盖：%2$d\n跳过：%3$d\n重命名：%4$d</string>
+    <string name="shibboleth">口令</string>
+    <string name="shibboleth_https_only">仅 HTTPS 直链支持转换为口令</string>
+    <string name="shibboleth_invalid">口令格式无效</string>
+    <string name="shibboleth_expired">口令已过期</string>
 </resources>

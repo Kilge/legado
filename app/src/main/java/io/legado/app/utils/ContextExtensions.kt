@@ -388,10 +388,18 @@ fun Context.sendToClip(text: String) {
 fun Context.getClipText(): String? {
     clipboardManager.primaryClip?.let {
         if (it.itemCount > 0) {
-            return it.getItemAt(0).text.toString().trim()
+            return it.getItemAt(0).text?.toString()?.trim()
         }
     }
     return null
+}
+
+fun Context.clearClip() {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+        clipboardManager.clearPrimaryClip()
+    } else {
+        clipboardManager.setPrimaryClip(ClipData.newPlainText(null, ""))
+    }
 }
 
 fun Context.sendMail(mail: String) {
