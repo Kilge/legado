@@ -269,7 +269,6 @@ private fun AdvancedTitleActionButton(
     val minHeight = (38f * LocalDensity.current.fontScale.coerceAtLeast(1f)).dp
     Surface(
         modifier = Modifier
-            .defaultMinSize(minHeight = minHeight)
             .clickable(enabled = enabled, onClick = onClick),
         shape = RoundedCornerShape(actionRadius),
         color = if (accent) palette.accent.copy(alpha = if (enabled) 0.14f else 0.08f)
@@ -277,14 +276,23 @@ private fun AdvancedTitleActionButton(
         tonalElevation = 0.dp,
         shadowElevation = 0.dp
     ) {
-        Text(
-            text = text,
-            color = if (enabled) palette.accent else palette.secondaryText,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Medium,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-            maxLines = 1
-        )
+        Row(
+            modifier = Modifier
+                .defaultMinSize(minHeight = minHeight)
+                .padding(horizontal = 12.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = text,
+                color = if (enabled) palette.accent else palette.secondaryText,
+                fontSize = 13.sp,
+                lineHeight = 18.sp,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
     }
 }
 
