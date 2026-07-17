@@ -115,6 +115,23 @@ class AudioCachePackageTest {
     }
 
     @Test
+    fun manifestRejectsInvalidIndexesAndOversizedFields() {
+        val invalidIndex = AudioCacheManifest(
+            bookUrl = "book",
+            chapters = listOf(AudioCacheManifest.Chapter(index = -1, title = "one"))
+        )
+        val oversizedTitle = AudioCacheManifest(
+            bookUrl = "book",
+            chapters = listOf(
+                AudioCacheManifest.Chapter(index = 0, title = "x".repeat(20 * 1024))
+            )
+        )
+
+        assertTrue(runCatching { invalidIndex.validateForRestore("book") }.isFailure)
+        assertTrue(runCatching { oversizedTitle.validateForRestore("book") }.isFailure)
+    }
+
+    @Test
     fun packageMergePreservesRemoteOnlyChapterAndUsesLocalCachedChapter() {
         val remote = listOf(
             AudioCacheManifest.Chapter(

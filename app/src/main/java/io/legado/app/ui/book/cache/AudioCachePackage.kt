@@ -5,6 +5,12 @@ import java.io.File
 import java.security.MessageDigest
 
 internal const val AUDIO_CACHE_MANIFEST_VERSION = 2
+private const val AUDIO_CACHE_MAX_CHAPTERS = 50_000
+private const val AUDIO_CACHE_MAX_CHAPTER_INDEX = 1_000_000
+private const val AUDIO_CACHE_MAX_FILE_COUNT = 1_000_000
+private const val AUDIO_CACHE_MAX_SHORT_TEXT = 16 * 1024
+private const val AUDIO_CACHE_MAX_URL_TEXT = 64 * 1024
+private const val AUDIO_CACHE_MAX_VARIABLE_TEXT = 256 * 1024
 
 internal data class AudioCacheManifest(
     val version: Int = 0,
@@ -105,10 +111,27 @@ internal data class AudioCacheManifest(
 
 internal fun AudioCacheManifest.validateForRestore(expectedBookUrl: String) {
     require(bookUrl.isNullOrBlank() || bookUrl == expectedBookUrl) { "audio cache book mismatch" }
+    require(bookName.hasAtMost(AUDIO_CACHE_MAX_SHORT_TEXT)) { "audio cache book name is too long" }
+    require(author.hasAtMost(AUDIO_CACHE_MAX_SHORT_TEXT)) { "audio cache author is too long" }
+    require(bookUrl.hasAtMost(AUDIO_CACHE_MAX_URL_TEXT)) { "audio cache book URL is too long" }
+    require(chapterList().size <= AUDIO_CACHE_MAX_CHAPTERS) { "audio cache contains too many chapters" }
     val cacheDirectories = hashSetOf<String>()
     val chapterIndexes = hashSetOf<Int>()
     val chapterUrls = hashSetOf<String>()
     chapterList().forEach { chapter ->
+        require(chapter.index in 0..AUDIO_CACHE_MAX_CHAPTER_INDEX) { "invalid audio chapter index" }
+        require(chapter.fileCount in 0..AUDIO_CACHE_MAX_FILE_COUNT) { "invalid audio file count" }
+        require(chapter.title.hasAtMost(AUDIO_CACHE_MAX_SHORT_TEXT)) { "audio chapter title is too long" }
+        require(chapter.url.hasAtMost(AUDIO_CACHE_MAX_URL_TEXT)) { "audio chapter URL is too long" }
+        require(chapter.baseUrl.hasAtMost(AUDIO_CACHE_MAX_URL_TEXT)) { "audio chapter base URL is too long" }
+        require(chapter.resourceUrl.hasAtMost(AUDIO_CACHE_MAX_URL_TEXT)) { "audio resource URL is too long" }
+        require(chapter.imgUrl.hasAtMost(AUDIO_CACHE_MAX_URL_TEXT)) { "audio chapter image URL is too long" }
+        require(chapter.tag.hasAtMost(AUDIO_CACHE_MAX_SHORT_TEXT)) { "audio chapter tag is too long" }
+        require(chapter.wordCount.hasAtMost(AUDIO_CACHE_MAX_SHORT_TEXT)) { "audio chapter word count is too long" }
+        require(chapter.startFragmentId.hasAtMost(AUDIO_CACHE_MAX_SHORT_TEXT)) { "audio chapter fragment is too long" }
+        require(chapter.endFragmentId.hasAtMost(AUDIO_CACHE_MAX_SHORT_TEXT)) { "audio chapter fragment is too long" }
+        require(chapter.variable.hasAtMost(AUDIO_CACHE_MAX_VARIABLE_TEXT)) { "audio chapter variables are too long" }
+        require(chapter.cacheDir.hasAtMost(255)) { "audio cache directory is too long" }
         require(chapterIndexes.add(chapter.index)) { "duplicate audio chapter index" }
         chapter.url.orEmpty().takeIf { it.isNotBlank() }?.let { url ->
             require(chapterUrls.add(url)) { "duplicate audio chapter url" }
@@ -120,6 +143,8 @@ internal fun AudioCacheManifest.validateForRestore(expectedBookUrl: String) {
         }
     }
 }
+
+private fun String?.hasAtMost(maxLength: Int): Boolean = this == null || length <= maxLength
 
 internal fun mergeRestoredAudioCatalog(
     existing: List<BookChapter>,

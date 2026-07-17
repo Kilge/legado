@@ -31,7 +31,8 @@ import java.util.LinkedHashMap
 object ParagraphRuleProcessor {
     private const val CLICK_PREFIX = "paragraphRule:"
     private const val RULE_PREFIX = "rule:"
-    private const val PROCESS_CACHE_MAX_SIZE = 32
+    private const val PROCESS_CACHE_MAX_SIZE = 16
+    private const val PROCESS_CACHE_MAX_BYTES = 8L * 1024L * 1024L
     private const val PARAGRAPH_ANCHOR_MIN_CONTAINMENT_LENGTH = 13
     private const val PARAGRAPH_ANCHOR_GRAM_HASH_BASE = 1_000_003L
     private const val PARAGRAPH_ANCHOR_GRAM_INDEX_BUDGET = 32_768
@@ -42,11 +43,8 @@ object ParagraphRuleProcessor {
     private val paragraphImageRegex = Regex("""<img\b[^>]*>""", RegexOption.IGNORE_CASE)
     private val paragraphHtmlTagRegex = Regex("""<[^>]+>""")
     private val paragraphWhitespaceRegex = Regex("""\s+""")
-    private val processCache = object : LinkedHashMap<String, BookContent>(PROCESS_CACHE_MAX_SIZE, 0.75f, true) {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, BookContent>?): Boolean {
-            return size > PROCESS_CACHE_MAX_SIZE
-        }
-    }
+    private val processCache = LinkedHashMap<String, CachedBookContent>(PROCESS_CACHE_MAX_SIZE, 0.75f, true)
+    private var processCacheBytes = 0L
 
     interface BrowserCallback {
         fun showBrowser(
@@ -87,7 +85,7 @@ object ParagraphRuleProcessor {
         val ruleStates = rules.map { RuleState(it, readVars(it.id)) }
         val cacheKey = processCacheKey(book, chapter, content, ruleStates)
         synchronized(processCache) {
-            processCache[cacheKey]?.let { return it }
+            processCache[cacheKey]?.content?.let { return it }
         }
         val original = content.textList.joinToString("\n")
         val protectedContent = SpecialContentProtector.protect(original)
@@ -123,7 +121,7 @@ object ParagraphRuleProcessor {
         }
         if (!hasFailure) {
             synchronized(processCache) {
-                processCache[cacheKey] = processed
+                putProcessCache(cacheKey, processed)
             }
         }
         return processed
@@ -676,6 +674,7 @@ object ParagraphRuleProcessor {
         synchronized(processCache) {
             if (bookUrl.isNullOrBlank()) {
                 processCache.clear()
+                processCacheBytes = 0L
                 return
             }
             val prefix = if (chapterIndex == null) {
@@ -683,9 +682,43 @@ object ParagraphRuleProcessor {
             } else {
                 "$bookUrl|$chapterIndex|"
             }
-            processCache.keys.removeAll { it.startsWith(prefix) }
+            val iterator = processCache.entries.iterator()
+            while (iterator.hasNext()) {
+                val entry = iterator.next()
+                if (entry.key.startsWith(prefix)) {
+                    processCacheBytes -= entry.value.estimatedBytes
+                    iterator.remove()
+                }
+            }
         }
     }
+
+    private fun putProcessCache(key: String, content: BookContent) {
+        val estimatedBytes = estimateProcessCacheBytes(content)
+        processCache.remove(key)?.let { processCacheBytes -= it.estimatedBytes }
+        if (estimatedBytes > PROCESS_CACHE_MAX_BYTES) return
+        processCache[key] = CachedBookContent(content, estimatedBytes)
+        processCacheBytes += estimatedBytes
+        val iterator = processCache.entries.iterator()
+        while ((processCache.size > PROCESS_CACHE_MAX_SIZE || processCacheBytes > PROCESS_CACHE_MAX_BYTES) &&
+            iterator.hasNext()
+        ) {
+            val eldest = iterator.next()
+            processCacheBytes -= eldest.value.estimatedBytes
+            iterator.remove()
+        }
+    }
+
+    internal fun estimateProcessCacheBytes(content: BookContent): Long {
+        val textBytes = content.textList.sumOf { it.length.toLong() * 2L + 40L }
+        val sourceIndexBytes = content.sourceIndexes.size.toLong() * 4L
+        return textBytes + sourceIndexBytes + 256L
+    }
+
+    private data class CachedBookContent(
+        val content: BookContent,
+        val estimatedBytes: Long
+    )
 
     private fun processCacheKey(
         book: Book,

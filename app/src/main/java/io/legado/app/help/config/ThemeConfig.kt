@@ -171,7 +171,15 @@ object ThemeConfig {
         if (bgImgBlu == 0) {
             return bgImage?.let { CenterCropBitmapDrawable(context.resources, it) }
         }
-        return bgImage?.stackBlur(bgImgBlu)?.let { CenterCropBitmapDrawable(context.resources, it) }
+        val source = bgImage ?: return null
+        val blurred = try {
+            source.stackBlur(bgImgBlu)
+        } catch (error: Throwable) {
+            if (!source.isRecycled) source.recycle()
+            throw error
+        }
+        if (blurred !== source && !source.isRecycled) source.recycle()
+        return CenterCropBitmapDrawable(context.resources, blurred)
     }
 
     fun hasUsableBgImage(context: Context): Boolean {
