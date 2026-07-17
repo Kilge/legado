@@ -37,6 +37,9 @@ import io.legado.app.utils.NetworkUtils
 import io.legado.app.utils.fromJsonObject
 import io.legado.app.utils.normalizeFileName
 import io.legado.app.utils.compress.ZipUtils
+import io.legado.app.utils.compress.SafeZipExtractor
+import io.legado.app.utils.compress.SafeZipLimits
+import io.legado.app.utils.compress.readTextLimited
 import io.legado.app.utils.isJsonArray
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -611,7 +614,7 @@ class CacheManageViewModel(application: Application) : BaseViewModel(application
             }
             try {
                 AppCloudStorage.downloadCachePackage(zipFileName, zipFile)
-                ZipUtils.unZipToPath(zipFile, unzipDir)
+                SafeZipExtractor.extract(zipFile, unzipDir, CACHE_PACKAGE_ZIP_LIMITS)
                 if (item.mode == CacheManageMode.AUDIO) {
                     restoreAudioCachePackage(item.book, unzipDir, strategy)
                 } else {
@@ -1070,7 +1073,7 @@ class CacheManageViewModel(application: Application) : BaseViewModel(application
             }
             try {
                 AppCloudStorage.downloadCachePackage(zipFileName, remoteZip)
-                ZipUtils.unZipToPath(remoteZip, remoteDir)
+                SafeZipExtractor.extract(remoteZip, remoteDir, CACHE_PACKAGE_ZIP_LIMITS)
                 if (item.mode == CacheManageMode.AUDIO) {
                     val remotePayload = resolveCachePayloadDir(remoteDir, "manifest.json")
                     copyDirectoryContents(remotePayload, mergeDir, overwrite = true)
@@ -1099,11 +1102,13 @@ class CacheManageViewModel(application: Application) : BaseViewModel(application
             mkdirs()
         }
         return try {
-            ZipUtils.unZipToPath(zipFile, unzipDir)
+            SafeZipExtractor.extract(zipFile, unzipDir, CACHE_PACKAGE_ZIP_LIMITS)
             if (mode == CacheManageMode.AUDIO) {
                 val payloadDir = resolveCachePayloadDir(unzipDir, "manifest.json")
                 val manifestFile = File(payloadDir, "manifest.json")
-                GSON.fromJsonObject<AudioCacheManifest>(manifestFile.readText()).getOrNull()
+                GSON.fromJsonObject<AudioCacheManifest>(
+                    manifestFile.readTextLimited(CACHE_MANIFEST_MAX_BYTES)
+                ).getOrNull()
                     ?.chapterList()
                     ?.count { chapter ->
                         !chapter.isVolume &&
@@ -1144,7 +1149,13 @@ class CacheManageViewModel(application: Application) : BaseViewModel(application
         }
         val manifestFile = File(packageDir, "manifest.json")
         val oldManifest = manifestFile.takeIf { it.isFile }
-            ?.let { GSON.fromJsonObject<AudioCacheManifest>(it.readText()).getOrNull() }
+            ?.let {
+                runCatching {
+                    GSON.fromJsonObject<AudioCacheManifest>(
+                        it.readTextLimited(CACHE_MANIFEST_MAX_BYTES)
+                    ).getOrNull()
+                }.getOrNull()
+            }
         oldManifest?.validateForRestore(book.bookUrl)
         val databaseChapters = appDb.bookChapterDao.getChapterList(book.bookUrl)
         val localChapters = databaseChapters
@@ -1326,6 +1337,13 @@ class CacheManageViewModel(application: Application) : BaseViewModel(application
 
     private companion object {
         private const val SELECTED_SOURCE_CACHE_KEY = "cacheManageSelectedSourceKeys"
+        private const val CACHE_MANIFEST_MAX_BYTES = 2L * 1024L * 1024L
+        private val CACHE_PACKAGE_ZIP_LIMITS = SafeZipLimits(
+            maxEntries = 50_000,
+            maxEntryBytes = 1024L * 1024L * 1024L,
+            maxTotalBytes = 5L * 1024L * 1024L * 1024L,
+            maxCompressionRatio = 1_000L
+        )
     }
 
     private fun restoreAudioCachePackage(
@@ -1338,7 +1356,9 @@ class CacheManageViewModel(application: Application) : BaseViewModel(application
         require(manifestFile.isFile) {
             context.getString(R.string.cache_manage_download_failed_simple)
         }
-        val audioManifest = GSON.fromJsonObject<AudioCacheManifest>(manifestFile.readText()).getOrNull()
+        val audioManifest = GSON.fromJsonObject<AudioCacheManifest>(
+            manifestFile.readTextLimited(CACHE_MANIFEST_MAX_BYTES)
+        ).getOrNull()
             ?: throw IllegalArgumentException(context.getString(R.string.cache_manage_download_failed_simple))
         runCatching { audioManifest.validateForRestore(book.bookUrl) }
             .getOrElse {

@@ -8,6 +8,9 @@ import io.legado.app.model.BookCover
 import io.legado.app.utils.FileUtils
 import io.legado.app.utils.GSON
 import io.legado.app.utils.compress.ZipUtils
+import io.legado.app.utils.compress.SafeZipExtractor
+import io.legado.app.utils.compress.SafeZipLimits
+import io.legado.app.utils.compress.readTextLimited
 import io.legado.app.utils.externalFiles
 import io.legado.app.utils.fromJsonArray
 import io.legado.app.utils.fromJsonObject
@@ -24,7 +27,6 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
 import splitties.init.appCtx
 import java.io.File
-import java.io.FileOutputStream
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
 import java.util.zip.ZipEntry
@@ -38,6 +40,13 @@ object AppearanceKitManager {
     const val KIT_SIDEBAR = "builtin_sidebar"
     private const val kitManifestName = "appearance_kit.json"
     private const val kitVersion = 1
+    private const val maxKitManifestBytes = 1024L * 1024L
+    private val kitZipLimits = SafeZipLimits(
+        maxEntries = 2_048,
+        maxEntryBytes = 128L * 1024L * 1024L,
+        maxTotalBytes = 512L * 1024L * 1024L,
+        maxCompressionRatio = 500L
+    )
     private val currentModeThemeMutex = Mutex()
     private val currentModeThemeGeneration = AtomicLong()
 
@@ -387,7 +396,9 @@ object AppearanceKitManager {
             val manifestFile = findKitManifestFile(unzipDir)
                 ?: throw IllegalArgumentException(appCtx.getString(io.legado.app.R.string.appearance_kit_manifest_missing))
             val packageRoot = manifestFile.parentFile ?: unzipDir
-            val manifest = GSON.fromJsonObject<AppearanceKitPackage>(manifestFile.readText()).getOrThrow()
+            val manifest = GSON.fromJsonObject<AppearanceKitPackage>(
+                manifestFile.readTextLimited(maxKitManifestBytes)
+            ).getOrThrow()
             val importedBinding = KitBinding()
             manifest.components.forEach { component ->
                 val componentFile = resolveKitComponentFile(packageRoot, unzipDir, component.path) ?: return@forEach
@@ -690,19 +701,7 @@ object AppearanceKitManager {
     }
 
     private fun unzipSecure(zipFile: File, targetDir: File) {
-        ZipFile(zipFile).use { zip ->
-            zip.entries().asSequence().forEach { entry ->
-                if (entry.isDirectory) return@forEach
-                val target = File(targetDir, entry.name)
-                if (!target.isSameOrSubFileOf(targetDir)) {
-                    throw IllegalArgumentException("Invalid package")
-                }
-                target.parentFile?.mkdirs()
-                zip.getInputStream(entry).use { input ->
-                    FileOutputStream(target).use { output -> input.copyTo(output) }
-                }
-            }
-        }
+        SafeZipExtractor.extract(zipFile, targetDir, kitZipLimits)
     }
 
     private suspend fun exportThemes(

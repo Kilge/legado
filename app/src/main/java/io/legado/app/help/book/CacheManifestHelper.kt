@@ -4,11 +4,13 @@ import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonObject
+import io.legado.app.utils.compress.readTextLimited
 import java.io.File
 
 object CacheManifestHelper {
 
     const val MANIFEST_FILE_NAME = "cache_manifest.json"
+    private const val MAX_MANIFEST_BYTES = 2L * 1024L * 1024L
 
     fun manifestFile(book: Book): File {
         return File(BookHelp.getCacheDir(book), MANIFEST_FILE_NAME)
@@ -25,7 +27,7 @@ object CacheManifestHelper {
     fun read(file: File): CacheBookManifest? {
         if (!file.isFile) return null
         return runCatching {
-            GSON.fromJsonObject<CacheBookManifest>(file.readText()).getOrNull()
+            GSON.fromJsonObject<CacheBookManifest>(file.readTextLimited(MAX_MANIFEST_BYTES)).getOrNull()
         }.getOrNull()
     }
 

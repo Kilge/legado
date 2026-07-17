@@ -25,6 +25,9 @@ import io.legado.app.utils.readBytesLimited
 import io.legado.app.help.http.newCallResponse
 import io.legado.app.help.http.okHttpClient
 import io.legado.app.utils.compress.ZipUtils
+import io.legado.app.utils.compress.SafeZipExtractor
+import io.legado.app.utils.compress.SafeZipLimits
+import io.legado.app.utils.compress.readTextLimited
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.TimeoutCancellationException
@@ -45,6 +48,14 @@ import java.util.zip.ZipFile
 object ThemePackageManager {
 
     private const val packageFileName = "theme.json"
+    private const val maxPackageManifestBytes = 512L * 1024L
+    private const val maxRemoteResourceBytes = 32L * 1024L * 1024L
+    private val packageZipLimits = SafeZipLimits(
+        maxEntries = 512,
+        maxEntryBytes = 32L * 1024L * 1024L,
+        maxTotalBytes = 128L * 1024L * 1024L,
+        maxCompressionRatio = 250L
+    )
     private const val remoteListTimeoutMillis = 4_000L
     private const val mainBackgroundPrefix = "background"
     private const val bookInfoBackgroundPrefix = "book_info_background"
@@ -612,7 +623,9 @@ object ThemePackageManager {
     private fun readPackage(dir: File): Package? {
         val file = File(dir, packageFileName)
         if (!file.exists()) return null
-        return GSON.fromJsonObject<Package>(file.readText()).getOrNull()
+        return runCatching {
+            GSON.fromJsonObject<Package>(file.readTextLimited(maxPackageManifestBytes)).getOrNull()
+        }.getOrNull()
     }
 
     private fun peekPackage(zipFile: File): Package {
@@ -621,10 +634,12 @@ object ThemePackageManager {
             mkdirs()
         }
         return try {
-            ZipUtils.unZipToPath(zipFile, unzipDir) { it.endsWith(packageFileName) }
+            SafeZipExtractor.extract(zipFile, unzipDir, packageZipLimits) {
+                it == packageFileName || it.endsWith("/$packageFileName")
+            }
             val packageFile = unzipDir.walkTopDown().firstOrNull { it.isFile && it.name == packageFileName }
                 ?: throw IllegalArgumentException(appCtx.getString(R.string.theme_config_file_missing))
-            GSON.fromJsonObject<Package>(packageFile.readText()).getOrThrow()
+            GSON.fromJsonObject<Package>(packageFile.readTextLimited(maxPackageManifestBytes)).getOrThrow()
         } finally {
             FileUtils.delete(unzipDir, deleteRootDir = true)
         }
@@ -1034,7 +1049,7 @@ object ThemePackageManager {
             check(mkdirs()) { "failed to create ${absolutePath}" }
         }
         try {
-            ZipUtils.unZipToPath(zipFile, unzipDir)
+            SafeZipExtractor.extract(zipFile, unzipDir, packageZipLimits)
             val packageFiles = unzipDir.walkTopDown()
                 .filter { it.isFile && it.name == packageFileName }
                 .toList()
@@ -1043,7 +1058,7 @@ object ThemePackageManager {
             }
             require(packageFiles.size == 1) { "theme package contains multiple $packageFileName files" }
             val packageFile = packageFiles.single()
-            val pkg = GSON.fromJsonObject<Package>(packageFile.readText()).getOrThrow()
+            val pkg = GSON.fromJsonObject<Package>(packageFile.readTextLimited(maxPackageManifestBytes)).getOrThrow()
             val dirName = safeImportedDirName(pkg)
             val parentDir = typeDir(pkg.isNightTheme).canonicalFile
             val targetDir = File(parentDir, dirName).canonicalFile
@@ -1326,21 +1341,44 @@ object ThemePackageManager {
         dir.mkdirs()
         val target = File(dir, remoteResourceName(path))
         if (isReadableOwnFile(target)) return target
-        withTimeout(60_000L) {
-            okHttpClient.newCallResponse(0) {
-                url(path)
-            }.use { response ->
-                if (!response.isSuccessful) {
-                    throw IllegalArgumentException(appCtx.getString(R.string.theme_resource_download_failed, response.code))
-                }
-                response.body.byteStream().use { input ->
-                    FileOutputStream(target).use { output ->
-                        input.copyTo(output)
+        val staging = File(dir, ".${target.name}.${UUID.randomUUID()}.part")
+        try {
+            withTimeout(60_000L) {
+                okHttpClient.newCallResponse(0) {
+                    url(path)
+                }.use { response ->
+                    if (!response.isSuccessful) {
+                        throw IllegalArgumentException(appCtx.getString(R.string.theme_resource_download_failed, response.code))
+                    }
+                    val declaredLength = response.body.contentLength()
+                    if (declaredLength > maxRemoteResourceBytes) {
+                        throw IOException("theme resource is too large")
+                    }
+                    response.body.byteStream().use { input ->
+                        FileOutputStream(staging).use { output ->
+                            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                            var total = 0L
+                            while (true) {
+                                val count = input.read(buffer)
+                                if (count < 0) break
+                                if (count == 0) continue
+                                total += count.toLong()
+                                if (total > maxRemoteResourceBytes) {
+                                    throw IOException("theme resource is too large")
+                                }
+                                output.write(buffer, 0, count)
+                            }
+                            check(total > 0L) { "theme resource is empty" }
+                        }
                     }
                 }
             }
+            if (isReadableOwnFile(target)) return target
+            check(staging.renameTo(target)) { "failed to store theme resource" }
+            return target
+        } finally {
+            staging.delete()
         }
-        return target
     }
 
     private fun remoteResourceName(path: String): String {
@@ -1395,7 +1433,7 @@ object ThemePackageManager {
     }
 
     private fun isReadableOwnFile(file: File): Boolean {
-        if (!file.isFile) return false
+        if (!file.isFile || file.length() <= 0L) return false
         if (isOtherAppExternalDataPath(file.absolutePath)) return false
         return runCatching {
             FileInputStream(file).use { true }
