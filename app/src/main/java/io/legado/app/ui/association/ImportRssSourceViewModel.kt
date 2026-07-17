@@ -13,7 +13,6 @@ import io.legado.app.data.appDb
 import io.legado.app.data.entities.RssSource
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.config.AppConfig
-import io.legado.app.help.http.decompressed
 import io.legado.app.help.http.newCallResponseBody
 import io.legado.app.help.http.okHttpClient
 import io.legado.app.help.source.SourceHelp
@@ -171,7 +170,7 @@ class ImportRssSourceViewModel(app: Application) : BaseViewModel(app) {
             } else {
                 url(url)
             }
-        }.decompressed().byteStream().use { body ->
+        }.useLimitedImportStream { body ->
             val items: List<Map<String, Any>> = jsonPath.parse(body).read("$")
             for (item in items) {
                 if (!item.containsKey("sourceUrl")) {

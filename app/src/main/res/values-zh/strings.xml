@@ -2291,4 +2291,5 @@ bookUrl：%7$s
     <string name="shibboleth_https_only">仅 HTTPS 直链支持转换为口令</string>
     <string name="shibboleth_invalid">口令格式无效</string>
     <string name="shibboleth_expired">口令已过期</string>
+    <string name="shibboleth_import_confirm">口令将从网络下载配置，请确认来源可信后继续。</string>
 </resources>

@@ -2477,4 +2477,5 @@ Selected text or question:
     <string name="shibboleth_https_only">Only HTTPS direct links can be converted to an import code</string>
     <string name="shibboleth_invalid">Invalid import code</string>
     <string name="shibboleth_expired">This import code has expired</string>
+    <string name="shibboleth_import_confirm">The import code will download configuration from the Internet. Continue only if you trust its source.</string>
 </resources>

@@ -418,7 +418,12 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
         }
         rejectedShibbolethHash = null
         clearClip()
-        showDialogFragment(dialog)
+        alert(R.string.shibboleth, R.string.shibboleth_import_confirm) {
+            positiveButton(R.string.sure) {
+                showDialogFragment(dialog)
+            }
+            cancelButton()
+        }
     }
 
     private fun notifyRejectedShibboleth(text: String) {

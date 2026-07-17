@@ -55,4 +55,14 @@ class ShibbolethCodecTest {
             ).isFailure
         )
     }
+
+    @Test
+    fun urlCredentialsAreRejected() {
+        assertFalse(ShibbolethCodec.canEncodeUrl("https://user:secret@example.com/a.json"))
+    }
+
+    @Test
+    fun urlWhitespaceIsRejected() {
+        assertFalse(ShibbolethCodec.canEncodeUrl("https://example.com/a json"))
+    }
 }

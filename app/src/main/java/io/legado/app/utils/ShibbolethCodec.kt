@@ -1,5 +1,6 @@
 package io.legado.app.utils
 
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import kotlin.random.Random
 
 /**
@@ -63,7 +64,7 @@ object ShibbolethCodec {
         return text != null && text.length <= MAX_CODE_CHARS && text.contains(URL_MARKER)
     }
 
-    fun canEncodeUrl(url: String): Boolean = url.startsWith("https://", ignoreCase = true)
+    fun canEncodeUrl(url: String): Boolean = validatedHttpsUrl(url) != null
 
     fun encode(
         url: String,
@@ -77,7 +78,7 @@ object ShibbolethCodec {
         require(type in supportedTypes) { "Unsupported import code type: $type" }
         require(expiryDays >= 0) { "Expiry days must not be negative" }
 
-        val normalizedUrl = "https://" + url.substring("https://".length)
+        val normalizedUrl = requireNotNull(validatedHttpsUrl(url))
         val random = Random(timeMillis)
         val encodedUrl = buildString(normalizedUrl.length) {
             var index = 0
@@ -116,7 +117,13 @@ object ShibbolethCodec {
         reverseMappings.forEach { (replacement, original) ->
             url = url.replace(replacement, original)
         }
-        require(url.startsWith("https://", ignoreCase = true)) { "Import code URL is invalid" }
+        require(url.none { it.isWhitespace() || it.isISOControl() }) { "Import code URL is invalid" }
+        val parsedUrl = url.toHttpUrlOrNull()
+            ?: throw IllegalArgumentException("Import code URL is invalid")
+        require(parsedUrl.isHttps && parsedUrl.username.isEmpty() && parsedUrl.password.isEmpty()) {
+            "Import code URL is invalid"
+        }
+        url = parsedUrl.toString()
 
         if (urlEnd == text.length) {
             return@runCatching Payload(url, "", "", null)
@@ -147,6 +154,13 @@ object ShibbolethCodec {
         }
 
         Payload(url, type, customWord, expiresAtMillis)
+    }
+
+    private fun validatedHttpsUrl(value: String): String? {
+        if (value.any { it.isWhitespace() || it.isISOControl() }) return null
+        val parsed = value.toHttpUrlOrNull() ?: return null
+        if (!parsed.isHttps || parsed.username.isNotEmpty() || parsed.password.isNotEmpty()) return null
+        return parsed.toString()
     }
 
     val supportedTypes = setOf(
