@@ -13,7 +13,7 @@ import io.legado.app.help.AppCloudStorage
 import io.legado.app.help.CacheManager
 import io.legado.app.help.book.BookHelp
 import io.legado.app.help.book.ContentProcessor
-import io.legado.app.service.relay.RelayParagraphActions
+import io.legado.app.service.relay.RelayContentSanitizer
 import io.legado.app.help.book.isLocal
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.glide.ImageLoader
@@ -233,20 +233,10 @@ object BookController {
     }
 
     fun getRelayBookContent(parameters: Map<String, List<String>>): ReturnData {
-        val bookUrl = parameters["url"]?.firstOrNull()
-            ?: return ReturnData().setErrorMsg("bookUrl为空")
-        val index = parameters["index"]?.firstOrNull()?.toIntOrNull()
-            ?: return ReturnData().setErrorMsg("index无效")
-        val book = appDb.bookDao.getBook(bookUrl)
-            ?: return ReturnData().setErrorMsg("未找到书籍")
-        val chapter = appDb.bookChapterDao.getChapter(bookUrl, index)
-            ?: return ReturnData().setErrorMsg("未找到章节")
         val base = getBookContent(parameters)
         if (!base.isSuccess) return base
         val content = base.data as? String ?: return ReturnData().setErrorMsg("正文格式无效")
-        return runCatching {
-            ReturnData().setData(RelayParagraphActions.decorate(book, chapter, content))
-        }.getOrElse { ReturnData().setErrorMsg(it.localizedMessage ?: "段评处理失败") }
+        return ReturnData().setData(RelayContentSanitizer.removeImages(content))
     }
 
     /**

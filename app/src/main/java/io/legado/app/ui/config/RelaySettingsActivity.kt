@@ -119,8 +119,6 @@ class RelaySettingsActivity : BaseActivity<ViewBinding>() {
                     initialEnabled = prefs.getBoolean(PreferKey.publicWebRelayEnabled, false),
                     initialPermanentShare = prefs.getBoolean(PreferKey.publicWebRelayPermanentShare, false),
                     initialShareProgressSync = prefs.getBoolean(PreferKey.publicWebRelayShareProgressSync, false),
-                    initialShareSearch = prefs.getBoolean(PreferKey.publicWebRelayShareSearch, true),
-                    initialShareParagraphComments = prefs.getBoolean(PreferKey.publicWebRelayShareParagraphComments, true),
                     deviceId = identityId,
                     secureStorageSupported = RelaySecretStore.isSupported,
                     onBack = ::finish,
@@ -132,12 +130,10 @@ class RelaySettingsActivity : BaseActivity<ViewBinding>() {
                     onShareQr = { shareWithQr(it, getString(R.string.public_web_relay_share_qr)) },
                     onRevokeShare = ::revokeShare,
                     onTest = ::testConnection,
-                    onShareOptionsChange = { permanent, progressSync, search, paragraphComments ->
+                    onShareOptionsChange = { permanent, progressSync ->
                         prefs.edit()
                             .putBoolean(PreferKey.publicWebRelayPermanentShare, permanent)
                             .putBoolean(PreferKey.publicWebRelayShareProgressSync, progressSync)
-                            .putBoolean(PreferKey.publicWebRelayShareSearch, search)
-                            .putBoolean(PreferKey.publicWebRelayShareParagraphComments, paragraphComments)
                             .apply()
                     },
                     onOpenBatterySettings = ::openBatterySettings,
@@ -260,8 +256,6 @@ class RelaySettingsActivity : BaseActivity<ViewBinding>() {
         deviceName: String,
         permanent: Boolean,
         allowProgress: Boolean,
-        allowSearch: Boolean,
-        allowParagraphComments: Boolean,
         onResult: (RelayShareResult?, String) -> Unit
     ) {
         saveInputs(workerUrl, deviceName)
@@ -273,9 +267,7 @@ class RelaySettingsActivity : BaseActivity<ViewBinding>() {
                         try {
                             client.createReadShare(
                                 permanent = permanent,
-                                allowProgress = allowProgress,
-                                allowSearch = allowSearch,
-                                allowParagraphComments = allowParagraphComments
+                                allowProgress = allowProgress
                             )
                         } finally {
                             client.close()
@@ -312,20 +304,18 @@ private fun RelaySettingsScreen(
     initialEnabled: Boolean,
     initialPermanentShare: Boolean,
     initialShareProgressSync: Boolean,
-    initialShareSearch: Boolean,
-    initialShareParagraphComments: Boolean,
     deviceId: String,
     secureStorageSupported: Boolean,
     onBack: () -> Unit,
     onEnabledChange: (Boolean, String, String) -> Boolean,
     onReconnect: (String, String) -> Unit,
     onProvision: (String, String, String, (Boolean, String) -> Unit) -> Unit,
-    onCreateShare: (String, String, Boolean, Boolean, Boolean, Boolean, (RelayShareResult?, String) -> Unit) -> Unit,
+    onCreateShare: (String, String, Boolean, Boolean, (RelayShareResult?, String) -> Unit) -> Unit,
     onCopyShare: (String) -> Unit,
     onShareQr: (String) -> Unit,
     onRevokeShare: (String, (Boolean, String) -> Unit) -> Unit,
     onTest: (String, String) -> Unit,
-    onShareOptionsChange: (Boolean, Boolean, Boolean, Boolean) -> Unit,
+    onShareOptionsChange: (Boolean, Boolean) -> Unit,
     onOpenBatterySettings: () -> Unit
 ) {
     val palette = rememberAppManagementPalette()
@@ -338,8 +328,6 @@ private fun RelaySettingsScreen(
     var shareId by remember { mutableStateOf("") }
     var permanentShare by rememberSaveable { mutableStateOf(initialPermanentShare) }
     var shareProgressSync by rememberSaveable { mutableStateOf(initialShareProgressSync) }
-    var shareSearch by rememberSaveable { mutableStateOf(initialShareSearch) }
-    var shareParagraphComments by rememberSaveable { mutableStateOf(initialShareParagraphComments) }
     var operationMessage by remember { mutableStateOf("") }
     val stateText = relayStateText(connectionState)
     val invalidAdminTokenMessage = stringResource(R.string.public_web_relay_admin_token_invalid)
@@ -492,7 +480,7 @@ private fun RelaySettingsScreen(
                             checked = permanentShare,
                             onCheckedChange = {
                                 permanentShare = it
-                                onShareOptionsChange(permanentShare, shareProgressSync, shareSearch, shareParagraphComments)
+                                onShareOptionsChange(permanentShare, shareProgressSync)
                             },
                             palette = palette
                         )
@@ -502,27 +490,7 @@ private fun RelaySettingsScreen(
                             checked = shareProgressSync,
                             onCheckedChange = {
                                 shareProgressSync = it
-                                onShareOptionsChange(permanentShare, shareProgressSync, shareSearch, shareParagraphComments)
-                            },
-                            palette = palette
-                        )
-                        RelayOptionSwitch(
-                            title = stringResource(R.string.public_web_relay_search),
-                            summary = stringResource(R.string.public_web_relay_search_summary),
-                            checked = shareSearch,
-                            onCheckedChange = {
-                                shareSearch = it
-                                onShareOptionsChange(permanentShare, shareProgressSync, shareSearch, shareParagraphComments)
-                            },
-                            palette = palette
-                        )
-                        RelayOptionSwitch(
-                            title = stringResource(R.string.public_web_relay_paragraph_comments),
-                            summary = stringResource(R.string.public_web_relay_paragraph_comments_summary),
-                            checked = shareParagraphComments,
-                            onCheckedChange = {
-                                shareParagraphComments = it
-                                onShareOptionsChange(permanentShare, shareProgressSync, shareSearch, shareParagraphComments)
+                                onShareOptionsChange(permanentShare, shareProgressSync)
                             },
                             palette = palette
                         )
@@ -554,9 +522,7 @@ private fun RelaySettingsScreen(
                                         workerUrl,
                                         deviceName,
                                         permanentShare,
-                                        shareProgressSync,
-                                        shareSearch,
-                                        shareParagraphComments
+                                        shareProgressSync
                                     ) { share, message ->
                                         shareUrl = share?.shareUrl.orEmpty()
                                         shareId = share?.id.orEmpty()

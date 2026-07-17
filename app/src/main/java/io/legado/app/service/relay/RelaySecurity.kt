@@ -221,8 +221,6 @@ internal object RelayReadAllowlist {
         , "/getBookCover"
     )
     private const val PROGRESS_PATH = "/saveBookProgress"
-    private const val SEARCH_PATH = "/searchBook"
-    private const val PARAGRAPH_ACTION_PATH = "/paragraph/action"
     private val allowedHeaders = setOf(
         "accept", "accept-language", "if-modified-since", "if-none-match", "range", "user-agent"
     )
@@ -238,18 +236,16 @@ internal object RelayReadAllowlist {
             "%2e" in lowerPath || "%2f" in lowerPath || "%5c" in lowerPath
         ) return "invalid_path"
         val method = message.method
-        if (method != "GET" && !(method == "POST" && pathOnly in setOf(PROGRESS_PATH, SEARCH_PATH, PARAGRAPH_ACTION_PATH))) {
+        if (method != "GET" && !(method == "POST" && pathOnly == PROGRESS_PATH)) {
             return if (method == "POST") "method_not_allowed" else "path_not_allowed"
         }
         val isRead = method == "GET" && pathOnly in paths
         val isProgressWrite = method == "POST" && pathOnly == PROGRESS_PATH && rawPath == PROGRESS_PATH
-        val isSearch = method == "POST" && pathOnly == SEARCH_PATH && rawPath == SEARCH_PATH
-        val isParagraphAction = method == "POST" && pathOnly == PARAGRAPH_ACTION_PATH && rawPath == PARAGRAPH_ACTION_PATH
-        if (!isRead && !isProgressWrite && !isSearch && !isParagraphAction) return "path_not_allowed"
+        if (!isRead && !isProgressWrite) return "path_not_allowed"
         val body = message.bodyBase64?.decodeBase64()?.toByteArray() ?: ByteArray(0)
         val declaredLength = message.contentLength ?: 0L
         if (isRead && (declaredLength != 0L || body.isNotEmpty())) return "body_not_allowed"
-        if ((isProgressWrite || isSearch || isParagraphAction) && (body.isEmpty() || body.size > 16 * 1024 || declaredLength != body.size.toLong())) {
+        if (isProgressWrite && (body.isEmpty() || body.size > 16 * 1024 || declaredLength != body.size.toLong())) {
             return "invalid_body"
         }
         val headers = message.headers.orEmpty()
@@ -257,7 +253,7 @@ internal object RelayReadAllowlist {
         for ((name, value) in headers) {
             if (name.length !in 1..64 || value.length > 4096) return "headers_too_large"
             val normalizedName = name.lowercase()
-            if (normalizedName !in allowedHeaders && !((isProgressWrite || isSearch || isParagraphAction) && normalizedName == "content-type")) {
+            if (normalizedName !in allowedHeaders && !(isProgressWrite && normalizedName == "content-type")) {
                 return "forbidden_header"
             }
             if (normalizedName == "content-type" && value.substringBefore(';').trim() != "application/json") {

@@ -5,7 +5,6 @@ import type {
   Book,
   BookChapter,
   BookProgress,
-  SeachBook,
 } from '@/book'
 import type { webReadConfig } from '@/web'
 import { ElMessage } from 'element-plus/es'
@@ -29,7 +28,6 @@ let webReadConfigLoadedDate: Date | undefined
 export const useBookStore = defineStore('book', {
   state: () => {
     return {
-      searchBooks: [] as SeachBook[],
       shelf: [] as Book[],
       catalog: [] as BookChapter[],
       readingBook: { chapterPos: 0, chapterIndex: 0 } as BaseBook & {
@@ -175,19 +173,6 @@ export const useBookStore = defineStore('book', {
     },
     setMiniInterface(mini: boolean) {
       this.miniInterface = mini
-    },
-    async setSearchBooks(books: SeachBook[]) {
-      books.forEach(book => {
-        const isSeachBook = this.shelf.every(
-          item => item.bookUrl !== book.bookUrl,
-        )
-        if (isSeachBook === true) {
-          this.searchBooks.push(book)
-        }
-      })
-    },
-    clearSearchBooks() {
-      this.searchBooks = []
     },
     /** 1.保存进度到app 2.修改内存中的数据*/
     async saveBookProgress() {

@@ -39,11 +39,9 @@ class RelaySecurityBoundaryTest {
     }
 
     @Test
-    fun searchAndParagraphActionsRequireBoundedJsonBodies() {
-        assertNull(validateJsonPost("/searchBook", "{\"key\":\"test\"}"))
-        assertNull(validateJsonPost("/paragraph/action", "{\"actionId\":\"id\",\"bookUrl\":\"book\",\"chapterIndex\":1}"))
-        assertEquals("invalid_body", validate("POST", "/searchBook"))
-        assertEquals("invalid_body", validate("POST", "/paragraph/action"))
+    fun searchAndParagraphActionsAreNotExposed() {
+        assertEquals("method_not_allowed", validateJsonPost("/searchBook", "{\"key\":\"test\"}"))
+        assertEquals("method_not_allowed", validateJsonPost("/paragraph/action", "{\"actionId\":\"id\"}"))
     }
 
     @Test
