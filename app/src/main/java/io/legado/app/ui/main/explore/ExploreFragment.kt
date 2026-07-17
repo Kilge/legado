@@ -150,7 +150,6 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicLong
 import kotlin.random.Random
 
 /**
@@ -720,7 +719,7 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
                 snapshotWidgets.any { it.id == key }
             }
         )
-        saveSuiteSnapshotCacheAsync(snapshot, DiscoveryCacheWriteScope.nextSuiteSaveVersion())
+        saveSuiteSnapshotCacheAsync(snapshot)
     }
 
     private fun readSuiteSnapshotCache(
@@ -744,12 +743,9 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
         return snapshot
     }
 
-    private fun saveSuiteSnapshotCacheAsync(
-        snapshot: DiscoverySuitePageSnapshot,
-        saveVersion: Long
-    ) {
+    private fun saveSuiteSnapshotCacheAsync(snapshot: DiscoverySuitePageSnapshot) {
         if (snapshot.widgetBooks.isEmpty() && snapshot.rankedWidgetBooks.isEmpty()) return
-        DiscoveryCacheWriteScope.scope.launch {
+        DiscoveryCacheWriteScope.launchLatest { saveVersion ->
             runCatching {
                 val compactSnapshot = snapshot.compactForCache()
                 if (!compactSnapshot.hasBooks()) return@runCatching
@@ -758,7 +754,7 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
                     AppLog.put("套件发现缓存超过安全大小，跳过内存和磁盘快照")
                     return@runCatching
                 }
-                if (!DiscoveryCacheWriteScope.isLatestSuiteSave(saveVersion)) return@runCatching
+                if (!DiscoveryCacheWriteScope.isLatest(saveVersion)) return@runCatching
                 DiscoverySuitePageSnapshotStore.put(compactSnapshot)
                 writeBoundedDiscoveryCache(
                     key = suiteSnapshotCacheKey(compactSnapshot.suiteId, compactSnapshot.signature),
@@ -3975,12 +3971,19 @@ private object DiscoverySuitePageSnapshotStore {
 }
 
 private object DiscoveryCacheWriteScope {
-    val scope = CoroutineScope(SupervisorJob() + IO)
-    private val suiteSaveVersion = AtomicLong(0L)
+    private val scope = CoroutineScope(SupervisorJob() + IO)
+    private var suiteSaveJob: Job? = null
+    private var suiteSaveVersion = 0L
 
-    fun nextSuiteSaveVersion(): Long = suiteSaveVersion.incrementAndGet()
+    @Synchronized
+    fun launchLatest(block: suspend CoroutineScope.(Long) -> Unit) {
+        val saveVersion = ++suiteSaveVersion
+        suiteSaveJob?.cancel()
+        suiteSaveJob = scope.launch { block(saveVersion) }
+    }
 
-    fun isLatestSuiteSave(version: Long): Boolean = suiteSaveVersion.get() == version
+    @Synchronized
+    fun isLatest(saveVersion: Long): Boolean = suiteSaveVersion == saveVersion
 }
 
 private const val DISCOVERY_SUITE_SNAPSHOT_RANDOM_LIMIT = 36
