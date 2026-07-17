@@ -178,9 +178,21 @@ object AdvancedTitleConfig {
         title: String
     ): String {
         val parts = split(title, book)
-        val variables = variables(book, parts)
+        return replaceTemplateVariables(source, variables(book, parts))
+    }
+
+    internal fun replaceTemplateVariables(
+        source: String,
+        variables: Map<String, String>
+    ): String {
         return variables.entries.fold(source) { value, entry ->
-            val replacement = entry.value
+            val replacement = GSON.toJson(entry.value).let { encoded ->
+                if (encoded.length >= 2 && encoded.first() == '"' && encoded.last() == '"') {
+                    encoded.substring(1, encoded.lastIndex)
+                } else {
+                    entry.value
+                }
+            }
             value
                 .replace("\${${entry.key}}", replacement)
                 .replace("{{${entry.key}}}", replacement)

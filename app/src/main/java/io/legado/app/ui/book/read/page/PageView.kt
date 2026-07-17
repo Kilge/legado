@@ -811,7 +811,9 @@ class PageView(context: Context) : FrameLayout(context) {
                     if (!style.has("f") || style.optString("f").isBlank()) {
                         style.put("f", fallbackFont)
                     }
-                    if (!style.has("fc") || style.optJSONArray("fc") == null) {
+                    if (style.optString("f") == fallbackFont ||
+                        !style.has("fc") || style.optJSONArray("fc") == null
+                    ) {
                         style.put("fc", parseColorArray(fallbackHex))
                     }
                     scaleLottieTextStyle(style, normalizedTextScale)
