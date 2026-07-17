@@ -108,7 +108,7 @@ object AdvancedTitleConfig {
                 obj.optJSONArray("layers") != null &&
                 LottieCompositionFactory.fromJsonStringSync(
                     json,
-                    "advanced-title-check:${json.hashCode()}"
+                    null
                 ).value != null
         }.getOrDefault(false)
     }

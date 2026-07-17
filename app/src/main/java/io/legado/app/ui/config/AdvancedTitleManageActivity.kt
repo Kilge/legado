@@ -22,6 +22,7 @@ import io.legado.app.help.http.newCallResponseBody
 import io.legado.app.help.http.okHttpClient
 import io.legado.app.lib.dialogs.SelectItem
 import io.legado.app.ui.book.read.config.AdvancedTitleConfigDialog
+import io.legado.app.ui.book.read.page.LottieImageBitmapCache
 import io.legado.app.ui.code.CodeEditActivity
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.widget.compose.AppManagementMenuAction
@@ -385,6 +386,7 @@ class AdvancedTitleManageActivity : BaseActivity<ActivityThemeManageBinding>() {
     }
 
     private fun notifyReader() {
+        LottieImageBitmapCache.clear()
         postEvent(EventBus.UP_CONFIG, arrayListOf(5, 8))
     }
 }

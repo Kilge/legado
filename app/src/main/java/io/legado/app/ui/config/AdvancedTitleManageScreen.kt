@@ -245,6 +245,11 @@ private fun AdvancedTitlePreview(
                         }
                     }
                 },
+                onRelease = { view ->
+                    view.cancelAnimation()
+                    view.clearAnimation()
+                    view.tag = null
+                },
                 modifier = Modifier.fillMaxSize()
             )
         }
