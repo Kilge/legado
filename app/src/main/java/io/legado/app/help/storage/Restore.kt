@@ -849,6 +849,8 @@ object Restore {
             PreferKey.advancedTitleConfig,
             PreferKey.advancedTitleLottieJson,
             PreferKey.advancedTitleLottiePath,
+            PreferKey.advancedTitlePackage,
+            PreferKey.advancedTitleHeightFactor,
             PreferKey.doublePageHorizontal,
             PreferKey.defaultBookTreeUri,
             PreferKey.readRecordComponents,

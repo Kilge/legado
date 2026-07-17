@@ -88,7 +88,8 @@ object AdvancedTitleConfig {
     }
 
     fun renderLottieJson(book: Book, title: String): String? {
-        val raw = lottieJson?.takeIf { it.isNotBlank() }
+        val raw = AdvancedTitlePackageManager.currentTemplate()
+            ?: lottieJson?.takeIf { it.isNotBlank() }
             ?: lottiePath?.takeIf { it.isNotBlank() }?.let { path ->
                 runCatching { File(path).takeIf { it.isFile }?.readText() }.getOrNull()
             }

@@ -313,6 +313,7 @@ object PreferKey {
     const val advancedTitleConfig = "advancedTitleConfig"
     const val advancedTitleLottieJson = "advancedTitleLottieJson"
     const val advancedTitleLottiePath = "advancedTitleLottiePath"
+    const val advancedTitlePackage = "advancedTitlePackage"
     const val advancedTitleHeightFactor = "advancedTitleHeightFactor"
     const val doublePageHorizontal = "doubleHorizontalPage"
     const val epubReadEngine = "epubReadEngine"

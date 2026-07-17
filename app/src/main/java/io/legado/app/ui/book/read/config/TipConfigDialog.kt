@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -48,6 +49,7 @@ import io.legado.app.ui.widget.compose.AppThemedStepperSlider
 import io.legado.app.ui.widget.compose.ComposeActionListDialog
 import io.legado.app.ui.widget.compose.LegadoMiuixChoiceRow
 import io.legado.app.ui.widget.compose.toMiuixPalette
+import io.legado.app.ui.config.AdvancedTitleManageActivity
 import io.legado.app.utils.hexString
 import io.legado.app.utils.observeEvent
 import io.legado.app.utils.postEvent
@@ -82,8 +84,7 @@ class TipConfigDialog : ReaderBottomSheetComposeDialogFragment() {
                         style = style,
                         colorRefreshTick = colorRefreshTick,
                         onShowAdvancedTitleConfig = {
-                            AdvancedTitleConfigDialog()
-                                .show(parentFragmentManager, "advancedTitleConfig")
+                            startActivity(Intent(requireContext(), AdvancedTitleManageActivity::class.java))
                         },
                         onShowSelector = ::showActionSelector,
                         onShowTipColorPicker = {
@@ -154,7 +155,7 @@ private fun TipConfigContent(
     val titleModeOptions = listOf(
         stringResource(R.string.title_left),
         stringResource(R.string.title_center),
-        stringResource(R.string.ai_tavily_search_depth_advanced),
+        stringResource(R.string.advanced_title_mode_label),
         stringResource(R.string.title_hide)
     )
     fun titleModeToUiIndex(mode: Int): Int {
