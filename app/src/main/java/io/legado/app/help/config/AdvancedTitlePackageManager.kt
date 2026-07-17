@@ -156,20 +156,22 @@ object AdvancedTitlePackageManager {
         invalidate()
     }
 
-    fun delete(entry: Entry) = synchronized(mutationLock) {
-        if (entry.isBuiltin || entry.id == BUILTIN_ID) return
-        val parent = rootDir.canonicalFile
-        val target = (entry.directory ?: localDir(entry.id)).canonicalFile
-        require(target.parentFile == parent) { "Advanced title directory escaped its root" }
-        if (target.exists() && !target.deleteRecursively() && target.exists()) {
-            throw IOException("Unable to delete advanced title")
+    fun delete(entry: Entry) {
+        synchronized(mutationLock) {
+            if (entry.isBuiltin || entry.id == BUILTIN_ID) return@synchronized
+            val parent = rootDir.canonicalFile
+            val target = (entry.directory ?: localDir(entry.id)).canonicalFile
+            require(target.parentFile == parent) { "Advanced title directory escaped its root" }
+            if (target.exists() && !target.deleteRecursively() && target.exists()) {
+                throw IOException("Unable to delete advanced title")
+            }
+            if (activeId() == entry.id) {
+                appCtx.putPrefString(PreferKey.advancedTitlePackage, BUILTIN_ID)
+                AdvancedTitleConfig.lottieJson = builtinJson()
+                AdvancedTitleConfig.lottiePath = null
+            }
+            invalidate()
         }
-        if (activeId() == entry.id) {
-            appCtx.putPrefString(PreferKey.advancedTitlePackage, BUILTIN_ID)
-            AdvancedTitleConfig.lottieJson = builtinJson()
-            AdvancedTitleConfig.lottiePath = null
-        }
-        invalidate()
     }
 
     fun validateJson(json: String) {
@@ -193,7 +195,7 @@ object AdvancedTitlePackageManager {
             .orEmpty()
             .asSequence()
             .filter { it.isDirectory && !it.name.startsWith('.') }
-            .take(MAX_PACKAGES)
+            .take(MAX_PACKAGES * 2)
             .mapNotNull { directory ->
                 runCatching {
                     val canonical = directory.canonicalFile
@@ -202,6 +204,7 @@ object AdvancedTitlePackageManager {
                     Entry(config, canonical)
                 }.getOrNull()
             }
+            .take(MAX_PACKAGES)
             .toList()
     }
 
@@ -224,7 +227,8 @@ object AdvancedTitlePackageManager {
 
     private fun migrateLegacyIfNeeded() {
         if (!appCtx.getPrefString(PreferKey.advancedTitlePackage).isNullOrBlank()) return
-        val legacy = legacyTemplate()?.takeIf { AdvancedTitleConfig.hasRenderableLayers(it) }
+        val legacy = legacyTemplate()
+            ?.takeIf { runCatching { validateJson(it) }.isSuccess }
         if (legacy == null) {
             appCtx.putPrefString(PreferKey.advancedTitlePackage, BUILTIN_ID)
             return
@@ -255,9 +259,9 @@ object AdvancedTitlePackageManager {
         val stamp = file.lastModified() xor file.length()
         if (cachedId == id && cachedStamp == stamp) return cachedJson
         return runCatching { readJsonFile(file) }.getOrNull()?.also { json ->
-            cachedId = id
-            cachedStamp = stamp
             cachedJson = json
+            cachedStamp = stamp
+            cachedId = id
         }
     }
 
