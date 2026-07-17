@@ -18,6 +18,7 @@ import android.widget.TextView
 import com.airbnb.lottie.LottieImageAsset
 import com.airbnb.lottie.LottieDrawable
 import com.airbnb.lottie.LottieAnimationView
+import com.airbnb.lottie.LottieOnCompositionLoadedListener
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.toDrawable
 import androidx.core.view.ViewCompat
@@ -112,6 +113,10 @@ class PageView(context: Context) : FrameLayout(context) {
     }
 
     override fun onDetachedFromWindow() {
+        clearAdvancedTitleLoadingState(binding.advancedTitleLottie)
+        clearAdvancedTitleLoadingState(binding.advancedTitleLottiePair)
+        advancedTitleLottieKey = null
+        advancedTitlePairLottieKey = null
         binding.advancedTitleLottie.cancelAnimation()
         binding.advancedTitleLottiePair.cancelAnimation()
         binding.contentTextView.setScrollFollowBackground(null, 255)
@@ -660,6 +665,7 @@ class PageView(context: Context) : FrameLayout(context) {
         pageWidth: Float
     ): String? {
         fun hide(): String? {
+            clearAdvancedTitleLoadingState(lottieView)
             lottieView.cancelAnimation()
             lottieView.visibility = GONE
             fallbackView.visibility = GONE
@@ -685,6 +691,7 @@ class PageView(context: Context) : FrameLayout(context) {
         }
 
         fun showFallback(block: TextPage.EpubEmbeddedBlock): String? {
+            clearAdvancedTitleLoadingState(lottieView)
             lottieView.cancelAnimation()
             lottieView.visibility = GONE
             val (targetWidth, targetHeight) = resolveTitleViewSize(block)
@@ -740,6 +747,16 @@ class PageView(context: Context) : FrameLayout(context) {
             "advanced_title:${it.hashCode()}:$targetWidth:$targetHeight"
         } ?: "advanced_title:raw:$targetWidth:$targetHeight"
         if (currentKey != nextKey) {
+            lottieView.animate().cancel()
+            lottieView.cancelAnimation()
+            lottieView.removeAllLottieOnCompositionLoadedListener()
+            lottieView.tag = nextKey
+            lottieView.alpha = 0f
+            lottieView.visibility = INVISIBLE
+            fallbackView.visibility = GONE
+            lottieView.setFailureListener {
+                if (lottieView.tag == nextKey) showFallback(block)
+            }
             runCatching {
                 if (resolvedJson != null) {
                     lottieView.setAnimationFromJson(resolvedJson, null)
@@ -749,8 +766,39 @@ class PageView(context: Context) : FrameLayout(context) {
             }.onFailure {
                 return showFallback(block)
             }
+            lottieView.addLottieOnCompositionLoadedListener(
+                LottieOnCompositionLoadedListener {
+                    if (lottieView.tag != nextKey) return@LottieOnCompositionLoadedListener
+                    runCatching {
+                        lottieView.progress = 0f
+                        lottieView.visibility = VISIBLE
+                        lottieView.animate()
+                            .alpha(1f)
+                            .setDuration(ADVANCED_TITLE_FADE_IN_DURATION_MS)
+                            .withEndAction {
+                                if (lottieView.tag == nextKey && !isScroll) {
+                                    lottieView.playAnimation()
+                                }
+                            }
+                            .start()
+                    }.onFailure {
+                        showFallback(block)
+                    }
+                }
+            )
+            return nextKey
+        }
+        if (lottieView.tag != nextKey || lottieView.composition == null) {
+            lottieView.alpha = 0f
+            lottieView.visibility = INVISIBLE
+            return nextKey
         }
         fallbackView.visibility = GONE
+        if (lottieView.alpha < 0.999f) {
+            lottieView.visibility = VISIBLE
+            return nextKey
+        }
+        lottieView.alpha = 1f
         lottieView.visibility = VISIBLE
         runCatching {
             if (!isScroll && !lottieView.isAnimating) {
@@ -763,6 +811,14 @@ class PageView(context: Context) : FrameLayout(context) {
             return showFallback(block)
         }
         return nextKey
+    }
+
+    private fun clearAdvancedTitleLoadingState(view: LottieAnimationView) {
+        view.animate().cancel()
+        view.removeAllLottieOnCompositionLoadedListener()
+        view.setFailureListener(null)
+        view.tag = null
+        view.alpha = 1f
     }
 
     private fun advancedTitleTextSizeSp(): Float {
@@ -1017,5 +1073,6 @@ class PageView(context: Context) : FrameLayout(context) {
         const val ADVANCED_TITLE_SIZE_FACTOR = 1.25f
         const val ADVANCED_TITLE_WIDTH_FACTOR = 0.86f
         const val MAX_STYLED_LOTTIE_CACHE_SIZE = 6
+        const val ADVANCED_TITLE_FADE_IN_DURATION_MS = 80L
     }
 }
