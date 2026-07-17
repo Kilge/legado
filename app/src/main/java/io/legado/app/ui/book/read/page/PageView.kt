@@ -11,7 +11,6 @@ import android.graphics.drawable.LayerDrawable
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.ViewGroup
-import com.airbnb.lottie.FontAssetDelegate
 import com.airbnb.lottie.ImageAssetDelegate
 import android.widget.FrameLayout
 import android.widget.ImageView
@@ -31,6 +30,7 @@ import io.legado.app.data.entities.Bookmark
 import io.legado.app.databinding.ViewBookPageBinding
 import io.legado.app.help.book.isEpub
 import io.legado.app.help.config.AdvancedTitleConfig
+import io.legado.app.help.config.AdvancedTitleFontAssetDelegate
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.help.config.ReadTipConfig
@@ -994,10 +994,8 @@ class PageView(context: Context) : FrameLayout(context) {
         }
     }
 
-    private val defaultFontAssetDelegate = object : FontAssetDelegate() {
-        override fun fetchFont(fontFamily: String): Typeface {
-            return ChapterProvider.titlePaint.typeface ?: ChapterProvider.typeface ?: Typeface.DEFAULT
-        }
+    private val defaultFontAssetDelegate = AdvancedTitleFontAssetDelegate {
+        ChapterProvider.titlePaint.typeface ?: ChapterProvider.typeface ?: Typeface.DEFAULT
     }
 
     val textPage get() = binding.contentTextView.textPage

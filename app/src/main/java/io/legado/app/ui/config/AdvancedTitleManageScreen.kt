@@ -44,6 +44,7 @@ import com.airbnb.lottie.LottieAnimationView
 import com.airbnb.lottie.RenderMode
 import io.legado.app.R
 import io.legado.app.help.config.AdvancedTitlePackageManager
+import io.legado.app.help.config.AdvancedTitleFontAssetDelegate
 import io.legado.app.lib.theme.composeActionRadius
 import io.legado.app.ui.widget.compose.AppListSpacing
 import io.legado.app.ui.widget.compose.AppManagementCard
@@ -227,6 +228,7 @@ private fun AdvancedTitlePreview(
                     LottieAnimationView(context).apply {
                         setBackgroundColor(AndroidColor.TRANSPARENT)
                         setCacheComposition(false)
+                        setFontAssetDelegate(AdvancedTitleFontAssetDelegate())
                         repeatCount = 0
                         renderMode = RenderMode.SOFTWARE
                     }
