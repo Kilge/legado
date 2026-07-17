@@ -91,24 +91,27 @@ object AdvancedTitlePackageManager {
         ?: BUILTIN_ID
 
     suspend fun loadEntries(): List<Entry> = withContext(IO) {
-        rootDir.mkdirs()
-        migrateLegacyIfNeeded()
-        var local = loadLocalEntries()
-        val validIds = local.asSequence().map { it.id }.toSet() + BUILTIN_ID
-        if (activeId() !in validIds) {
-            val recovery = legacyTemplate()
-                ?.takeIf { runCatching { validateJson(it) }.isSuccess }
-                ?.let { addOrUpdate(appCtx.getString(R.string.advanced_title_migrated), it) }
-            appCtx.putPrefString(
-                PreferKey.advancedTitlePackage,
-                recovery?.id ?: BUILTIN_ID
+        synchronized(mutationLock) {
+            rootDir.mkdirs()
+            AdvancedTitlePackageStorage.cleanupStaleStagingDirectories(rootDir)
+            migrateLegacyIfNeeded()
+            var local = loadLocalEntries()
+            val validIds = local.asSequence().map { it.id }.toSet() + BUILTIN_ID
+            if (activeId() !in validIds) {
+                val recovery = legacyTemplate()
+                    ?.takeIf { runCatching { validateJson(it) }.isSuccess }
+                    ?.let { addOrUpdate(appCtx.getString(R.string.advanced_title_migrated), it) }
+                appCtx.putPrefString(
+                    PreferKey.advancedTitlePackage,
+                    recovery?.id ?: BUILTIN_ID
+                )
+                if (recovery != null) local = loadLocalEntries()
+                invalidate()
+            }
+            listOf(builtinEntry()) + local.sortedWith(
+                compareByDescending<Entry> { it.updatedAt }.thenBy { it.name }
             )
-            if (recovery != null) local = loadLocalEntries()
-            invalidate()
         }
-        listOf(builtinEntry()) + local.sortedWith(
-            compareByDescending<Entry> { it.updatedAt }.thenBy { it.name }
-        )
     }
 
     fun currentTemplate(): String? {
@@ -182,16 +185,28 @@ object AdvancedTitlePackageManager {
             regex = splitRule?.regex,
             heightFactor = heightFactor?.coerceIn(30, 120)
         )
-        staging.mkdirs()
-        File(staging, MANIFEST_FILE).writeText(GSON.toJson(config))
-        lottieFile(staging).writeText(json)
-        verifyInstalledDirectory(staging, expectedId = id)
-        val installed = BubbleDirectoryTransaction().install(target, staging, backup) { installedDir ->
-            val verified = verifyInstalledDirectory(installedDir, expectedId = id)
-            Entry(verified, installedDir)
+        try {
+            staging.mkdirs()
+            File(staging, MANIFEST_FILE).writeText(GSON.toJson(config))
+            lottieFile(staging).writeText(json)
+            verifyInstalledDirectory(
+                directory = staging,
+                expectedId = id,
+                requireDirectoryIdMatch = false
+            )
+            val installed = BubbleDirectoryTransaction().install(
+                target,
+                staging,
+                backup
+            ) { installedDir ->
+                val verified = verifyInstalledDirectory(installedDir, expectedId = id)
+                Entry(verified, installedDir)
+            }
+            invalidate()
+            installed
+        } finally {
+            AdvancedTitlePackageStorage.deleteStagingDirectory(parent, staging)
         }
-        invalidate()
-        installed
     }
 
     fun apply(entry: Entry) = synchronized(mutationLock) {
@@ -264,7 +279,11 @@ object AdvancedTitlePackageManager {
             .toList()
     }
 
-    private fun verifyInstalledDirectory(directory: File, expectedId: String? = null): Config {
+    private fun verifyInstalledDirectory(
+        directory: File,
+        expectedId: String? = null,
+        requireDirectoryIdMatch: Boolean = true
+    ): Config {
         val manifest = File(directory, MANIFEST_FILE)
         require(manifest.isFile && manifest.length() in 1..64L * 1024L) {
             "Advanced title manifest is invalid"
@@ -272,7 +291,11 @@ object AdvancedTitlePackageManager {
         val config = GSON.fromJsonObject<Config>(manifest.readText()).getOrThrow()
         require(isValidId(config.id)) { "Advanced title id is invalid" }
         require(expectedId == null || config.id == expectedId) { "Advanced title id changed" }
-        require(config.id == directory.name) { "Advanced title directory does not match its id" }
+        AdvancedTitlePackageStorage.requireDirectoryMatchesId(
+            directoryName = directory.name,
+            configId = config.id,
+            requireMatch = requireDirectoryIdMatch
+        )
         require(config.name.isNotBlank() && config.name.length <= 100) { "Advanced title name is invalid" }
         val json = readJsonFile(lottieFile(directory))
         require(AdvancedTitleConfig.hasRenderableLayers(json)) {
