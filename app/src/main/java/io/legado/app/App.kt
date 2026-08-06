@@ -176,10 +176,8 @@ class App : Application() {
                         themeConfigurationMutex.unlock()
                     }
                     withContext(Dispatchers.Main.immediate) {
-                        val currentNight = resources.configuration.uiMode and
-                            Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
+                        //必须用 newConfig 的 expectedNight，resources.configuration 被包装上下文固定为启动模式，跟随系统切换后不更新，否则会跳过 applyDayNight
                         if (generation == themeConfigurationGeneration.get() &&
-                            currentNight == expectedNight &&
                             AppConfig.themeMode == "0"
                         ) {
                             applyDayNight(this@App, expectedNight)
