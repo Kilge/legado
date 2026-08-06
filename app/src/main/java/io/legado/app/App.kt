@@ -5,7 +5,6 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
-import android.content.pm.ActivityInfo
 import android.content.pm.ApplicationInfo
 import android.content.res.Configuration
 import android.os.Build
@@ -157,8 +156,10 @@ class App : Application() {
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
-        val diff = newConfig.diff(oldConfig)
-        if ((diff and ActivityInfo.CONFIG_UI_MODE) != 0 && AppConfig.themeMode == "0") {
+        //只处理真正的亮暗切换，忽略车载/底座等 uiMode 类型变化，避免无谓重建
+        val nightChanged = (newConfig.uiMode and Configuration.UI_MODE_NIGHT_MASK) !=
+            (oldConfig.uiMode and Configuration.UI_MODE_NIGHT_MASK)
+        if (nightChanged && AppConfig.themeMode == "0") {
             val expectedNight = newConfig.uiMode and Configuration.UI_MODE_NIGHT_MASK ==
                 Configuration.UI_MODE_NIGHT_YES
             val generation = themeConfigurationGeneration.incrementAndGet()
