@@ -712,6 +712,37 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
         }
     }
 
+    override fun autoPage() {
+        triggerMangaMenuItem(R.id.menu_enable_auto_page)
+    }
+
+    override fun openColorFilter() {
+        binding.mangaMenu.runMenuOut()
+        showDialogFragment(MangaColorFilterDialog())
+    }
+
+    override fun toggleGray() {
+        triggerMangaMenuItem(R.id.menu_gray_manga)
+    }
+
+    override fun toggleEInk() {
+        triggerMangaMenuItem(R.id.menu_epaper_manga)
+    }
+
+    override fun openCatalog() {
+        ReadManga.book?.let {
+            tocActivity.launch(it.bookUrl)
+        }
+    }
+
+    override fun showInterfaceSetting() {
+        showMangaConfigMenu()
+    }
+
+    override fun showMoreSettingMenu() {
+        showMangaConfigMenu()
+    }
+
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         val keyCode = event.keyCode
         val action = event.action
