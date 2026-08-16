@@ -10,6 +10,7 @@ import com.bumptech.glide.load.model.ModelLoaderFactory
 import com.bumptech.glide.load.model.MultiModelLoaderFactory
 import com.bumptech.glide.signature.ObjectKey
 import io.legado.app.constant.AppLog
+import io.legado.app.lib.smb.SmbZipReader
 import io.legado.app.lib.webdav.Authorization
 import io.legado.app.lib.webdav.WebDavZipReader
 import io.legado.app.model.analyzeRule.AnalyzeUrl
@@ -68,7 +69,31 @@ object ArchiveImageLoader {
         val encodeUrl = url.substring(SCHEME.length)
         val zipUri = Uri.decode(encodeUrl.substringBefore("|"))
         val entryName = Uri.decode(encodeUrl.substringAfter("|"))
-        return if (zipUri.startsWith("http://", true) || zipUri.startsWith("https://", true)) {
+        return if (zipUri.startsWith("smb://", true)) {
+            //SMB远程压缩包免下载直读,信号量在整个读取期间持有,流关闭时释放
+            runBlocking {
+                fetchSemaphore.acquire()
+                try {
+                    val entry = SmbZipReader.getEntries(zipUri)
+                        .firstOrNull { it.name == entryName }
+                        ?: throw FileNotFoundException("压缩包内没有图片 $entryName")
+                    //共享连接读取,避免大漫画每张图新建SMB连接
+                    val raw = SmbZipReader.openEntryShared(zipUri, entry)
+                    object : FilterInputStream(raw) {
+                        override fun close() {
+                            try {
+                                super.close()
+                            } finally {
+                                fetchSemaphore.release()
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    fetchSemaphore.release()
+                    throw e
+                }
+            }
+        } else if (zipUri.startsWith("http://", true) || zipUri.startsWith("https://", true)) {
             //webdav远程压缩包免下载直读(Range请求)
             runBlocking {
                 fetchSemaphore.acquire()

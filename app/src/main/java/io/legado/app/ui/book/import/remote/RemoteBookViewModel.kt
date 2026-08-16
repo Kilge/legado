@@ -160,8 +160,8 @@ class RemoteBookViewModel(application: Application) : BaseViewModel(application)
             existing.save()
             return
         }
-        //免下载检测压缩包内是否有图片,判断是否漫画
-        val remoteUrl = remoteBook.path
+        //免下载检测压缩包内是否有图片,判断是否漫画(用origin的remoteUrl,带serverID选项)
+        val remoteUrl = origin.substringAfter(BookType.webDavTag)
         val hasImages = kotlin.runCatching {
             when (bookManager) {
                 is RemoteBookSmb -> {

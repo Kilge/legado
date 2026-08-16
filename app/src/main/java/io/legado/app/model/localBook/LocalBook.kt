@@ -20,6 +20,8 @@ import io.legado.app.exception.TocEmptyException
 import io.legado.app.help.AppWebDav
 import io.legado.app.help.glide.ArchiveImageLoader
 import io.legado.app.lib.webdav.Authorization
+import io.legado.app.lib.smb.Smb
+import io.legado.app.lib.smb.SmbZipReader
 import io.legado.app.lib.webdav.WebDavZipReader
 import io.legado.app.utils.AlphanumComparator
 import io.legado.app.utils.MD5Utils
@@ -138,6 +140,7 @@ object LocalBook {
     fun getImageArchiveToc(book: Book): Pair<ArrayList<BookChapter>, String>? {
         if (!book.isArchive) return null
         val remoteUrl = book.getRemoteUrl()
+        val isSmb = remoteUrl?.startsWith("smb://", true) == true
         val isWebDav = remoteUrl?.startsWith("http://", true) == true ||
             remoteUrl?.startsWith("https://", true) == true ||
             remoteUrl?.startsWith("dav://", true) == true ||
@@ -157,6 +160,14 @@ object LocalBook {
                     it.matches(AppPattern.imageFileRegex)
                 }
                 book.bookUrl to list
+            }
+
+            isSmb -> {
+                //SMB远程直读,失败直接抛出,避免降级为文本解析污染书籍
+                val entries = SmbZipReader.getEntries(remoteUrl)
+                val list = entries.map { it.name }
+                    .filter { it.matches(AppPattern.imageFileRegex) }
+                remoteUrl to list
             }
 
             isWebDav -> {
@@ -735,15 +746,20 @@ object LocalBook {
         try {
             AppConfig.defaultBookTreeUri
                 ?: throw NoBooksDirException()
-            // 兼容旧版链接
-            val webdav: WebDav = kotlin.runCatching {
-                WebDav.fromPath(webDavUrl)
-            }.getOrElse {
-                AppWebDav.authorization?.let { WebDav(webDavUrl, it) }
-                    ?: throw WebDavException("Unexpected defaultBookWebDav")
-            }
             val inputStream = runBlocking {
-                webdav.downloadInputStream()
+                if (webDavUrl.startsWith("smb://", true)) {
+                    // SMB远程书籍
+                    Smb.fromPath(webDavUrl).downloadInputStream()
+                } else {
+                    // 兼容旧版链接
+                    val webdav: WebDav = kotlin.runCatching {
+                        WebDav.fromPath(webDavUrl)
+                    }.getOrElse {
+                        AppWebDav.authorization?.let { WebDav(webDavUrl, it) }
+                            ?: throw WebDavException("Unexpected defaultBookWebDav")
+                    }
+                    webdav.downloadInputStream()
+                }
             }
             inputStream.use {
                 if (localBook.isArchive) {
