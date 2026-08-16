@@ -5,45 +5,48 @@ import io.legado.app.constant.AppPattern.archiveFileRegex
 import io.legado.app.constant.AppPattern.bookFileRegex
 import io.legado.app.constant.BookType
 import io.legado.app.data.entities.Book
+import io.legado.app.data.entities.Server
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.book.update
 import io.legado.app.help.config.AppConfig
-import io.legado.app.lib.webdav.Authorization
-import io.legado.app.lib.webdav.WebDav
-import io.legado.app.lib.webdav.WebDavFile
+import io.legado.app.lib.smb.Smb
 import io.legado.app.model.analyzeRule.CustomUrl
 import io.legado.app.model.localBook.LocalBook
 import io.legado.app.utils.NetworkUtils
 import io.legado.app.utils.isContentScheme
 import kotlinx.coroutines.runBlocking
+import splitties.init.appCtx
+import java.io.File
 
-class RemoteBookWebDav(
+/**
+ * SMB远程书库管理(移植自reader:com.x.reader.model.remote.RemoteBookSmb)
+ */
+class RemoteBookSmb(
     override val rootBookUrl: String,
-    val authorization: Authorization,
+    val config: Server.SmbConfig,
     override val serverID: Long? = null
 ) : RemoteBookManager() {
 
     init {
         runBlocking {
-            WebDav(rootBookUrl, authorization).makeAsDir()
+            Smb(rootBookUrl, config).makeAsDir()
         }
     }
-
 
     @Throws(Exception::class)
     override suspend fun getRemoteBookList(path: String): MutableList<RemoteBook> {
         if (!NetworkUtils.isAvailable()) throw NoStackTraceException("网络不可用")
         val remoteBooks = mutableListOf<RemoteBook>()
         //读取文件列表
-        val remoteWebDavFileList: List<WebDavFile> = WebDav(path, authorization).listFiles()
+        val smbFileList = Smb(path, config).listFiles()
         //转化远程文件信息到本地对象
-        remoteWebDavFileList.forEach { webDavFile ->
-            if (webDavFile.isDir
-                || bookFileRegex.matches(webDavFile.displayName)
-                || archiveFileRegex.matches(webDavFile.displayName)
+        smbFileList.forEach { smbFile ->
+            if (smbFile.isDir
+                || bookFileRegex.matches(smbFile.displayName)
+                || archiveFileRegex.matches(smbFile.displayName)
             ) {
                 //扩展名符合阅读的格式则认为是书籍
-                remoteBooks.add(RemoteBook(webDavFile))
+                remoteBooks.add(RemoteBook(smbFile))
             }
         }
         return remoteBooks
@@ -51,17 +54,16 @@ class RemoteBookWebDav(
 
     override suspend fun getRemoteBook(path: String): RemoteBook? {
         if (!NetworkUtils.isAvailable()) throw NoStackTraceException("网络不可用")
-        val webDavFile = WebDav(path, authorization).getWebDavFile()
+        val smbFileInfo = Smb(path, config).getSmbFileInfo()
             ?: return null
-        return RemoteBook(webDavFile)
+        return RemoteBook(smbFileInfo)
     }
 
     override suspend fun downloadRemoteBook(remoteBook: RemoteBook): Uri {
         AppConfig.defaultBookTreeUri
             ?: throw NoStackTraceException("没有设置书籍保存位置!")
         if (!NetworkUtils.isAvailable()) throw NoStackTraceException("网络不可用")
-        val webdav = WebDav(remoteBook.path, authorization)
-        return webdav.downloadInputStream().let { inputStream ->
+        return Smb(remoteBook.path, config).downloadInputStream().let { inputStream ->
             LocalBook.saveBookFile(inputStream, remoteBook.filename)
         }
     }
@@ -69,13 +71,13 @@ class RemoteBookWebDav(
     override suspend fun upload(book: Book) {
         if (!NetworkUtils.isAvailable()) throw NoStackTraceException("网络不可用")
         val localBookUri = Uri.parse(book.bookUrl)
-        val putUrl = "$rootBookUrl${book.originName}"
-        val webDav = WebDav(putUrl, authorization)
+        val smb = Smb(rootBookUrl, config)
         if (localBookUri.isContentScheme()) {
-            webDav.upload(localBookUri)
+            smb.upload(localBookUri, book.originName)
         } else {
-            webDav.upload(localBookUri.path!!)
+            smb.upload(File(localBookUri.path!!), book.originName)
         }
+        val putUrl = rootBookUrl.trimEnd('/') + "/" + book.originName
         book.origin = BookType.webDavTag + CustomUrl(putUrl)
             .putAttribute("serverID", serverID)
             .toString()
@@ -84,7 +86,7 @@ class RemoteBookWebDav(
 
     override suspend fun delete(remoteBookUrl: String) {
         if (!NetworkUtils.isAvailable()) throw NoStackTraceException("网络不可用")
-        WebDav(remoteBookUrl, authorization).delete()
+        Smb(remoteBookUrl, config).delete()
     }
 
 }
