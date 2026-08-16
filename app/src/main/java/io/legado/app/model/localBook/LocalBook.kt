@@ -18,6 +18,11 @@ import io.legado.app.exception.NoBooksDirException
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.exception.TocEmptyException
 import io.legado.app.help.AppWebDav
+import io.legado.app.help.glide.ArchiveImageLoader
+import io.legado.app.lib.webdav.Authorization
+import io.legado.app.lib.webdav.WebDavZipReader
+import io.legado.app.utils.AlphanumComparator
+import io.legado.app.utils.MD5Utils
 import io.legado.app.help.book.BookHelp
 import io.legado.app.help.book.ContentProcessor
 import io.legado.app.help.book.addType
@@ -26,6 +31,7 @@ import io.legado.app.help.book.getArchiveUri
 import io.legado.app.help.book.getLocalUri
 import io.legado.app.help.book.getRemoteUrl
 import io.legado.app.help.book.isArchive
+import io.legado.app.help.book.isImage
 import io.legado.app.help.book.isEpub
 import io.legado.app.help.book.isMobi
 import io.legado.app.help.book.isPdf
@@ -41,7 +47,6 @@ import io.legado.app.utils.ArchiveUtils
 import io.legado.app.utils.FileDoc
 import io.legado.app.utils.FileUtils
 import io.legado.app.utils.GSON
-import io.legado.app.utils.MD5Utils
 import io.legado.app.utils.externalFiles
 import io.legado.app.utils.fromJsonObject
 import io.legado.app.utils.getFile
@@ -119,8 +124,95 @@ object LocalBook {
         }
     }
 
+    /**
+     * 图片压缩包生成漫画章节
+     * webdav远程压缩包免下载直接读取,其余远程先下载
+     * @return 章节列表和章节内容,非图片压缩包返回null
+     */
+    fun getImageArchiveToc(book: Book): Pair<ArrayList<BookChapter>, String>? {
+        if (!book.isArchive) return null
+        val remoteUrl = book.getRemoteUrl()
+        val isWebDav = remoteUrl?.startsWith("http://", true) == true ||
+            remoteUrl?.startsWith("https://", true) == true ||
+            remoteUrl?.startsWith("dav://", true) == true ||
+            remoteUrl?.startsWith("davs://", true) == true
+        //本地已有文件则用本地,否则远程免下载直读(安静检查,不产生日志)
+        val localExists = kotlin.runCatching {
+            when {
+                book.bookUrl.isContentScheme() ->
+                    DocumentFile.fromSingleUri(appCtx, book.bookUrl.toUri())?.exists() == true
+                else -> File(book.bookUrl).exists()
+            }
+        }.getOrDefault(false)
+        val (zipUri, images) = when {
+            localExists -> {
+                val list = ArchiveUtils.getArchiveFilesName(book.bookUrl.toUri()) {
+                    it.matches(AppPattern.imageFileRegex)
+                }
+                book.bookUrl to list
+            }
+
+            isWebDav -> {
+                //webdav远程直读(Range请求),失败直接抛出,避免降级为文本解析污染书籍
+                val serverID = AnalyzeUrl(remoteUrl).serverID
+                    ?: throw NoStackTraceException("webdav服务器不存在")
+                val entries = kotlin.runCatching {
+                    WebDavZipReader.getEntries(remoteUrl, Authorization(serverID))
+                }.onFailure {
+                    AppLog.put("webdav zip直读失败\n$remoteUrl\n${it.localizedMessage}", it)
+                }.getOrThrow()
+                if (entries.isEmpty()) {
+                    AppLog.put("webdav zip直读为空(可能zip结构异常)\n$remoteUrl")
+                }
+                val list = entries.map { it.name }
+                    .filter { it.matches(AppPattern.imageFileRegex) }
+                remoteUrl to list
+            }
+
+            else -> {
+                //webdav等远程:先下载到本地
+                getBookInputStream(book).close()
+                val list = ArchiveUtils.getArchiveFilesName(book.bookUrl.toUri()) {
+                    it.matches(AppPattern.imageFileRegex)
+                }
+                book.bookUrl to list
+            }
+        }
+        if (images.isEmpty()) {
+            AppLog.put(
+                "漫画检测未通过:${book.name}\n" +
+                    "来源:${if (localExists) "本地文件" else if (isWebDav) "webdav直读" else "远程下载"},压缩包内无图片"
+            )
+            return null
+        }
+        val sortedImages = images.sortedWith(AlphanumComparator)
+        val chapter = BookChapter(
+            url = MD5Utils.md5Encode16(zipUri + "manga"),
+            title = book.name,
+            bookUrl = book.bookUrl,
+            index = 0,
+            baseUrl = zipUri
+        )
+        val content = sortedImages.joinToString("\n") { image ->
+            "<img src=\"${ArchiveImageLoader.buildUrl(zipUri, image)}\">"
+        }
+        book.addType(BookType.image)
+        book.tocUrl = zipUri
+        book.totalChapterNum = 1
+        book.latestChapterTitle = book.name
+        book.save()
+        BookHelp.saveText(book, chapter, content)
+        return arrayListOf(chapter) to content
+    }
+
     @Throws(TocEmptyException::class)
     fun getChapterList(book: Book): ArrayList<BookChapter> {
+        if (book.isArchive) {
+            //图片压缩包一律按漫画章节处理,避免被按文本解析出乱码
+            getImageArchiveToc(book)?.let { (toc, _) ->
+                return toc
+            }
+        }
         val chapters = when {
             book.isEpub -> {
                 EpubFile.getChapterList(book)
@@ -173,6 +265,10 @@ object LocalBook {
     }
 
     fun getContent(book: Book, chapter: BookChapter): String? {
+        if (book.isImage) {
+            //图片压缩包章节内容已由getImageArchiveToc经saveText缓存
+            return BookHelp.getContent(book, chapter)
+        }
         var content = try {
             when {
                 book.isEpub -> {
