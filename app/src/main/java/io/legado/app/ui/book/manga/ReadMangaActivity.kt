@@ -43,6 +43,7 @@ import io.legado.app.model.ReadManga
 import io.legado.app.receiver.NetworkChangedListener
 import io.legado.app.ui.book.changesource.ChangeBookSourceDialog
 import io.legado.app.ui.book.info.BookInfoStartActivityContract
+import io.legado.app.ui.book.source.edit.BookSourceEditActivity
 import io.legado.app.ui.book.manga.config.MangaColorFilterConfig
 import io.legado.app.ui.book.manga.config.MangaAutoReadDialog
 import io.legado.app.ui.book.manga.config.MangaColorFilterDialog
@@ -154,6 +155,14 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
             viewModel.openChapter(it[0] as Int, it[1] as Int)
         }
     }
+    private val sourceEditActivity =
+        registerForActivityResult(StartActivityContract(BookSourceEditActivity::class.java)) {
+            if (it.resultCode == RESULT_OK) {
+                viewModel.upBookSource {
+                    mMenu?.let { upMenu(it) }
+                }
+            }
+        }
     private val bookInfoActivity =
         registerForActivityResult(BookInfoStartActivityContract()) {
             if (it.resultCode == RESULT_OK) {
@@ -718,6 +727,18 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
         }
     }
 
+    override fun openSourceEditActivity() {
+        ReadManga.bookSource?.let {
+            sourceEditActivity.launch {
+                putExtra("sourceUrl", it.bookSourceUrl)
+            }
+        }
+    }
+
+    override fun disableSource() {
+        viewModel.disableSource()
+    }
+
     override fun openMangaConfig() {
         showMangaConfigMenu()
     }
@@ -846,6 +867,12 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
     override fun toggleNightTheme() {
         AppConfig.isNightTheme = !AppConfig.isNightTheme
         ThemeConfig.applyDayNight(this)
+    }
+
+    override fun openCatalog() {
+        ReadManga.book?.let {
+            tocActivity.launch(it.bookUrl)
+        }
     }
 
     override fun showInterfaceSetting() {

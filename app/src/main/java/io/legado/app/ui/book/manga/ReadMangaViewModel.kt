@@ -288,6 +288,25 @@ class ReadMangaViewModel(application: Application) : BaseViewModel(application) 
         changeSourceCoroutine?.cancel()
     }
 
+    fun disableSource() {
+        execute {
+            ReadManga.bookSource?.let {
+                it.enabled = false
+                appDb.bookSourceDao.update(it)
+            }
+        }
+    }
+
+    fun upBookSource(success: (() -> Unit)?) {
+        execute {
+            ReadManga.book?.let { book ->
+                ReadManga.bookSource = appDb.bookSourceDao.getBookSource(book.origin)
+            }
+        }.onSuccess {
+            success?.invoke()
+        }
+    }
+
     fun refreshContentDur(book: Book) {
         execute {
             appDb.bookChapterDao.getChapter(book.bookUrl, ReadManga.durChapterIndex)
