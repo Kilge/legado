@@ -49,6 +49,7 @@ import io.legado.app.ui.book.info.BookInfoStartActivityContract
 import io.legado.app.ui.book.source.edit.BookSourceEditActivity
 import io.legado.app.ui.book.manga.config.MangaColorFilterConfig
 import io.legado.app.ui.book.manga.config.MangaAutoReadDialog
+import io.legado.app.ui.book.manga.config.MangaMoreConfigDialog
 import io.legado.app.ui.book.manga.config.MangaColorFilterDialog
 import io.legado.app.ui.book.manga.config.MangaEpaperDialog
 import io.legado.app.ui.book.manga.config.MangaFooterConfig
@@ -275,6 +276,16 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
             mMangaFooterConfig = it
             val item = mAdapter.getItem(binding.recyclerView.findCenterViewPosition())
             upInfoBar(item)
+        }
+        //漫画设置弹窗(pref变更)应用
+        observeEvent<ArrayList<Int>>(EventBus.UP_CONFIG) {
+            applyBookMangaReadConfig()
+            mAdapter.enableGray(AppConfig.enableMangaGray)
+            mAdapter.enableMangaEInk(AppConfig.enableMangaEInk, AppConfig.mangaEInkThreshold)
+            binding.mangaMenu.refreshQuickActions()
+            if (AppConfig.hideMangaTitle) {
+                ReadManga.loadContent()
+            }
         }
     }
 
@@ -983,42 +994,8 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
     }
 
     fun showMangaConfigMenu() {
-        val items = listOf(
-            getString(R.string.screen_direction),
-            getString(R.string.pre_download),
-            getString(R.string.disable_manga_scale).removePrefix("禁用").removePrefix("Disable "),
-            getString(R.string.disable_manga_click_scroll).removePrefix("禁用").removePrefix("Disable "),
-            getString(R.string.enable_auto_page_scroll).removePrefix("开启").removePrefix("Enable "),
-            getString(R.string.enable_auto_scroll).removePrefix("开启").removePrefix("Enable "),
-            getString(R.string.setting_manga_auto_page_speed).removePrefix("设置"),
-            getString(R.string.enable_manga_horizontal_scroll),
-            getString(R.string.disable_horizontal_page_snap).removePrefix("禁用").removePrefix("Disable "),
-            getString(R.string.footer),
-            getString(R.string.manga_color_filter),
-            getString(R.string.title),
-            getString(R.string.manga_epaper),
-            getString(R.string.manga_epaper_stting),
-            getString(R.string.enable_manga_gray).removePrefix("开启").removePrefix("Enable ")
-        )
-        selector(R.string.manga_config, items) { _, index ->
-            when (index) {
-                0 -> showScreenDirectionDialog()
-                1 -> triggerMangaMenuItem(R.id.menu_pre_manga_number)
-                2 -> triggerMangaMenuItem(R.id.menu_disable_manga_scale)
-                3 -> triggerMangaMenuItem(R.id.menu_disable_click_scroll)
-                4 -> triggerMangaMenuItem(R.id.menu_enable_auto_page)
-                5 -> triggerMangaMenuItem(R.id.menu_enable_auto_scroll)
-                6 -> triggerMangaMenuItem(R.id.menu_manga_auto_page_speed)
-                7 -> triggerMangaMenuItem(R.id.menu_enable_horizontal_scroll)
-                8 -> triggerMangaMenuItem(R.id.menu_disable_horizontal_page_snap)
-                9 -> triggerMangaMenuItem(R.id.menu_manga_footer_config)
-                10 -> triggerMangaMenuItem(R.id.menu_manga_color_filter)
-                11 -> triggerMangaMenuItem(R.id.menu_hide_manga_title)
-                12 -> triggerMangaMenuItem(R.id.menu_epaper_manga)
-                13 -> triggerMangaMenuItem(R.id.menu_epaper_manga_setting)
-                14 -> triggerMangaMenuItem(R.id.menu_gray_manga)
-            }
-        }
+        //漫画设置弹窗(同小说MoreConfigDialog:底部sheet+preference列表)
+        showDialogFragment(MangaMoreConfigDialog())
     }
 
     /**
