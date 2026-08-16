@@ -582,7 +582,7 @@ object LocalBook {
     /**
      * 从文件分析书籍必要信息（书名 作者等）
      */
-    private fun analyzeNameAuthor(fileName: String): Pair<String, String> {
+    fun analyzeNameAuthor(fileName: String): Pair<String, String> {
         val tempFileName = fileName.substringBeforeLast(".")
         var name = ""
         var author = ""

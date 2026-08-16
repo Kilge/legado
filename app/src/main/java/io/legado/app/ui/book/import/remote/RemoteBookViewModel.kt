@@ -4,17 +4,24 @@ import android.app.Application
 import androidx.lifecycle.MutableLiveData
 import io.legado.app.base.BaseViewModel
 import io.legado.app.constant.AppLog
+import io.legado.app.constant.AppPattern
 import io.legado.app.constant.BookType
 import io.legado.app.data.appDb
+import io.legado.app.data.entities.Book
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.AppWebDav
+import io.legado.app.help.book.addType
 import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.webdav.Authorization
+import io.legado.app.lib.webdav.WebDavZipReader
+import io.legado.app.model.analyzeRule.AnalyzeUrl
 import io.legado.app.model.analyzeRule.CustomUrl
 import io.legado.app.model.localBook.LocalBook
 import io.legado.app.model.remote.RemoteBook
 import io.legado.app.model.remote.RemoteBookWebDav
 import io.legado.app.utils.AlphanumComparator
+import io.legado.app.utils.ArchiveUtils
+import io.legado.app.utils.MD5Utils
 import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
@@ -113,6 +120,53 @@ class RemoteBookViewModel(application: Application) : BaseViewModel(application)
         }
     }
 
+    /**
+     * 远程压缩包免下载加入书架:
+     * 生成书籍记录(bookUrl=origin URL,首次打开时下载或webdav直读),zip标记archive,
+     * 若压缩包内为图片则标记image(打开时getImageArchiveToc webdav直读)
+     */
+    private fun addArchiveToBookshelfDirect(
+        remoteBook: RemoteBook,
+        bookWebDav: RemoteBookWebDav
+    ) {
+        val nameAuthor = LocalBook.analyzeNameAuthor(remoteBook.filename)
+        val origin = BookType.webDavTag + CustomUrl(remoteBook.path)
+            .putAttribute("serverID", bookWebDav.serverID)
+            .toString()
+        //已存在的同名书籍时重新关联远程地址
+        appDb.bookDao.getBookByFileName(remoteBook.filename)?.let { existing ->
+            existing.origin = origin
+            existing.addType(BookType.archive)
+            existing.bookUrl = origin
+            existing.save()
+            return
+        }
+        //免下载检测压缩包内是否有图片,判断是否漫画
+        val remoteUrl = CustomUrl(origin).getUrl()
+        val hasImages = kotlin.runCatching {
+            val serverID = AnalyzeUrl(remoteUrl).serverID
+            val authorization = Authorization(serverID!!)
+            WebDavZipReader.getEntries(remoteUrl, authorization)
+                .any { it.name.matches(AppPattern.imageFileRegex) }
+        }.getOrDefault(false)
+        val book = Book(
+            type = BookType.text or BookType.local or BookType.archive or
+                if (hasImages) BookType.image else 0,
+            bookUrl = origin,
+            name = nameAuthor.first,
+            author = nameAuthor.second,
+            originName = remoteBook.filename,
+            latestChapterTime = remoteBook.lastModify ?: System.currentTimeMillis(),
+            order = appDb.bookDao.minOrder - 1,
+            origin = origin
+        )
+        appDb.bookDao.insert(book)
+        AppLog.put(
+            "zip免下载加入书架:book=${book.name}, hasImages=$hasImages, " +
+                "bookUrl=${book.bookUrl}"
+        )
+    }
+
     fun loadRemoteBookList(path: String?, loadCallback: (loading: Boolean) -> Unit) {
         executeLazy {
             val bookWebDav = remoteBookWebDav
@@ -136,12 +190,19 @@ class RemoteBookViewModel(application: Application) : BaseViewModel(application)
             val bookWebDav = remoteBookWebDav
                 ?: throw NoStackTraceException("没有配置webDav")
             remoteBooks.forEach { remoteBook ->
-                val downloadBookUri = bookWebDav.downloadRemoteBook(remoteBook)
-                LocalBook.importFiles(downloadBookUri).forEach { book ->
-                    book.origin = BookType.webDavTag + CustomUrl(remoteBook.path)
-                        .putAttribute("serverID", bookWebDav.serverID)
-                        .toString()
-                    book.save()
+                if (remoteBook.isDir) return@forEach
+                if (ArchiveUtils.isArchive(remoteBook.filename)) {
+                    //压缩包:免下载直读,生成书籍记录,首次打开阅读时webdav Range直读
+                    addArchiveToBookshelfDirect(remoteBook, bookWebDav)
+                } else {
+                    //普通书籍:下载到本地再导入
+                    val downloadBookUri = bookWebDav.downloadRemoteBook(remoteBook)
+                    LocalBook.importFiles(downloadBookUri).forEach { book ->
+                        book.origin = BookType.webDavTag + CustomUrl(remoteBook.path)
+                            .putAttribute("serverID", bookWebDav.serverID)
+                            .toString()
+                        book.save()
+                    }
                 }
                 remoteBook.isOnBookShelf = true
             }
