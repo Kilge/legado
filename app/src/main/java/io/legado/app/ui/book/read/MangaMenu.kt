@@ -7,13 +7,17 @@ import android.util.AttributeSet
 import android.view.LayoutInflater
 import android.view.animation.Animation
 import android.widget.FrameLayout
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -27,7 +31,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color as ComposeColor
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalContext
@@ -62,11 +65,10 @@ import io.legado.app.model.ReadBook
 import io.legado.app.model.ReadManga
 import io.legado.app.ui.book.manga.config.MangaAutoReadDialog
 import io.legado.app.ui.book.read.config.rememberReaderMenuDialogStyle
+import io.legado.app.ui.book.read.ReadMenuBrightnessRow
 import io.legado.app.ui.book.read.ReadMenuSeekBarRow
 import io.legado.app.ui.browser.WebViewActivity
 import io.legado.app.ui.widget.compose.AppDialogStyle
-import io.legado.app.ui.widget.compose.AppThemedStepperSlider
-import io.legado.app.ui.widget.compose.toMiuixPalette
 import io.legado.app.utils.activity
 import io.legado.app.utils.applyNavigationBarPadding
 import io.legado.app.utils.getPrefBoolean
@@ -362,8 +364,15 @@ private fun QuickActionsPanel(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+                .padding(
+                    start = 14.dp,
+                    top = 10.dp,
+                    end = 14.dp,
+                    bottom = 10.dp + WindowInsets.navigationBars
+                        .asPaddingValues()
+                        .calculateBottomPadding()
+                ),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             // 章节条(同小说 ReadMenuSeekBarRow)
             ReadMenuSeekBarRow(
@@ -378,10 +387,11 @@ private fun QuickActionsPanel(
                 onSeekStop = { progress -> menu.callBack.skipToPage(progress) }
             )
 
-            // 亮度行
-            BrightnessRow(
+            // 亮度行(复用小说 ReadMenuBrightnessRow)
+            ReadMenuBrightnessRow(
                 brightness = brightness,
                 isAuto = brightnessAuto,
+                showBrightnessView = true,
                 style = style,
                 onAutoClick = {
                     brightnessAuto = !brightnessAuto
@@ -482,7 +492,7 @@ private fun QuickButtonRow(
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(4.dp)
+        horizontalArrangement = Arrangement.spacedBy(0.dp)
     ) {
         content()
     }
@@ -501,9 +511,12 @@ private fun RowScope.QuickActionButton(
     Column(
         modifier = modifier
             .weight(1f)
-            .clip(RoundedCornerShape(style.actionRadius))
-            .clickable(onClick = onClick)
-            .padding(vertical = 8.dp),
+            .heightIn(min = 52.dp)
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = null
+            )
+            .padding(vertical = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Icon(
@@ -527,52 +540,3 @@ private fun RowScope.QuickActionButton(
     }
 }
 
-@Composable
-private fun BrightnessRow(
-    brightness: Int,
-    isAuto: Boolean,
-    style: AppDialogStyle,
-    onAutoClick: () -> Unit,
-    onBrightnessChange: (Int) -> Unit,
-    onBrightnessStop: (Int) -> Unit
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        Text(
-            text = stringResource(R.string.brightness),
-            color = style.primaryText,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Medium,
-            maxLines = 1
-        )
-        // 自动按钮
-        Column(
-            modifier = Modifier
-                .clip(RoundedCornerShape(style.actionRadius))
-                .clickable(onClick = onAutoClick)
-                .padding(6.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Icon(
-                painter = painterResource(id = R.drawable.ic_brightness_auto),
-                contentDescription = stringResource(R.string.brightness),
-                tint = if (isAuto) style.accent else style.secondaryText,
-                modifier = Modifier.size(20.dp)
-            )
-        }
-        // 滑块
-        AppThemedStepperSlider(
-            value = brightness,
-            range = 0..255,
-            onValueChange = { onBrightnessChange(it) },
-            palette = style.toMiuixPalette(),
-            step = 1,
-            enabled = !isAuto,
-            onValueChangeFinished = { onBrightnessStop(brightness) },
-            modifier = Modifier.weight(1f)
-        )
-    }
-}
