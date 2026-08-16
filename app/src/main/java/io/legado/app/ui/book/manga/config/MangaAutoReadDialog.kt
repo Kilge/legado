@@ -1,4 +1,4 @@
-package io.legado.app.ui.book.read.config
+package io.legado.app.ui.book.manga.config
 
 import android.content.DialogInterface
 import android.os.Bundle
@@ -7,7 +7,6 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -17,9 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -31,12 +28,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ComposeView
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.ViewCompositionStrategy
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -44,19 +37,20 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.legado.app.R
-import io.legado.app.help.config.ReadBookConfig
-import io.legado.app.model.ReadAloud
-import io.legado.app.model.ReadBook
-import io.legado.app.service.BaseReadAloudService
-import io.legado.app.ui.book.read.BaseReadBookActivity
-import io.legado.app.ui.book.read.ReadBookActivity
+import io.legado.app.help.config.AppConfig
+import io.legado.app.ui.book.manga.ReadMangaActivity
+import io.legado.app.ui.book.read.config.AutoReadAction
+import io.legado.app.ui.book.read.config.AutoReadModeButton
 import io.legado.app.ui.widget.compose.AppThemedStepperSlider
 import io.legado.app.ui.widget.compose.ComposeDialogFragment
 import io.legado.app.ui.widget.compose.LegadoMiuixCard
 import io.legado.app.ui.widget.compose.LegadoMiuixPalette
 import io.legado.app.ui.widget.compose.rememberAppDialogStyle
 
-class AutoReadDialog : ComposeDialogFragment() {
+/**
+ * 漫画自动翻页控制条(同小说AutoReadDialog:模式单选+速度滑块+底部快捷按钮)
+ */
+class MangaAutoReadDialog : ComposeDialogFragment() {
 
     override val dialogTheme: Int = R.style.Theme_Legado_ComposeDialog_Bottom
     override val dialogWidth: Int = ViewGroup.LayoutParams.MATCH_PARENT
@@ -65,7 +59,6 @@ class AutoReadDialog : ComposeDialogFragment() {
     override val dialogWindowAnimations: Int = R.style.AnimDialogBottom
 
     private val callBack: CallBack? get() = activity as? CallBack
-    private var registeredBottomDialog = false
 
     override fun onStart() {
         super.onStart()
@@ -81,62 +74,37 @@ class AutoReadDialog : ComposeDialogFragment() {
         }
     }
 
-    override fun onDismiss(dialog: DialogInterface) {
-        super.onDismiss(dialog)
-        if (registeredBottomDialog) {
-            (activity as? ReadBookActivity)?.let { it.bottomDialog-- }
-            registeredBottomDialog = false
-        }
-    }
-
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View {
-        val readActivity = activity as? ReadBookActivity
-        val bottomDialog = readActivity?.bottomDialog ?: 0
-        val alreadyRegistered = registeredBottomDialog
-        val shouldDismissForExistingDialog = !alreadyRegistered && bottomDialog > 0
-        if (!alreadyRegistered && readActivity != null) {
-            readActivity.bottomDialog = bottomDialog + 1
-            registeredBottomDialog = true
-        }
+        val timedMode = (activity as? ReadMangaActivity)?.isAutoScrollEnabled() == true
         return ComposeView(requireContext()).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
-            if (shouldDismissForExistingDialog) {
-                post { dismissAllowingStateLoss() }
-            }
             setContent {
-                if (!shouldDismissForExistingDialog) {
-                    AutoReadContent(
-                        onShowMenu = {
-                            callBack?.showMenuBar()
-                            dismissAllowingStateLoss()
-                        },
-                        onOpenChapterList = { callBack?.openChapterList() },
-                        onStopAutoPage = {
-                            callBack?.autoPageStop()
-                            post { dismissAllowingStateLoss() }
-                        },
-                        onOpenSetting = {
-                            (activity as? BaseReadBookActivity)?.showPageAnimConfig {
-                                (activity as? ReadBookActivity)?.upPageAnim()
-                                ReadBook.loadContent(false)
-                            }
-                        },
-                        onSpeedCommitted = ::upTtsSpeechRate
-                    )
-                }
+                MangaAutoReadContent(
+                    initialTimedMode = timedMode,
+                    onShowMenu = {
+                        callBack?.showMenuBar()
+                        dismissAllowingStateLoss()
+                    },
+                    onOpenChapterList = { callBack?.openChapterList() },
+                    onStopAutoPage = {
+                        callBack?.autoPageStop()
+                        post { dismissAllowingStateLoss() }
+                    },
+                    onOpenSetting = {
+                        (activity as? ReadMangaActivity)?.showMangaConfigMenu()
+                    },
+                    onModeChange = { mode ->
+                        (activity as? ReadMangaActivity)?.applyMangaAutoMode(mode)
+                    },
+                    onSpeedCommitted = { speed ->
+                        (activity as? ReadMangaActivity)?.applyMangaAutoSpeed(speed)
+                    }
+                )
             }
-        }
-    }
-
-    private fun upTtsSpeechRate() {
-        ReadAloud.upTtsSpeechRate(requireContext())
-        if (!BaseReadAloudService.pause) {
-            ReadAloud.pause(requireContext())
-            ReadAloud.resume(requireContext())
         }
     }
 
@@ -148,12 +116,14 @@ class AutoReadDialog : ComposeDialogFragment() {
 }
 
 @Composable
-private fun AutoReadContent(
+private fun MangaAutoReadContent(
+    initialTimedMode: Boolean,
     onShowMenu: () -> Unit,
     onOpenChapterList: () -> Unit,
     onStopAutoPage: () -> Unit,
     onOpenSetting: () -> Unit,
-    onSpeedCommitted: () -> Unit
+    onModeChange: (String) -> Unit,
+    onSpeedCommitted: (Int) -> Unit
 ) {
     val dialogStyle = rememberAppDialogStyle()
     val sliderPalette = LegadoMiuixPalette(
@@ -168,12 +138,11 @@ private fun AutoReadContent(
     val panel = dialogStyle.fieldSurface
     val textColor = dialogStyle.primaryText
     val secondaryTextColor = dialogStyle.secondaryText
-    val accent = dialogStyle.accent
-    var mode by remember { mutableIntStateOf(ReadBookConfig.autoReadMode) }
+    var mode by remember { mutableIntStateOf(if (initialTimedMode) 1 else 0) }
     var speed by remember {
-        mutableIntStateOf(ReadBookConfig.autoReadSpeed.coerceIn(1, 120))
+        mutableIntStateOf(AppConfig.mangaAutoPageSpeed.coerceIn(1, 120))
     }
-    val speedTitle = if (mode == ReadBookConfig.AUTO_READ_MODE_TIMED) {
+    val speedTitle = if (mode == 1) {
         stringResource(R.string.auto_page_interval)
     } else {
         stringResource(R.string.auto_page_speed)
@@ -210,24 +179,24 @@ private fun AutoReadContent(
                     ) {
                         AutoReadModeButton(
                             text = stringResource(R.string.auto_read_mode_scroll),
-                            selected = mode != ReadBookConfig.AUTO_READ_MODE_TIMED,
+                            selected = mode != 1,
                             palette = sliderPalette,
                             actionRadius = dialogStyle.actionRadius,
                             modifier = Modifier.weight(1f),
                             onClick = {
-                                mode = ReadBookConfig.AUTO_READ_MODE_SCROLL
-                                ReadBookConfig.autoReadMode = mode
+                                mode = 0
+                                onModeChange("scroll")
                             }
                         )
                         AutoReadModeButton(
                             text = stringResource(R.string.auto_read_mode_timed),
-                            selected = mode == ReadBookConfig.AUTO_READ_MODE_TIMED,
+                            selected = mode == 1,
                             palette = sliderPalette,
                             actionRadius = dialogStyle.actionRadius,
                             modifier = Modifier.weight(1f),
                             onClick = {
-                                mode = ReadBookConfig.AUTO_READ_MODE_TIMED
-                                ReadBookConfig.autoReadMode = mode
+                                mode = 1
+                                onModeChange("page")
                             }
                         )
                     }
@@ -262,9 +231,9 @@ private fun AutoReadContent(
                         step = 1,
                         onValueChangeFinished = {
                             val nextSpeed = speed.coerceIn(1, 120)
-                            if (ReadBookConfig.autoReadSpeed != nextSpeed) {
-                                ReadBookConfig.autoReadSpeed = nextSpeed
-                                onSpeedCommitted()
+                            if (AppConfig.mangaAutoPageSpeed != nextSpeed) {
+                                AppConfig.mangaAutoPageSpeed = nextSpeed
+                                onSpeedCommitted(nextSpeed)
                             }
                         }
                     )
@@ -312,72 +281,5 @@ private fun AutoReadContent(
                 }
             }
         }
-    }
-}
-
-@Composable
-internal fun AutoReadModeButton(
-    text: String,
-    selected: Boolean,
-    palette: LegadoMiuixPalette,
-    actionRadius: androidx.compose.ui.unit.Dp,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit
-) {
-    LegadoMiuixCard(
-        modifier = modifier
-            .height(40.dp)
-            .clickable(onClick = onClick),
-        color = if (selected) palette.accent.copy(alpha = 0.18f) else palette.surfaceVariant,
-        contentColor = if (selected) palette.accent else palette.primaryText,
-        cornerRadius = actionRadius,
-        insidePadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)
-    ) {
-        Text(
-            text = text,
-            color = if (selected) palette.accent else palette.primaryText,
-            fontSize = 13.sp,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
-            textAlign = TextAlign.Center,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.fillMaxWidth()
-        )
-    }
-}
-
-@Composable
-internal fun AutoReadAction(
-    iconRes: Int,
-    text: String,
-    textColor: Color,
-    panelColor: Color,
-    actionRadius: androidx.compose.ui.unit.Dp,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit
-) {
-    Column(
-        modifier = modifier
-            .height(50.dp)
-            .clip(RoundedCornerShape(actionRadius))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 4.dp, vertical = 4.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Icon(
-            painter = painterResource(id = iconRes),
-            contentDescription = text,
-            tint = textColor,
-            modifier = Modifier.size(22.dp)
-        )
-        Spacer(modifier = Modifier.height(3.dp))
-        Text(
-            text = text,
-            color = textColor,
-            fontSize = 11.sp,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
     }
 }

@@ -43,6 +43,7 @@ import io.legado.app.receiver.NetworkChangedListener
 import io.legado.app.ui.book.changesource.ChangeBookSourceDialog
 import io.legado.app.ui.book.info.BookInfoStartActivityContract
 import io.legado.app.ui.book.manga.config.MangaColorFilterConfig
+import io.legado.app.ui.book.manga.config.MangaAutoReadDialog
 import io.legado.app.ui.book.manga.config.MangaColorFilterDialog
 import io.legado.app.ui.book.manga.config.MangaEpaperDialog
 import io.legado.app.ui.book.manga.config.MangaFooterConfig
@@ -80,7 +81,8 @@ import kotlin.math.ceil
 
 class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewModel>(),
     ReadManga.Callback, ChangeBookSourceDialog.CallBack, MangaMenu.CallBack,
-    MangaColorFilterDialog.Callback, ScrollTimer.ScrollCallback, MangaEpaperDialog.Callback {
+    MangaColorFilterDialog.Callback, ScrollTimer.ScrollCallback, MangaEpaperDialog.Callback,
+    MangaAutoReadDialog.CallBack {
 
     private val mLayoutManager by lazy {
         MangaLayoutManager(this)
@@ -713,7 +715,94 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
     }
 
     override fun autoPage() {
-        triggerMangaMenuItem(R.id.menu_enable_auto_page)
+        if (enableAutoScrollPage || enableAutoScroll) {
+            stopMangaAutoPage()
+        } else {
+            mScrollTimer.setSpeed(mangaAutoPageSpeed)
+            setAutoPageEnabled(true)
+            binding.mangaMenu.setAutoPage(true)
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            binding.infobar.update(getString(R.string.auto_page_running, mangaAutoPageSpeed))
+            showDialogFragment(MangaAutoReadDialog())
+        }
+    }
+
+    /**
+     * 自动翻页控制条:停止自动翻页
+     */
+    fun stopMangaAutoPage() {
+        setAutoPageEnabled(false)
+        setAutoScrollEnabled(false)
+        binding.mangaMenu.setAutoPage(false)
+        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        binding.infobar.update("")
+    }
+
+    /**
+     * 自动翻页控制条:应用翻页模式(逐页/连续滚动)
+     */
+    fun applyMangaAutoMode(mode: String?) {
+        if (enableAutoScrollPage || enableAutoScroll) {
+            mScrollTimer.setSpeed(mangaAutoPageSpeed)
+            if (mode == "scroll") {
+                setAutoScrollEnabled(true)
+            } else {
+                setAutoPageEnabled(true)
+            }
+        }
+    }
+
+    /**
+     * 自动翻页控制条:速度变化
+     */
+    fun applyMangaAutoSpeed(speed: Int) {
+        mScrollTimer.setSpeed(speed)
+        binding.infobar.update(getString(R.string.auto_page_running, speed))
+    }
+
+    /**
+     * 自动翻页控制条:当前是否连续滚动模式
+     */
+    fun isAutoScrollEnabled(): Boolean {
+        return enableAutoScroll
+    }
+
+    /**
+     * 自动翻页控制条:显示主菜单(底部面板)
+     */
+    override fun showMenuBar() {
+        if (!binding.mangaMenu.isVisible) {
+            binding.mangaMenu.runMenuIn()
+        }
+    }
+
+    override fun autoPageStop() {
+        stopMangaAutoPage()
+    }
+
+    override fun openChapterList() {
+        openCatalog()
+    }
+
+    private fun setAutoPageEnabled(enable: Boolean) {
+        enableAutoScrollPage = enable
+        enableAutoScroll = false
+        mScrollTimer.isEnabledPage = enable
+        mScrollTimer.isEnabled = false
+        mMenu?.let { upMenu(it) }
+    }
+
+    private fun setAutoScrollEnabled(enable: Boolean) {
+        enableAutoScroll = enable
+        enableAutoScrollPage = false
+        mScrollTimer.isEnabled = enable
+        mScrollTimer.isEnabledPage = false
+        if (enable) {
+            mPagerSnapHelper.attachToRecyclerView(null)
+        } else if (mangaHorizontalScroll) {
+            mPagerSnapHelper.attachToRecyclerView(binding.recyclerView)
+        }
+        mMenu?.let { upMenu(it) }
     }
 
     override fun openColorFilter() {
@@ -806,6 +895,10 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
             isChecked = mangaDisableHorizontalPageSnap || mangaDisablePageAnim
         }
         menu.findItem(R.id.menu_gray_manga).isChecked = AppConfig.enableMangaGray
+        menu.findItem(R.id.menu_enable_auto_page).isChecked = enableAutoScrollPage
+        menu.findItem(R.id.menu_enable_auto_scroll).isChecked = enableAutoScroll
+        menu.findItem(R.id.menu_manga_auto_page_speed).isVisible =
+            enableAutoScrollPage || enableAutoScroll
         mangaConfigMenuItems.forEach { id ->
             menu.findItem(id)?.isVisible = false
         }
@@ -819,7 +912,7 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
         mMenu?.let { upMenu(it) }
     }
 
-    private fun showMangaConfigMenu() {
+    fun showMangaConfigMenu() {
         val items = listOf(
             getString(R.string.pre_download),
             getString(R.string.disable_manga_scale).removePrefix("禁用").removePrefix("Disable "),
