@@ -461,22 +461,65 @@ object LocalBook {
         }
     }
 
-    /* 批量导入 支持自动导入压缩包的支持书籍 */
+     /* 批量导入 支持自动导入压缩包的支持书籍 */
     fun importFiles(uri: Uri, onStage: ((String) -> Unit)? = null): List<Book> {
         val books = mutableListOf<Book>()
         onStage?.invoke("读取文件信息")
         val fileDoc = FileDoc.fromUri(uri, false)
         if (ArchiveUtils.isArchive(fileDoc.name)) {
             onStage?.invoke("解压压缩包")
-            books.addAll(
-                importArchiveFile(uri) {
-                    it.matches(AppPattern.bookFileRegex)
+            val innerBooks = importArchiveFile(uri) {
+                it.matches(AppPattern.bookFileRegex)
+            }
+            if (innerBooks.isEmpty()) {
+                //压缩包内没有书籍文件,尝试以图片漫画导入
+                kotlin.runCatching {
+                    importImageArchive(fileDoc)
+                }.onSuccess {
+                    books.add(it)
+                }.onFailure {
+                    throw NoStackTraceException(appCtx.getString(R.string.unsupport_archivefile_entry))
                 }
-            )
+            } else {
+                books.addAll(innerBooks)
+            }
         } else {
             books.add(importFile(uri, onStage))
         }
         return books
+    }
+
+    /**
+     * 图片压缩包(zip)以漫画方式导入,压缩包本身作为书籍
+     * 首次打开阅读时生成漫画章节
+     */
+    fun importImageArchive(fileDoc: FileDoc): Book {
+        val bookUrl = fileDoc.toString()
+        val images = ArchiveUtils.getArchiveFilesName(fileDoc) {
+            it.matches(AppPattern.imageFileRegex)
+        }
+        if (images.isEmpty()) {
+            AppLog.put("漫画导入失败:压缩包内无图片 ${fileDoc.name}")
+            throw NoStackTraceException(appCtx.getString(R.string.unsupport_archivefile_entry))
+        }
+        val nameAuthor = analyzeNameAuthor(fileDoc.name)
+        return appDb.bookDao.getBook(bookUrl)?.let {
+            it.origin = BookType.localTag
+            it.addType(BookType.image)
+            it.save()
+            it
+        } ?: Book(
+            type = BookType.text or BookType.local or BookType.archive or BookType.image,
+            bookUrl = bookUrl,
+            name = nameAuthor.first,
+            author = nameAuthor.second,
+            originName = fileDoc.name,
+            latestChapterTime = fileDoc.lastModified,
+            order = appDb.bookDao.minOrder - 1,
+            origin = BookType.localTag
+        ).apply {
+            appDb.bookDao.insert(this)
+        }
     }
 
     fun importFiles(uris: List<Uri>) {
