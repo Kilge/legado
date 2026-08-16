@@ -14,6 +14,7 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.ui.config.compose.ComposeSettingFragment
 import io.legado.app.ui.config.compose.SettingChoiceOption
 import io.legado.app.ui.config.compose.SettingChoiceSpec
+import io.legado.app.ui.config.compose.SettingActionSpec
 import io.legado.app.ui.config.compose.SettingPageSpec
 import io.legado.app.ui.config.compose.SettingSectionSpec
 import io.legado.app.ui.config.compose.SettingSwitchSpec
@@ -23,6 +24,7 @@ import io.legado.app.ui.widget.compose.showComposeNumberPickerDialog
 import io.legado.app.lib.theme.dialogSurfaceBackground
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.postEvent
+import io.legado.app.utils.showDialogFragment
 
 /**
  * 漫画设置弹窗(同小说MoreConfigDialog:底部sheet+圆角面板+preference列表)
@@ -105,10 +107,85 @@ class MangaMoreConfigDialog : BasePrefDialogFragment() {
                                 title = getString(R.string.show_brightness_view),
                                 defaultValue = true
                             ),
+                            choice(
+                                key = PreferKey.progressBarBehavior,
+                                title = getString(R.string.progress_bar_behavior),
+                                entriesRes = R.array.progress_bar_behavior_title,
+                                valuesRes = R.array.progress_bar_behavior_value,
+                                defaultValue = "page"
+                            ),
                             switch(
                                 key = PreferKey.hideMangaTitle,
                                 title = getString(R.string.hide_manga_title),
                                 defaultValue = false
+                            )
+                        )
+                    ),
+                    SettingSectionSpec(
+                        title = getString(R.string.manga_config),
+                        items = listOf(
+                            action(
+                                title = getString(R.string.pre_download),
+                                onClick = {
+                                    (activity as? ReadMangaActivity)?.showNumberPickerDialog(
+                                        0,
+                                        getString(R.string.pre_download),
+                                        AppConfig.mangaPreDownloadNum
+                                    ) {
+                                        AppConfig.mangaPreDownloadNum = it
+                                        (activity as? ReadMangaActivity)?.setRecyclerViewPreloader(it)
+                                    }
+                                }
+                            ),
+                            action(
+                                title = getString(R.string.enable_auto_page_scroll),
+                                onClick = {
+                                    (activity as? ReadMangaActivity)?.triggerMangaMenuItem(
+                                        R.id.menu_enable_auto_page
+                                    )
+                                }
+                            ),
+                            action(
+                                title = getString(R.string.enable_auto_scroll),
+                                onClick = {
+                                    (activity as? ReadMangaActivity)?.triggerMangaMenuItem(
+                                        R.id.menu_enable_auto_scroll
+                                    )
+                                }
+                            ),
+                            action(
+                                title = getString(R.string.setting_manga_auto_page_speed),
+                                onClick = {
+                                    (activity as? ReadMangaActivity)?.showNumberPickerDialog(
+                                        1,
+                                        getString(R.string.setting_manga_auto_page_speed),
+                                        (activity as? ReadMangaActivity)?.mangaAutoPageSpeed ?: 1
+                                    ) {
+                                        (activity as? ReadMangaActivity)?.applyMangaAutoSpeed(it)
+                                    }
+                                }
+                            ),
+                            action(
+                                title = getString(R.string.manga_color_filter),
+                                onClick = {
+                                    (activity as? ReadMangaActivity)?.openColorFilter()
+                                }
+                            ),
+                            action(
+                                title = getString(R.string.manga_footer_config),
+                                onClick = {
+                                    (activity as? ReadMangaActivity)?.showDialogFragment(
+                                        MangaFooterSettingDialog()
+                                    )
+                                }
+                            ),
+                            action(
+                                title = getString(R.string.manga_epaper_stting),
+                                onClick = {
+                                    (activity as? ReadMangaActivity)?.showDialogFragment(
+                                        MangaEpaperDialog()
+                                    )
+                                }
                             )
                         )
                     ),
@@ -141,17 +218,17 @@ class MangaMoreConfigDialog : BasePrefDialogFragment() {
             )
         }
 
-        override fun onSettingPreferenceChanged(key: String) {
-            when (key) {
-                PreferKey.screenOrientation -> {
-                    (activity as? ReadMangaActivity)?.setOrientation()
-                }
-
-                else -> {
-                    //灰度/墨水屏/缩放/点击滚动/隐藏标题等,通知漫画页应用
-                    postEvent(EventBus.UP_CONFIG, arrayListOf(0))
-                }
-            }
+        private fun action(
+            title: String,
+            onClick: () -> Unit,
+            visible: Boolean = true
+        ): SettingActionSpec {
+            return SettingActionSpec(
+                key = title,
+                title = title,
+                visible = visible,
+                onClick = onClick
+            )
         }
 
         private fun switch(
