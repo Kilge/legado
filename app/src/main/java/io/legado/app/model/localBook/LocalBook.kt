@@ -468,9 +468,18 @@ object LocalBook {
         val fileDoc = FileDoc.fromUri(uri, false)
         if (ArchiveUtils.isArchive(fileDoc.name)) {
             onStage?.invoke("解压压缩包")
-            val innerBooks = importArchiveFile(uri) {
-                it.matches(AppPattern.bookFileRegex)
-            }
+            //压缩包内无匹配书籍文件(或没有支持的文件)时,尝试以图片漫画导入
+            val innerBooks = kotlin.runCatching {
+                importArchiveFile(uri) {
+                    it.matches(AppPattern.bookFileRegex)
+                }
+            }.recoverCatching {
+                if (it is NoStackTraceException) {
+                    emptyList()
+                } else {
+                    throw it
+                }
+            }.getOrThrow()
             if (innerBooks.isEmpty()) {
                 //压缩包内没有书籍文件,尝试以图片漫画导入
                 kotlin.runCatching {
