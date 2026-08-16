@@ -1,6 +1,9 @@
 package io.legado.app.ui.book.manga
 
 import android.annotation.SuppressLint
+import android.content.pm.ActivityInfo
+import io.legado.app.constant.PreferKey
+import io.legado.app.utils.putPrefString
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
@@ -223,6 +226,22 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
     override fun onCreate(savedInstanceState: Bundle?) {
         upLayoutInDisplayCutoutMode()
         super.onCreate(savedInstanceState)
+        setOrientation()
+    }
+
+    /**
+     * 屏幕方向(同小说:0默认/1竖屏/2横屏/3传感器/4反向竖屏/5反向横屏)
+     */
+    @SuppressLint("SourceLockedOrientationActivity")
+    fun setOrientation() {
+        when (AppConfig.screenOrientation) {
+            "0" -> requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            "1" -> requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+            "2" -> requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+            "3" -> requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR
+            "4" -> requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_REVERSE_PORTRAIT
+            "5" -> requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE
+        }
     }
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
@@ -965,6 +984,7 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
 
     fun showMangaConfigMenu() {
         val items = listOf(
+            getString(R.string.screen_direction),
             getString(R.string.pre_download),
             getString(R.string.disable_manga_scale).removePrefix("禁用").removePrefix("Disable "),
             getString(R.string.disable_manga_click_scroll).removePrefix("禁用").removePrefix("Disable "),
@@ -982,21 +1002,35 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
         )
         selector(R.string.manga_config, items) { _, index ->
             when (index) {
-                0 -> triggerMangaMenuItem(R.id.menu_pre_manga_number)
-                1 -> triggerMangaMenuItem(R.id.menu_disable_manga_scale)
-                2 -> triggerMangaMenuItem(R.id.menu_disable_click_scroll)
-                3 -> triggerMangaMenuItem(R.id.menu_enable_auto_page)
-                4 -> triggerMangaMenuItem(R.id.menu_enable_auto_scroll)
-                5 -> triggerMangaMenuItem(R.id.menu_manga_auto_page_speed)
-                6 -> triggerMangaMenuItem(R.id.menu_enable_horizontal_scroll)
-                7 -> triggerMangaMenuItem(R.id.menu_disable_horizontal_page_snap)
-                8 -> triggerMangaMenuItem(R.id.menu_manga_footer_config)
-                9 -> triggerMangaMenuItem(R.id.menu_manga_color_filter)
-                10 -> triggerMangaMenuItem(R.id.menu_hide_manga_title)
-                11 -> triggerMangaMenuItem(R.id.menu_epaper_manga)
-                12 -> triggerMangaMenuItem(R.id.menu_epaper_manga_setting)
-                13 -> triggerMangaMenuItem(R.id.menu_gray_manga)
+                0 -> showScreenDirectionDialog()
+                1 -> triggerMangaMenuItem(R.id.menu_pre_manga_number)
+                2 -> triggerMangaMenuItem(R.id.menu_disable_manga_scale)
+                3 -> triggerMangaMenuItem(R.id.menu_disable_click_scroll)
+                4 -> triggerMangaMenuItem(R.id.menu_enable_auto_page)
+                5 -> triggerMangaMenuItem(R.id.menu_enable_auto_scroll)
+                6 -> triggerMangaMenuItem(R.id.menu_manga_auto_page_speed)
+                7 -> triggerMangaMenuItem(R.id.menu_enable_horizontal_scroll)
+                8 -> triggerMangaMenuItem(R.id.menu_disable_horizontal_page_snap)
+                9 -> triggerMangaMenuItem(R.id.menu_manga_footer_config)
+                10 -> triggerMangaMenuItem(R.id.menu_manga_color_filter)
+                11 -> triggerMangaMenuItem(R.id.menu_hide_manga_title)
+                12 -> triggerMangaMenuItem(R.id.menu_epaper_manga)
+                13 -> triggerMangaMenuItem(R.id.menu_epaper_manga_setting)
+                14 -> triggerMangaMenuItem(R.id.menu_gray_manga)
             }
+        }
+    }
+
+    /**
+     * 屏幕方向选择(同小说:0默认/1竖屏/2横屏/3传感器/4反向竖屏/5反向横屏)
+     */
+    private fun showScreenDirectionDialog() {
+        val titles = resources.getStringArray(R.array.screen_direction_title)
+        val values = resources.getStringArray(R.array.screen_direction_value)
+        selector(getString(R.string.screen_direction), titles.toList()) { _, index ->
+            val value = values.getOrElse(index) { "0" }
+            this@ReadMangaActivity.putPrefString(PreferKey.screenOrientation, value)
+            setOrientation()
         }
     }
 
