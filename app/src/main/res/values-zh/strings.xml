@@ -1202,6 +1202,9 @@
     <string name="download_book_success">下载成功</string>
     <string name="download_book_fail">下载失败</string>
     <string name="upload_to_remote">上传 WebDav</string>
+    <string name="webdav_name">WebDav</string>
+    <string name="smb_name">SMB</string>
+    <string name="smb_not_configured">没有配置SMB服务器</string>
     <string name="add_remote_book">远程书籍</string>
     <string name="bitmap_cache_size_summary">当前最大缓存 %1$s MB</string>
     <string name="bitmap_cache_size">图片绘制缓存</string>
