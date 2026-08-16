@@ -271,8 +271,8 @@ object LocalBook {
 
     fun getContent(book: Book, chapter: BookChapter): String? {
         if (book.isImage) {
-            //图片压缩包章节内容已由getImageArchiveToc经saveText缓存
-            return BookHelp.getContent(book, chapter)
+            //图片压缩包章节内容已由getImageArchiveToc经saveText缓存,丢失时重新生成
+            return getImageArchiveToc(book)?.second
         }
         var content = try {
             when {
