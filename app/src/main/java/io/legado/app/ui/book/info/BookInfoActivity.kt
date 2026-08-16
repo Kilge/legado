@@ -3427,7 +3427,7 @@ class BookInfoActivity :
                 Intent(
                     this,
                     when {
-                        !book.isLocal && book.isImage && AppConfig.showMangaUi -> ReadMangaActivity::class.java
+                        book.isImage && AppConfig.showMangaUi -> ReadMangaActivity::class.java
                         else -> ReadBookActivity::class.java
                     }
                 )
