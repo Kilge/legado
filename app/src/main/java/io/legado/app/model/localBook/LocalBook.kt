@@ -42,6 +42,7 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.webdav.WebDav
 import io.legado.app.lib.webdav.WebDavException
 import io.legado.app.model.analyzeRule.AnalyzeUrl
+import io.legado.app.model.analyzeRule.CustomUrl
 import io.legado.app.model.localBook.epubcore.cache.EpubCoreDiskCache
 import io.legado.app.utils.ArchiveUtils
 import io.legado.app.utils.FileDoc
@@ -185,6 +186,10 @@ object LocalBook {
             )
             return null
         }
+        AppLog.put(
+            "zip漫画诊断:book=${book.name}, 来源=${if (localExists) "本地" else if (isWebDav) "webdav直读" else "远程下载"}, " +
+                "图片数=${images.size}, zipUri=$zipUri, isImage=${book.isImage}"
+        )
         val sortedImages = images.sortedWith(AlphanumComparator)
         val chapter = BookChapter(
             url = MD5Utils.md5Encode16(zipUri + "manga"),
@@ -737,12 +742,41 @@ object LocalBook {
             inputStream.use {
                 if (localBook.isArchive) {
                     // 压缩包
-                    val archiveUri = saveBookFile(it, localBook.archiveName)
-                    val newBook = importArchiveFile(archiveUri, localBook.originName) { name ->
-                        name.contains(localBook.originName)
-                    }.first()
-                    localBook.origin = newBook.origin
-                    localBook.bookUrl = newBook.bookUrl
+                    val remoteUrl = localBook.getRemoteUrl()
+                    val archiveName = remoteUrl?.let { CustomUrl(it).getUrl().substringAfterLast("/") }
+                        ?: localBook.archiveName
+                    val archiveUri = saveBookFile(it, archiveName)
+                    //直接加入的压缩包(originName为压缩包本身)时,导入其中符合书籍格式的文件
+                    val isArchiveItself = localBook.originName == archiveName
+                    val innerBooks = kotlin.runCatching {
+                        importArchiveFile(archiveUri, localBook.originName) { name ->
+                            if (isArchiveItself) {
+                                name.matches(AppPattern.bookFileRegex)
+                            } else {
+                                name.contains(localBook.originName)
+                            }
+                        }
+                    }.getOrNull()
+                    if (innerBooks != null && innerBooks.isNotEmpty()) {
+                        val newBook = innerBooks.first()
+                        localBook.origin = if (isArchiveItself) localBook.origin else newBook.origin
+                        localBook.bookUrl = newBook.bookUrl
+                    } else {
+                        //压缩包内没有书籍文件,若为图片压缩包则标记为漫画保留压缩包本身
+                        localBook.bookUrl = FileDoc.fromUri(archiveUri, false).toString()
+                        val hasImages = ArchiveUtils.getArchiveFilesName(archiveUri) {
+                            it.matches(AppPattern.imageFileRegex)
+                        }.isNotEmpty()
+                        if (hasImages) {
+                            localBook.addType(BookType.image)
+                        }
+                        AppLog.put(
+                            "webdav zip诊断:重新下载归档, archiveName=$archiveName, " +
+                                "innerBooks=${innerBooks?.size}, hasImages=$hasImages, " +
+                                "bookUrl=${localBook.bookUrl}, isImage=${localBook.isImage}"
+                        )
+                    }
+                    localBook.save()
                 } else {
                     // txt epub pdf umd
                     val fileUri = saveBookFile(it, localBook.originName)
