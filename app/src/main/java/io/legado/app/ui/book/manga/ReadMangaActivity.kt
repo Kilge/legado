@@ -700,6 +700,24 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
         }
     }
 
+    override fun returnToBookshelf() {
+        finish()
+    }
+
+    override fun changeSource() {
+        binding.mangaMenu.runMenuOut()
+        ReadManga.book?.let {
+            showDialogFragment(ChangeBookSourceDialog(it.name, it.author))
+        }
+    }
+
+    override fun refreshContent() {
+        binding.flLoading.isVisible = true
+        ReadManga.book?.let {
+            viewModel.refreshContentDur(it)
+        }
+    }
+
     override fun openMangaConfig() {
         showMangaConfigMenu()
     }
@@ -786,7 +804,9 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
     }
 
     override fun openChapterList() {
-        openCatalog()
+        ReadManga.book?.let {
+            tocActivity.launch(it.bookUrl)
+        }
     }
 
     private fun setAutoPageEnabled(enable: Boolean) {
@@ -826,12 +846,6 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
     override fun toggleNightTheme() {
         AppConfig.isNightTheme = !AppConfig.isNightTheme
         ThemeConfig.applyDayNight(this)
-    }
-
-    override fun openCatalog() {
-        ReadManga.book?.let {
-            tocActivity.launch(it.bookUrl)
-        }
     }
 
     override fun showInterfaceSetting() {

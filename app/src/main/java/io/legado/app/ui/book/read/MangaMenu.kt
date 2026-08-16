@@ -1,27 +1,31 @@
 package io.legado.app.ui.book.read
 
-import android.annotation.SuppressLint
 import android.content.Context
-import android.graphics.Color
 import android.util.AttributeSet
 import android.view.LayoutInflater
 import android.view.animation.Animation
 import android.widget.FrameLayout
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -31,7 +35,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color as ComposeColor
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.ViewCompositionStrategy
@@ -42,41 +46,30 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Icon
-import androidx.compose.material3.Surface
 import androidx.core.view.isGone
 import androidx.core.view.isVisible
 import io.legado.app.R
-import io.legado.app.constant.PreferKey
 import io.legado.app.databinding.ViewMangaMenuBinding
 import io.legado.app.help.config.AppConfig
-import io.legado.app.help.config.ThemeConfig
 import io.legado.app.help.source.getSourceType
 import io.legado.app.lib.dialogs.alert
-import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.applyUiBodyTypefaceDeep
 import io.legado.app.lib.theme.bottomBackground
-import io.legado.app.lib.theme.buttonDisabledColor
 import io.legado.app.lib.theme.primaryTextColor
-import io.legado.app.lib.theme.secondaryTextColor
 import io.legado.app.lib.theme.uiTypeface
 import io.legado.app.model.ReadBook
 import io.legado.app.model.ReadManga
-import io.legado.app.ui.book.manga.config.MangaAutoReadDialog
 import io.legado.app.ui.book.read.config.rememberReaderMenuDialogStyle
-import io.legado.app.ui.book.read.ReadMenuBrightnessRow
-import io.legado.app.ui.book.read.ReadMenuSeekBarRow
-import io.legado.app.ui.browser.WebViewActivity
 import io.legado.app.ui.widget.compose.AppDialogStyle
+import io.legado.app.ui.browser.WebViewActivity
 import io.legado.app.utils.activity
-import io.legado.app.utils.applyNavigationBarPadding
 import io.legado.app.utils.getPrefBoolean
+import io.legado.app.utils.putPrefBoolean
+import io.legado.app.utils.applyNavigationBarPadding
 import io.legado.app.utils.gone
 import io.legado.app.utils.invisible
 import io.legado.app.utils.loadAnimation
 import io.legado.app.utils.openUrl
-import io.legado.app.utils.putPrefBoolean
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.visible
 
@@ -132,17 +125,11 @@ class MangaMenu @JvmOverloads constructor(
     }
     private val menuInListener = object : Animation.AnimationListener {
         override fun onAnimationStart(animation: Animation) {
-            binding.tvSourceAction.text =
-                ReadManga.bookSource?.bookSourceName ?: context.getString(R.string.book_source)
             callBack.upSystemUiVisibility(true)
-            binding.tvSourceAction.isGone = false
         }
 
-        @SuppressLint("RtlHardcoded")
         override fun onAnimationEnd(animation: Animation) {
-            binding.run {
-                vwMenuBg.setOnClickListener { runMenuOut() }
-            }
+            binding.vwMenuBg.setOnClickListener { runMenuOut() }
         }
 
         override fun onAnimationRepeat(animation: Animation) = Unit
@@ -152,25 +139,17 @@ class MangaMenu @JvmOverloads constructor(
         binding.root.applyUiBodyTypefaceDeep(context.uiTypeface())
         initView()
         bindEvent()
+        initComposeTitleBar()
         initComposeQuickActions()
     }
 
     private fun initView() = binding.run {
         initAnimation()
-        val textColor = context.primaryTextColor
-        val secondaryTextColor = context.secondaryTextColor
-        tvChapterName.setTextColor(secondaryTextColor)
-        tvChapterUrl.setTextColor(secondaryTextColor)
         if (AppConfig.isEInkMode) {
             titleBar.setBackgroundResource(R.drawable.bg_eink_border_bottom)
             bottomMenu.setBackgroundResource(R.drawable.bg_eink_border_top)
         } else {
-            bottomMenu.setBackgroundColor(Color.TRANSPARENT)
-        }
-        if (AppConfig.showReadTitleBarAddition) {
-            titleBarAddition.visible()
-        } else {
-            titleBarAddition.gone()
+            bottomMenu.setBackgroundColor(android.graphics.Color.TRANSPARENT)
         }
         /**
          * 确保视图不被导航栏遮挡
@@ -181,6 +160,21 @@ class MangaMenu @JvmOverloads constructor(
     private fun initAnimation() {
         menuTopIn.setAnimationListener(menuInListener)
         menuTopOut.setAnimationListener(menuOutListener)
+    }
+
+    private fun initComposeTitleBar() {
+        binding.titleBar.apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                MangaTitleBar(
+                    onBackClick = { callBack.returnToBookshelf() },
+                    onBookClick = { callBack.openBookInfoActivity() },
+                    onChangeSourceClick = { callBack.changeSource() },
+                    onRefreshClick = { callBack.refreshContent() },
+                    onMoreClick = { callBack.showMoreSettingMenu() }
+                )
+            }
+        }
     }
 
     private fun initComposeQuickActions() {
@@ -196,7 +190,6 @@ class MangaMenu @JvmOverloads constructor(
                     onToggleGray = { callBack.toggleGray() },
                     onToggleEInk = { callBack.toggleEInk() },
                     onToggleNightTheme = { callBack.toggleNightTheme() },
-                    onOpenCatalog = { callBack.openCatalog() },
                     onShowInterfaceSetting = { callBack.showInterfaceSetting() },
                     onShowMoreSetting = { callBack.showMoreSettingMenu() }
                 )
@@ -256,38 +249,6 @@ class MangaMenu @JvmOverloads constructor(
 
     private fun bindEvent() = binding.run {
         vwMenuBg.setOnClickListener { runMenuOut() }
-        titleBar.toolbar.setOnClickListener {
-            callBack.openBookInfoActivity()
-        }
-        val chapterViewClickListener = OnClickListener {
-            val url = tvChapterUrl.text.toString().trim()
-            if (url.isBlank()) return@OnClickListener
-            context.startActivity<WebViewActivity> {
-                val bookSource = ReadBook.bookSource
-                putExtra("title", tvChapterName.text)
-                putExtra("url", url)
-                putExtra("sourceOrigin", bookSource?.bookSourceUrl)
-                putExtra("sourceName", bookSource?.bookSourceName)
-                putExtra("sourceType", bookSource?.getSourceType())
-            }
-        }
-        val chapterViewLongClickListener = OnLongClickListener {
-            val url = tvChapterUrl.text.toString().trim()
-            if (url.isNotBlank()) {
-                context.alert(R.string.open_fun) {
-                    setMessage(R.string.use_browser_open)
-                    okButton {
-                        context.openUrl(url)
-                    }
-                    noButton()
-                }
-            }
-            true
-        }
-        tvChapterName.setOnClickListener(chapterViewClickListener)
-        tvChapterName.setOnLongClickListener(chapterViewLongClickListener)
-        tvChapterUrl.setOnClickListener(chapterViewClickListener)
-        tvChapterUrl.setOnLongClickListener(chapterViewLongClickListener)
     }
 
     fun upSeekBar(value: Int, count: Int) {
@@ -297,7 +258,10 @@ class MangaMenu @JvmOverloads constructor(
     }
 
     interface CallBack {
+        fun returnToBookshelf()
         fun openBookInfoActivity()
+        fun changeSource()
+        fun refreshContent()
         fun openMangaConfig()
         fun upSystemUiVisibility(menuIsVisible: Boolean)
         fun skipToPage(index: Int)
@@ -307,11 +271,121 @@ class MangaMenu @JvmOverloads constructor(
         fun toggleGray()
         fun toggleEInk()
         fun toggleNightTheme()
-        fun openCatalog()
         fun showInterfaceSetting()
         fun showMoreSettingMenu()
     }
 
+}
+
+/**
+ * 漫画菜单顶栏(同小说 ReadMenuTitleBar 样式:状态栏衔接+Surface全宽+返回/书名/换源/刷新/三点)
+ */
+@Composable
+private fun MangaTitleBar(
+    onBackClick: () -> Unit,
+    onBookClick: () -> Unit,
+    onChangeSourceClick: () -> Unit,
+    onRefreshClick: () -> Unit,
+    onMoreClick: () -> Unit
+) {
+    val context = LocalContext.current
+    val style = rememberReaderMenuDialogStyle(context.bottomBackground)
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = style.surface,
+        contentColor = style.primaryText,
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            // 状态栏占位(带背景色,衔接顶栏)
+            val statusBarHeight = WindowInsets.statusBars
+                .asPaddingValues()
+                .calculateTopPadding()
+            Spacer(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(statusBarHeight)
+            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onBookClick)
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // 返回按钮
+                MangaTitleIconButton(
+                    painterRes = R.drawable.ic_arrow_back,
+                    contentDescription = null,
+                    tint = style.primaryText,
+                    style = style,
+                    onClick = onBackClick
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                // 书名
+                Text(
+                    text = ReadManga.book?.name ?: "",
+                    color = style.primaryText,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+                // 换源图标
+                MangaTitleIconButton(
+                    painterRes = R.drawable.ic_exchange,
+                    contentDescription = stringResource(R.string.change_origin),
+                    tint = style.primaryText,
+                    style = style,
+                    onClick = onChangeSourceClick
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                // 刷新图标
+                MangaTitleIconButton(
+                    painterRes = R.drawable.ic_refresh_black_24dp,
+                    contentDescription = stringResource(R.string.refresh),
+                    tint = style.primaryText,
+                    style = style,
+                    onClick = onRefreshClick
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                // 三点菜单
+                MangaTitleIconButton(
+                    painterRes = R.drawable.ic_more_vert,
+                    contentDescription = stringResource(R.string.more),
+                    tint = style.primaryText,
+                    style = style,
+                    onClick = onMoreClick
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun MangaTitleIconButton(
+    painterRes: Int,
+    contentDescription: String?,
+    tint: Color,
+    style: AppDialogStyle,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = modifier
+            .size(40.dp)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            painter = painterResource(painterRes),
+            contentDescription = contentDescription,
+            tint = tint,
+            modifier = Modifier.size(20.dp)
+        )
+    }
 }
 
 /**
@@ -326,7 +400,6 @@ private fun QuickActionsPanel(
     onToggleGray: () -> Unit,
     onToggleEInk: () -> Unit,
     onToggleNightTheme: () -> Unit,
-    onOpenCatalog: () -> Unit,
     onShowInterfaceSetting: () -> Unit,
     onShowMoreSetting: () -> Unit
 ) {
@@ -448,15 +521,8 @@ private fun QuickActionsPanel(
                 )
             }
 
-            // 快捷按钮第二行:目录/自动翻页/界面/设置
+            // 快捷按钮第二行:自动翻页/界面/设置
             QuickButtonRow {
-                QuickActionButton(
-                    title = stringResource(R.string.chapter_list),
-                    iconRes = R.drawable.ic_toc,
-                    active = false,
-                    style = style,
-                    onClick = onOpenCatalog
-                )
                 QuickActionButton(
                     title = stringResource(if (autoPageActive) R.string.auto_next_page_stop else R.string.auto_next_page),
                     iconRes = if (autoPageActive) R.drawable.ic_auto_page_stop else R.drawable.ic_auto_page,
@@ -488,7 +554,7 @@ private fun QuickActionsPanel(
 
 @Composable
 private fun QuickButtonRow(
-    content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit
+    content: @Composable RowScope.() -> Unit
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -539,4 +605,3 @@ private fun RowScope.QuickActionButton(
         )
     }
 }
-
