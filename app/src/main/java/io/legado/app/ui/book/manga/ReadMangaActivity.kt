@@ -35,6 +35,7 @@ import io.legado.app.databinding.ViewLoadMoreBinding
 import io.legado.app.help.book.isImage
 import io.legado.app.help.book.removeType
 import io.legado.app.help.config.AppConfig
+import io.legado.app.help.config.ThemeConfig
 import io.legado.app.help.storage.Backup
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.dialogs.selector
@@ -727,6 +728,10 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
         }
     }
 
+    override fun isAutoPageActive(): Boolean {
+        return enableAutoScrollPage || enableAutoScroll
+    }
+
     /**
      * 自动翻页控制条:停止自动翻页
      */
@@ -734,6 +739,7 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
         setAutoPageEnabled(false)
         setAutoScrollEnabled(false)
         binding.mangaMenu.setAutoPage(false)
+        binding.mangaMenu.refreshQuickActions()
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         binding.infobar.update("")
     }
@@ -816,6 +822,11 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
 
     override fun toggleEInk() {
         triggerMangaMenuItem(R.id.menu_epaper_manga)
+    }
+
+    override fun toggleNightTheme() {
+        AppConfig.isNightTheme = !AppConfig.isNightTheme
+        ThemeConfig.applyDayNight(this)
     }
 
     override fun openCatalog() {
