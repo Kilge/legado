@@ -54,6 +54,7 @@ import androidx.core.view.isGone
 import androidx.core.view.isVisible
 import io.legado.app.R
 import io.legado.app.databinding.ViewMangaMenuBinding
+import io.legado.app.help.book.isLocal
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.source.getSourceType
 import io.legado.app.lib.dialogs.alert
@@ -349,15 +350,17 @@ private fun MangaTitleBar(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f)
                 )
-                // 换源图标
-                MangaTitleIconButton(
-                    painterRes = R.drawable.ic_exchange,
-                    contentDescription = stringResource(R.string.change_origin),
-                    tint = style.primaryText,
-                    style = style,
-                    onClick = onChangeSourceClick
-                )
-                Spacer(modifier = Modifier.width(8.dp))
+                // 换源图标(本地书不显示,同小说)
+                if (ReadManga.book?.isLocal != true) {
+                    MangaTitleIconButton(
+                        painterRes = R.drawable.ic_exchange,
+                        contentDescription = stringResource(R.string.change_origin),
+                        tint = style.primaryText,
+                        style = style,
+                        onClick = onChangeSourceClick
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
                 // 刷新图标
                 MangaTitleIconButton(
                     painterRes = R.drawable.ic_refresh_black_24dp,
@@ -395,60 +398,62 @@ private fun MangaTitleBar(
                         modifier = Modifier.weight(1f)
                     )
                 }
-                Spacer(modifier = Modifier.width(12.dp))
-                // 书源胶囊(点击弹编辑源/禁用源)
-                val sourceName = ReadManga.bookSource?.bookSourceName
-                val editSourceTitle = stringResource(R.string.edit_book_source)
-                val disableSourceTitle = stringResource(R.string.disable_book_source)
-                Box(
-                    modifier = Modifier
-                        .widthIn(max = 180.dp)
-                        .height(34.dp)
-                        .clip(RoundedCornerShape(style.actionRadius))
-                        .background(style.fieldSurface)
-                        .onGloballyPositioned { coordinates ->
-                            val pos = coordinates.localToWindow(androidx.compose.ui.geometry.Offset.Zero)
-                            val size = coordinates.size
-                            sourceAnchorBounds = androidx.compose.ui.geometry.Rect(
-                                pos.x, pos.y,
-                                pos.x + size.width, pos.y + size.height
-                            )
-                        }
-                        .clickable {
-                            val menuActions = buildList {
-                                add(
-                                    ModernActionPopup.Action(
-                                        title = editSourceTitle,
-                                        invoke = onEditSourceClick
-                                    )
-                                )
-                                add(
-                                    ModernActionPopup.Action(
-                                        title = disableSourceTitle,
-                                        invoke = onDisableSourceClick
-                                    )
+                // 书源胶囊(本地书不显示,点击弹编辑源/禁用源;同小说)
+                if (ReadManga.book?.isLocal != true) {
+                    Spacer(modifier = Modifier.width(12.dp))
+                    val sourceName = ReadManga.bookSource?.bookSourceName
+                    val editSourceTitle = stringResource(R.string.edit_book_source)
+                    val disableSourceTitle = stringResource(R.string.disable_book_source)
+                    Box(
+                        modifier = Modifier
+                            .widthIn(max = 180.dp)
+                            .height(34.dp)
+                            .clip(RoundedCornerShape(style.actionRadius))
+                            .background(style.fieldSurface)
+                            .onGloballyPositioned { coordinates ->
+                                val pos = coordinates.localToWindow(androidx.compose.ui.geometry.Offset.Zero)
+                                val size = coordinates.size
+                                sourceAnchorBounds = androidx.compose.ui.geometry.Rect(
+                                    pos.x, pos.y,
+                                    pos.x + size.width, pos.y + size.height
                                 )
                             }
-                            sourcePopupHandle = ModernActionPopup.show(
-                                context,
-                                sourceAnchorBounds.left.toInt(),
-                                sourceAnchorBounds.top.toInt(),
-                                sourceAnchorBounds.right.toInt(),
-                                sourceAnchorBounds.bottom.toInt(),
-                                menuActions,
-                                sourcePopupHandle
-                            )
-                        }
-                        .padding(horizontal = 14.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = sourceName ?: stringResource(R.string.book_source),
-                        color = style.primaryText,
-                        fontSize = 12.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                            .clickable {
+                                val menuActions = buildList {
+                                    add(
+                                        ModernActionPopup.Action(
+                                            title = editSourceTitle,
+                                            invoke = onEditSourceClick
+                                        )
+                                    )
+                                    add(
+                                        ModernActionPopup.Action(
+                                            title = disableSourceTitle,
+                                            invoke = onDisableSourceClick
+                                        )
+                                    )
+                                }
+                                sourcePopupHandle = ModernActionPopup.show(
+                                    context,
+                                    sourceAnchorBounds.left.toInt(),
+                                    sourceAnchorBounds.top.toInt(),
+                                    sourceAnchorBounds.right.toInt(),
+                                    sourceAnchorBounds.bottom.toInt(),
+                                    menuActions,
+                                    sourcePopupHandle
+                                )
+                            }
+                            .padding(horizontal = 14.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = sourceName ?: stringResource(R.string.book_source),
+                            color = style.primaryText,
+                            fontSize = 12.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
             }
         }

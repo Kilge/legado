@@ -19,9 +19,12 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Semaphore
 import me.ag2s.epublib.util.zip.AndroidZipFile
+import io.legado.app.utils.getFile
 import splitties.init.appCtx
 import java.io.File
+import java.io.FileInputStream
 import java.io.FileNotFoundException
+import java.io.FileOutputStream
 import java.io.FilterInputStream
 import java.io.InputStream
 
@@ -149,12 +152,24 @@ object ArchiveImageLoader {
             priority: Priority,
             callback: DataFetcher.DataCallback<in InputStream>
         ) {
+            //磁盘缓存命中直接返回,避免重复网络Range读取(滑动过快/来回滑动时秒显)
+            val cacheFile = cacheFile(url)
+            if (cacheFile != null && cacheFile.exists()) {
+                callback.onDataReady(FileInputStream(cacheFile))
+                return
+            }
             var lastError: Exception? = null
             //远程压缩包连接不稳定时自动重试,避免服务器限流导致图片显示重新加载
             repeat(3) { attempt ->
                 try {
                     val stream = openArchiveImage(url)
                     synchronized(this) { currentStream = stream }
+                    //缓存到本地磁盘(仅远程图片),滑动回来秒显
+                    if (url.contains("http://", true) || url.contains("https://", true) ||
+                        url.contains("smb://", true)
+                    ) {
+                        cacheStreamToFile(stream, cacheFile)
+                    }
                     callback.onDataReady(stream)
                     return
                 } catch (e: Exception) {
@@ -166,6 +181,36 @@ object ArchiveImageLoader {
             }
             AppLog.put("漫画图片加载失败\n$url\n${lastError?.localizedMessage}", lastError)
             callback.onLoadFailed(lastError ?: Exception("加载失败"))
+        }
+
+        /**
+         * 磁盘缓存文件(以url哈希命名)
+         */
+        private fun cacheFile(url: String): File? {
+            return kotlin.runCatching {
+                File(appCtx.cacheDir, "archiveImages").apply { mkdirs() }
+                    .getFile(url.hashCode().toString() + ".img")
+            }.getOrNull()
+        }
+
+        /**
+         * 读取流并写入缓存(读取完成后流复位)
+         */
+        private fun cacheStreamToFile(stream: InputStream, cacheFile: File?) {
+            if (cacheFile == null) return
+            kotlin.runCatching {
+                if (!stream.markSupported()) return
+                stream.mark(Int.MAX_VALUE)
+                val buffer = ByteArray(64 * 1024)
+                FileOutputStream(cacheFile).use { out ->
+                    while (true) {
+                        val n = stream.read(buffer)
+                        if (n < 0) break
+                        out.write(buffer, 0, n)
+                    }
+                }
+                stream.reset()
+            }
         }
 
         override fun cleanup() {
