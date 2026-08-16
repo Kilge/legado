@@ -7,7 +7,6 @@ import android.util.AttributeSet
 import android.view.LayoutInflater
 import android.view.animation.Animation
 import android.widget.FrameLayout
-import android.widget.SeekBar
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -42,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Surface
 import androidx.core.view.isGone
 import androidx.core.view.isVisible
 import io.legado.app.R
@@ -62,11 +62,11 @@ import io.legado.app.model.ReadBook
 import io.legado.app.model.ReadManga
 import io.legado.app.ui.book.manga.config.MangaAutoReadDialog
 import io.legado.app.ui.book.read.config.rememberReaderMenuDialogStyle
+import io.legado.app.ui.book.read.ReadMenuSeekBarRow
 import io.legado.app.ui.browser.WebViewActivity
 import io.legado.app.ui.widget.compose.AppDialogStyle
 import io.legado.app.ui.widget.compose.AppThemedStepperSlider
 import io.legado.app.ui.widget.compose.toMiuixPalette
-import io.legado.app.ui.widget.seekbar.SeekBarChangeListener
 import io.legado.app.utils.activity
 import io.legado.app.utils.applyNavigationBarPadding
 import io.legado.app.utils.getPrefBoolean
@@ -99,6 +99,12 @@ class MangaMenu @JvmOverloads constructor(
     }
     private var isMenuOutAnimating = false
     private var bgColor = context.bottomBackground
+
+    /**
+     * 当前章节进度(Compose章节条读取)
+     */
+    var seekProgress: Int = 0
+    var seekMax: Int = 0
 
     /**
      * Compose快捷面板刷新信号(供setAutoPage/upMangaIcons等外部更新时触发重组)
@@ -153,8 +159,6 @@ class MangaMenu @JvmOverloads constructor(
         val secondaryTextColor = context.secondaryTextColor
         tvChapterName.setTextColor(secondaryTextColor)
         tvChapterUrl.setTextColor(secondaryTextColor)
-        tvPre.setTextColor(textColor)
-        tvNext.setTextColor(textColor)
         if (AppConfig.isEInkMode) {
             titleBar.setBackgroundResource(R.drawable.bg_eink_border_bottom)
             bottomMenu.setBackgroundResource(R.drawable.bg_eink_border_top)
@@ -282,35 +286,12 @@ class MangaMenu @JvmOverloads constructor(
         tvChapterName.setOnLongClickListener(chapterViewLongClickListener)
         tvChapterUrl.setOnClickListener(chapterViewClickListener)
         tvChapterUrl.setOnLongClickListener(chapterViewLongClickListener)
-
-        tvNext.setOnClickListener {
-            ReadManga.moveToNextChapter(true)
-        }
-        tvPre.setOnClickListener {
-            ReadManga.moveToPrevChapter(true)
-        }
-        seekReadPage.setOnSeekBarChangeListener(object : SeekBarChangeListener {
-            override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
-                if (fromUser) {
-                    callBack.skipToPage(seekBar.progress)
-                }
-            }
-
-            override fun onStartTrackingTouch(seekBar: SeekBar) {
-                binding.vwMenuBg.setOnClickListener(null)
-            }
-
-            override fun onStopTrackingTouch(seekBar: SeekBar) {
-                binding.vwMenuBg.setOnClickListener { runMenuOut() }
-            }
-        })
     }
 
     fun upSeekBar(value: Int, count: Int) {
-        binding.seekReadPage.apply {
-            max = count.minus(1)
-            progress = value
-        }
+        seekProgress = value
+        seekMax = count.minus(1)
+        refreshQuickActions()
     }
 
     interface CallBack {
@@ -332,7 +313,7 @@ class MangaMenu @JvmOverloads constructor(
 }
 
 /**
- * 漫画菜单快捷面板(Compose,复用Archive小说阅读菜单样式:亮度行+图标按钮网格)
+ * 漫画菜单快捷面板(Compose,复用Archive小说阅读菜单样式:章节条+亮度行+图标按钮网格)
  */
 @Composable
 private fun QuickActionsPanel(
@@ -366,100 +347,131 @@ private fun QuickActionsPanel(
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+    // 整体面板(同小说阅读菜单底部面板样式)
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(
+            topStart = style.panelRadius,
+            topEnd = style.panelRadius
+        ),
+        color = style.surface,
+        contentColor = style.primaryText,
+        tonalElevation = 0.dp,
+        shadowElevation = 8.dp
     ) {
-        // 亮度行(复用小说 ReadMenuBrightnessRow)
-        BrightnessRow(
-            brightness = brightness,
-            isAuto = brightnessAuto,
-            style = style,
-            onAutoClick = {
-                brightnessAuto = !brightnessAuto
-                context.putPrefBoolean("brightnessAuto", brightnessAuto)
-            },
-            onBrightnessChange = { setScreenBrightness(it.toFloat()) },
-            onBrightnessStop = {
-                brightness = it
-                AppConfig.readBrightness = it
-            }
-        )
-        QuickButtonRow {
-            QuickActionButton(
-                title = stringResource(R.string.manga_color_filter),
-                iconRes = R.drawable.ic_filter_filled,
-                active = filterOn,
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            // 章节条(同小说 ReadMenuSeekBarRow)
+            ReadMenuSeekBarRow(
+                seekProgress = menu.seekProgress,
+                seekMax = menu.seekMax,
+                canGoPrev = menu.seekProgress > 0,
+                canGoNext = menu.seekProgress < menu.seekMax,
                 style = style,
-                onClick = onOpenColorFilter
+                onPrevClick = { ReadManga.moveToPrevChapter(true) },
+                onNextClick = { ReadManga.moveToNextChapter(true) },
+                onSeekStart = { },
+                onSeekStop = { progress -> menu.callBack.skipToPage(progress) }
             )
-            QuickActionButton(
-                title = stringResource(R.string.enable_manga_gray),
-                iconRes = if (grayOn) R.drawable.ic_grayscale_filled else R.drawable.ic_grayscale_outline,
-                active = grayOn,
-                style = style,
-                onClick = {
-                    grayOn = !grayOn
-                    onToggleGray()
-                }
-            )
-            QuickActionButton(
-                title = stringResource(R.string.manga_epaper),
-                iconRes = if (eInkOn) R.drawable.ic_book_filled else R.drawable.ic_book_outline,
-                active = eInkOn,
-                style = style,
-                onClick = {
-                    eInkOn = !eInkOn
-                    onToggleEInk()
-                }
-            )
-            QuickActionButton(
-                title = stringResource(if (nightTheme) R.string.theme_day else R.string.theme_night),
-                iconRes = if (nightTheme) R.drawable.ic_daytime else R.drawable.ic_brightness,
-                active = nightTheme,
-                style = style,
-                onClick = {
-                    nightTheme = !nightTheme
-                    onToggleNightTheme()
-                }
-            )
-        }
 
-        // 快捷按钮第二行:目录/自动翻页/界面/设置
-        QuickButtonRow {
-            QuickActionButton(
-                title = stringResource(R.string.chapter_list),
-                iconRes = R.drawable.ic_toc,
-                active = false,
+            // 亮度行
+            BrightnessRow(
+                brightness = brightness,
+                isAuto = brightnessAuto,
                 style = style,
-                onClick = onOpenCatalog
-            )
-            QuickActionButton(
-                title = stringResource(if (autoPageActive) R.string.auto_next_page_stop else R.string.auto_next_page),
-                iconRes = if (autoPageActive) R.drawable.ic_auto_page_stop else R.drawable.ic_auto_page,
-                active = autoPageActive,
-                style = style,
-                onClick = {
-                    autoPageActive = !autoPageActive
-                    onAutoPage()
+                onAutoClick = {
+                    brightnessAuto = !brightnessAuto
+                    context.putPrefBoolean("brightnessAuto", brightnessAuto)
+                },
+                onBrightnessChange = {
+                    brightness = it
+                    setScreenBrightness(it.toFloat())
+                },
+                onBrightnessStop = {
+                    brightness = it
+                    AppConfig.readBrightness = it
                 }
             )
-            QuickActionButton(
-                title = stringResource(R.string.interface_setting),
-                iconRes = R.drawable.ic_interface_setting,
-                active = false,
-                style = style,
-                onClick = onShowInterfaceSetting
-            )
-            QuickActionButton(
-                title = stringResource(R.string.setting),
-                iconRes = R.drawable.ic_settings,
-                active = false,
-                style = style,
-                onClick = onShowMoreSetting
-            )
+
+            // 快捷按钮第一行:滤镜/灰度/墨水屏/夜间
+            QuickButtonRow {
+                QuickActionButton(
+                    title = stringResource(R.string.manga_color_filter),
+                    iconRes = R.drawable.ic_filter_filled,
+                    active = filterOn,
+                    style = style,
+                    onClick = onOpenColorFilter
+                )
+                QuickActionButton(
+                    title = stringResource(R.string.enable_manga_gray),
+                    iconRes = if (grayOn) R.drawable.ic_grayscale_filled else R.drawable.ic_grayscale_outline,
+                    active = grayOn,
+                    style = style,
+                    onClick = {
+                        grayOn = !grayOn
+                        onToggleGray()
+                    }
+                )
+                QuickActionButton(
+                    title = stringResource(R.string.manga_epaper),
+                    iconRes = if (eInkOn) R.drawable.ic_book_filled else R.drawable.ic_book_outline,
+                    active = eInkOn,
+                    style = style,
+                    onClick = {
+                        eInkOn = !eInkOn
+                        onToggleEInk()
+                    }
+                )
+                QuickActionButton(
+                    title = stringResource(if (nightTheme) R.string.theme_day else R.string.theme_night),
+                    iconRes = if (nightTheme) R.drawable.ic_daytime else R.drawable.ic_brightness,
+                    active = nightTheme,
+                    style = style,
+                    onClick = {
+                        nightTheme = !nightTheme
+                        onToggleNightTheme()
+                    }
+                )
+            }
+
+            // 快捷按钮第二行:目录/自动翻页/界面/设置
+            QuickButtonRow {
+                QuickActionButton(
+                    title = stringResource(R.string.chapter_list),
+                    iconRes = R.drawable.ic_toc,
+                    active = false,
+                    style = style,
+                    onClick = onOpenCatalog
+                )
+                QuickActionButton(
+                    title = stringResource(if (autoPageActive) R.string.auto_next_page_stop else R.string.auto_next_page),
+                    iconRes = if (autoPageActive) R.drawable.ic_auto_page_stop else R.drawable.ic_auto_page,
+                    active = autoPageActive,
+                    style = style,
+                    onClick = {
+                        autoPageActive = !autoPageActive
+                        onAutoPage()
+                    }
+                )
+                QuickActionButton(
+                    title = stringResource(R.string.interface_setting),
+                    iconRes = R.drawable.ic_interface_setting,
+                    active = false,
+                    style = style,
+                    onClick = onShowInterfaceSetting
+                )
+                QuickActionButton(
+                    title = stringResource(R.string.setting),
+                    iconRes = R.drawable.ic_settings,
+                    active = false,
+                    style = style,
+                    onClick = onShowMoreSetting
+                )
+            }
         }
     }
 }

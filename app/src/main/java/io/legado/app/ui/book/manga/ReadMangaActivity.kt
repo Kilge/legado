@@ -515,7 +515,6 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
 
     override fun updateColorFilter(config: MangaColorFilterConfig) {
         mAdapter.setMangaImageColorFilter(config)
-        updateWindowBrightness(config.l)
     }
 
     @SuppressLint("StringFormatMatches")
@@ -1064,15 +1063,6 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
                 noButton { viewModel.removeFromBookshelf { super.finish() } }
             }
         }
-    }
-
-    fun updateWindowBrightness(brightness: Int) {
-        val layoutParams = window.attributes
-        val normalizedBrightness = brightness.toFloat() / 255.0f
-        layoutParams.screenBrightness = normalizedBrightness.coerceIn(0f, 1f)
-        window.attributes = layoutParams
-        // 强制刷新屏幕
-        window.decorView.postInvalidate()
     }
 
     override fun skipToPage(index: Int) {
