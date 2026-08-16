@@ -5,6 +5,7 @@ import android.util.AttributeSet
 import android.view.LayoutInflater
 import android.view.animation.Animation
 import android.widget.FrameLayout
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -23,6 +24,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
@@ -36,6 +38,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.ViewCompositionStrategy
@@ -53,6 +57,7 @@ import io.legado.app.databinding.ViewMangaMenuBinding
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.source.getSourceType
 import io.legado.app.lib.dialogs.alert
+import io.legado.app.ui.widget.ModernActionPopup
 import io.legado.app.lib.theme.applyUiBodyTypefaceDeep
 import io.legado.app.lib.theme.bottomBackground
 import io.legado.app.lib.theme.primaryTextColor
@@ -171,7 +176,9 @@ class MangaMenu @JvmOverloads constructor(
                     onBookClick = { callBack.openBookInfoActivity() },
                     onChangeSourceClick = { callBack.changeSource() },
                     onRefreshClick = { callBack.refreshContent() },
-                    onMoreClick = { callBack.showMoreSettingMenu() }
+                    onMoreClick = { callBack.showMoreSettingMenu() },
+                    onEditSourceClick = { callBack.openSourceEditActivity() },
+                    onDisableSourceClick = { callBack.disableSource() }
                 )
             }
         }
@@ -190,6 +197,7 @@ class MangaMenu @JvmOverloads constructor(
                     onToggleGray = { callBack.toggleGray() },
                     onToggleEInk = { callBack.toggleEInk() },
                     onToggleNightTheme = { callBack.toggleNightTheme() },
+                    onOpenCatalog = { callBack.openCatalog() },
                     onShowInterfaceSetting = { callBack.showInterfaceSetting() },
                     onShowMoreSetting = { callBack.showMoreSettingMenu() }
                 )
@@ -262,6 +270,8 @@ class MangaMenu @JvmOverloads constructor(
         fun openBookInfoActivity()
         fun changeSource()
         fun refreshContent()
+        fun openSourceEditActivity()
+        fun disableSource()
         fun openMangaConfig()
         fun upSystemUiVisibility(menuIsVisible: Boolean)
         fun skipToPage(index: Int)
@@ -271,6 +281,7 @@ class MangaMenu @JvmOverloads constructor(
         fun toggleGray()
         fun toggleEInk()
         fun toggleNightTheme()
+        fun openCatalog()
         fun showInterfaceSetting()
         fun showMoreSettingMenu()
     }
@@ -279,6 +290,7 @@ class MangaMenu @JvmOverloads constructor(
 
 /**
  * 漫画菜单顶栏(同小说 ReadMenuTitleBar 样式:状态栏衔接+Surface全宽+返回/书名/换源/刷新/三点)
+ * 下方章节信息行(同小说 ReadMenuActionBar:章节名+书源胶囊,点击弹编辑源/禁用源)
  */
 @Composable
 private fun MangaTitleBar(
@@ -286,10 +298,14 @@ private fun MangaTitleBar(
     onBookClick: () -> Unit,
     onChangeSourceClick: () -> Unit,
     onRefreshClick: () -> Unit,
-    onMoreClick: () -> Unit
+    onMoreClick: () -> Unit,
+    onEditSourceClick: () -> Unit,
+    onDisableSourceClick: () -> Unit
 ) {
     val context = LocalContext.current
     val style = rememberReaderMenuDialogStyle(context.bottomBackground)
+    var sourcePopupHandle by remember { mutableStateOf<ModernActionPopup.Handle?>(null) }
+    var sourceAnchorBounds by remember { mutableStateOf(androidx.compose.ui.geometry.Rect.Zero) }
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = style.surface,
@@ -360,6 +376,81 @@ private fun MangaTitleBar(
                     onClick = onMoreClick
                 )
             }
+            // 章节信息行(同小说 ReadMenuActionBar)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // 章节名
+                ReadManga.curMangaChapter?.let {
+                    Text(
+                        text = it.chapter.title,
+                        color = style.primaryText,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                // 书源胶囊(点击弹编辑源/禁用源)
+                val sourceName = ReadManga.bookSource?.bookSourceName
+                val editSourceTitle = stringResource(R.string.edit_book_source)
+                val disableSourceTitle = stringResource(R.string.disable_book_source)
+                Box(
+                    modifier = Modifier
+                        .widthIn(max = 180.dp)
+                        .height(34.dp)
+                        .clip(RoundedCornerShape(style.actionRadius))
+                        .background(style.fieldSurface)
+                        .onGloballyPositioned { coordinates ->
+                            val pos = coordinates.localToWindow(androidx.compose.ui.geometry.Offset.Zero)
+                            val size = coordinates.size
+                            sourceAnchorBounds = androidx.compose.ui.geometry.Rect(
+                                pos.x, pos.y,
+                                pos.x + size.width, pos.y + size.height
+                            )
+                        }
+                        .clickable {
+                            val menuActions = buildList {
+                                add(
+                                    ModernActionPopup.Action(
+                                        title = editSourceTitle,
+                                        invoke = onEditSourceClick
+                                    )
+                                )
+                                add(
+                                    ModernActionPopup.Action(
+                                        title = disableSourceTitle,
+                                        invoke = onDisableSourceClick
+                                    )
+                                )
+                            }
+                            sourcePopupHandle = ModernActionPopup.show(
+                                context,
+                                sourceAnchorBounds.left.toInt(),
+                                sourceAnchorBounds.top.toInt(),
+                                sourceAnchorBounds.right.toInt(),
+                                sourceAnchorBounds.bottom.toInt(),
+                                menuActions,
+                                sourcePopupHandle
+                            )
+                        }
+                        .padding(horizontal = 14.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = sourceName ?: stringResource(R.string.book_source),
+                        color = style.primaryText,
+                        fontSize = 12.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
         }
     }
 }
@@ -400,6 +491,7 @@ private fun QuickActionsPanel(
     onToggleGray: () -> Unit,
     onToggleEInk: () -> Unit,
     onToggleNightTheme: () -> Unit,
+    onOpenCatalog: () -> Unit,
     onShowInterfaceSetting: () -> Unit,
     onShowMoreSetting: () -> Unit
 ) {
@@ -521,8 +613,15 @@ private fun QuickActionsPanel(
                 )
             }
 
-            // 快捷按钮第二行:自动翻页/界面/设置
+            // 快捷按钮第二行:目录/自动翻页/界面/设置
             QuickButtonRow {
+                QuickActionButton(
+                    title = stringResource(R.string.chapter_list),
+                    iconRes = R.drawable.ic_toc,
+                    active = false,
+                    style = style,
+                    onClick = onOpenCatalog
+                )
                 QuickActionButton(
                     title = stringResource(if (autoPageActive) R.string.auto_next_page_stop else R.string.auto_next_page),
                     iconRes = if (autoPageActive) R.drawable.ic_auto_page_stop else R.drawable.ic_auto_page,
