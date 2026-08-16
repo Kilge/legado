@@ -114,7 +114,7 @@ class MangaMenu @JvmOverloads constructor(
 
         override fun onAnimationEnd(animation: Animation) {
             this@MangaMenu.invisible()
-            binding.titleBar.invisible()
+            binding.mangaTitleBar.invisible()
             binding.bottomMenu.invisible()
             isMenuOutAnimating = false
             canShowMenu = false
@@ -146,7 +146,7 @@ class MangaMenu @JvmOverloads constructor(
     private fun initView() = binding.run {
         initAnimation()
         if (AppConfig.isEInkMode) {
-            titleBar.setBackgroundResource(R.drawable.bg_eink_border_bottom)
+            mangaTitleBar.setBackgroundResource(R.drawable.bg_eink_border_bottom)
             bottomMenu.setBackgroundResource(R.drawable.bg_eink_border_top)
         } else {
             bottomMenu.setBackgroundColor(android.graphics.Color.TRANSPARENT)
@@ -163,7 +163,7 @@ class MangaMenu @JvmOverloads constructor(
     }
 
     private fun initComposeTitleBar() {
-        binding.titleBar.apply {
+        binding.mangaTitleBar.apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
                 MangaTitleBar(
@@ -203,7 +203,7 @@ class MangaMenu @JvmOverloads constructor(
         }
         if (this.isVisible) {
             if (anim) {
-                binding.titleBar.startAnimation(menuTopOut)
+                binding.mangaTitleBar.startAnimation(menuTopOut)
                 binding.bottomMenu.startAnimation(menuBottomOut)
             } else {
                 menuOutListener.onAnimationStart(menuBottomOut)
@@ -214,11 +214,11 @@ class MangaMenu @JvmOverloads constructor(
 
     fun runMenuIn(anim: Boolean = !AppConfig.isEInkMode) {
         this.visible()
-        binding.titleBar.visible()
+        binding.mangaTitleBar.visible()
         binding.bottomMenu.visible()
         refreshQuickActions()
         if (anim) {
-            binding.titleBar.startAnimation(menuTopIn)
+            binding.mangaTitleBar.startAnimation(menuTopIn)
             binding.bottomMenu.startAnimation(menuBottomIn)
         } else {
             menuInListener.onAnimationStart(menuBottomIn)
