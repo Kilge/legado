@@ -142,17 +142,16 @@ class RemoteBookViewModel(application: Application) : BaseViewModel(application)
             return
         }
         //免下载检测压缩包内是否有图片,判断是否漫画
-        val remoteUrl = CustomUrl(origin).getUrl()
+        val remoteUrl = remoteBook.path
         val hasImages = kotlin.runCatching {
-            val serverID = AnalyzeUrl(remoteUrl).serverID
-            val authorization = Authorization(serverID!!)
-            WebDavZipReader.getEntries(remoteUrl, authorization)
+            WebDavZipReader.getEntries(remoteUrl, bookWebDav.authorization)
                 .any { it.name.matches(AppPattern.imageFileRegex) }
         }.getOrDefault(false)
         val book = Book(
             type = BookType.text or BookType.local or BookType.archive or
                 if (hasImages) BookType.image else 0,
-            bookUrl = origin,
+            //未下载书籍的占位符:避免被当作本地文件,首次打开webdav直读
+            bookUrl = "/remote/" + MD5Utils.md5Encode16(remoteBook.path),
             name = nameAuthor.first,
             author = nameAuthor.second,
             originName = remoteBook.filename,

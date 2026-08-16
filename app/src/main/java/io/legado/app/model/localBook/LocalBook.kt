@@ -75,6 +75,11 @@ import kotlinx.coroutines.currentCoroutineContext
  */
 object LocalBook {
 
+    /**
+     * 远程书未下载占位符前缀(与RemoteBookViewModel.addArchiveToBookshelfDirect一致)
+     */
+    const val REMOTE_PLACEHOLDER_PREFIX = "/remote/"
+
     private const val LARGE_EPUB_FAST_IMPORT_BYTES = 100L * 1024L * 1024L
 
     private val nameAuthorPatterns = arrayOf(
@@ -140,6 +145,7 @@ object LocalBook {
         //本地已有文件则用本地,否则远程免下载直读(安静检查,不产生日志)
         val localExists = kotlin.runCatching {
             when {
+                book.bookUrl.startsWith(REMOTE_PLACEHOLDER_PREFIX) -> false
                 book.bookUrl.isContentScheme() ->
                     DocumentFile.fromSingleUri(appCtx, book.bookUrl.toUri())?.exists() == true
                 else -> File(book.bookUrl).exists()
