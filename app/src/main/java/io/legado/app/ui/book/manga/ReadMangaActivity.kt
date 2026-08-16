@@ -50,6 +50,7 @@ import io.legado.app.ui.book.source.edit.BookSourceEditActivity
 import io.legado.app.ui.book.manga.config.MangaColorFilterConfig
 import io.legado.app.ui.book.manga.config.MangaAutoReadDialog
 import io.legado.app.ui.book.manga.config.MangaMoreConfigDialog
+import io.legado.app.ui.book.bookmark.BookmarkDialog
 import io.legado.app.ui.book.manga.config.MangaColorFilterDialog
 import io.legado.app.ui.book.manga.config.MangaEpaperDialog
 import io.legado.app.ui.book.manga.config.MangaFooterConfig
@@ -221,7 +222,7 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
         get() = ReadManga.book?.config?.mangaDisableClickScroll ?: AppConfig.disableClickScroll
     private val mangaDisableScale: Boolean
         get() = ReadManga.book?.config?.mangaDisableScale ?: AppConfig.disableMangaScale
-    private val mangaAutoPageSpeed: Int
+    val mangaAutoPageSpeed: Int
         get() = ReadManga.book?.config?.mangaAutoPageSpeed ?: AppConfig.mangaAutoPageSpeed
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -769,6 +770,20 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
         viewModel.disableSource()
     }
 
+    override fun addBookmark() {
+        val book = ReadManga.book
+        val chapter = ReadManga.curMangaChapter?.chapter
+        if (book != null && chapter != null) {
+            val bookmark = book.createBookMark().apply {
+                chapterIndex = ReadManga.durChapterIndex
+                chapterPos = ReadManga.durChapterPos
+                chapterName = chapter.title
+                bookText = chapter.title
+            }
+            showDialogFragment(BookmarkDialog(bookmark, editPos = 0, contentOnly = true))
+        }
+    }
+
     override fun openMangaConfig() {
         showMangaConfigMenu()
     }
@@ -931,7 +946,7 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
         return super.dispatchKeyEvent(event)
     }
 
-    private fun setRecyclerViewPreloader(maxPreload: Int) {
+    fun setRecyclerViewPreloader(maxPreload: Int) {
         if (mRecyclerViewPreloader != null) {
             binding.recyclerView.removeOnScrollListener(mRecyclerViewPreloader!!)
         }
@@ -1011,7 +1026,7 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
         }
     }
 
-    private fun triggerMangaMenuItem(id: Int) {
+    fun triggerMangaMenuItem(id: Int) {
         val item = mMenu?.findItem(id)
         if (item != null) {
             onCompatOptionsItemSelected(item)
@@ -1196,7 +1211,7 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
         }
     }
 
-    private fun showNumberPickerDialog(
+    fun showNumberPickerDialog(
         min: Int,
         title: String,
         initValue: Int,

@@ -54,6 +54,7 @@ import androidx.core.view.isGone
 import androidx.core.view.isVisible
 import io.legado.app.R
 import io.legado.app.databinding.ViewMangaMenuBinding
+import io.legado.app.constant.PreferKey
 import io.legado.app.help.book.isLocal
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.source.getSourceType
@@ -178,6 +179,7 @@ class MangaMenu @JvmOverloads constructor(
                     onChangeSourceClick = { callBack.changeSource() },
                     onRefreshClick = { callBack.refreshContent() },
                     onMoreClick = { callBack.showMoreSettingMenu() },
+                    onAddBookmarkClick = { callBack.addBookmark() },
                     onEditSourceClick = { callBack.openSourceEditActivity() },
                     onDisableSourceClick = { callBack.disableSource() }
                 )
@@ -273,6 +275,7 @@ class MangaMenu @JvmOverloads constructor(
         fun refreshContent()
         fun openSourceEditActivity()
         fun disableSource()
+        fun addBookmark()
         fun openMangaConfig()
         fun upSystemUiVisibility(menuIsVisible: Boolean)
         fun skipToPage(index: Int)
@@ -300,12 +303,15 @@ private fun MangaTitleBar(
     onChangeSourceClick: () -> Unit,
     onRefreshClick: () -> Unit,
     onMoreClick: () -> Unit,
+    onAddBookmarkClick: () -> Unit,
     onEditSourceClick: () -> Unit,
     onDisableSourceClick: () -> Unit
 ) {
     val context = LocalContext.current
     val style = rememberReaderMenuDialogStyle(context.bottomBackground)
     var sourcePopupHandle by remember { mutableStateOf<ModernActionPopup.Handle?>(null) }
+    var morePopupHandle by remember { mutableStateOf<ModernActionPopup.Handle?>(null) }
+    var moreAnchorBounds by remember { mutableStateOf(androidx.compose.ui.geometry.Rect.Zero) }
     var sourceAnchorBounds by remember { mutableStateOf(androidx.compose.ui.geometry.Rect.Zero) }
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -370,14 +376,90 @@ private fun MangaTitleBar(
                     onClick = onRefreshClick
                 )
                 Spacer(modifier = Modifier.width(8.dp))
-                // 三点菜单
-                MangaTitleIconButton(
-                    painterRes = R.drawable.ic_more_vert,
-                    contentDescription = stringResource(R.string.more),
-                    tint = style.primaryText,
-                    style = style,
-                    onClick = onMoreClick
-                )
+                // 三点菜单(同小说:ModernActionPopup溢出菜单)
+                val bookmarkAdd = stringResource(R.string.bookmark_add)
+                val preDownload = stringResource(R.string.pre_download)
+                val enableAutoPageScroll = stringResource(R.string.enable_auto_page_scroll)
+                val enableAutoScroll = stringResource(R.string.enable_auto_scroll)
+                val mangaAutoPageSpeedTitle = stringResource(R.string.manga_auto_page_speed)
+                val mangaColorFilterTitle = stringResource(R.string.manga_color_filter)
+                val mangaFooterConfigTitle = stringResource(R.string.manga_footer_config)
+                val mangaEpaperTitle = stringResource(R.string.manga_epaper)
+                val mangaEpaperSettingTitle = stringResource(R.string.manga_epaper_stting)
+                val enableMangaGrayTitle = stringResource(R.string.enable_manga_gray)
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .onGloballyPositioned { coordinates ->
+                            val pos = coordinates.localToWindow(androidx.compose.ui.geometry.Offset.Zero)
+                            val size = coordinates.size
+                            moreAnchorBounds = androidx.compose.ui.geometry.Rect(
+                                pos.x, pos.y,
+                                pos.x + size.width, pos.y + size.height
+                            )
+                        }
+                        .clickable {
+                            val actions = buildList {
+                                add(ModernActionPopup.Action(
+                                    title = bookmarkAdd,
+                                    invoke = onAddBookmarkClick
+                                ))
+                                add(ModernActionPopup.Action(
+                                    title = preDownload,
+                                    invoke = onMoreClick
+                                ))
+                                add(ModernActionPopup.Action(
+                                    title = enableAutoPageScroll,
+                                    invoke = onMoreClick
+                                ))
+                                add(ModernActionPopup.Action(
+                                    title = enableAutoScroll,
+                                    invoke = onMoreClick
+                                ))
+                                add(ModernActionPopup.Action(
+                                    title = mangaAutoPageSpeedTitle,
+                                    invoke = onMoreClick
+                                ))
+                                add(ModernActionPopup.Action(
+                                    title = mangaColorFilterTitle,
+                                    invoke = onMoreClick
+                                ))
+                                add(ModernActionPopup.Action(
+                                    title = mangaFooterConfigTitle,
+                                    invoke = onMoreClick
+                                ))
+                                add(ModernActionPopup.Action(
+                                    title = mangaEpaperTitle,
+                                    invoke = onMoreClick
+                                ))
+                                add(ModernActionPopup.Action(
+                                    title = mangaEpaperSettingTitle,
+                                    invoke = onMoreClick
+                                ))
+                                add(ModernActionPopup.Action(
+                                    title = enableMangaGrayTitle,
+                                    invoke = onMoreClick
+                                ))
+                            }
+                            morePopupHandle = ModernActionPopup.show(
+                                context,
+                                moreAnchorBounds.left.toInt(),
+                                moreAnchorBounds.top.toInt(),
+                                moreAnchorBounds.right.toInt(),
+                                moreAnchorBounds.bottom.toInt(),
+                                actions,
+                                morePopupHandle
+                            )
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_more_vert),
+                        contentDescription = stringResource(R.string.more),
+                        tint = style.primaryText,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
             }
             // 章节信息行(同小说 ReadMenuActionBar)
             Row(
@@ -557,11 +639,11 @@ private fun QuickActionsPanel(
                 onSeekStop = { progress -> menu.callBack.skipToPage(progress) }
             )
 
-            // 亮度行(复用小说 ReadMenuBrightnessRow)
+            // 亮度行(复用小说 ReadMenuBrightnessRow,showBrightnessView控制显隐)
             ReadMenuBrightnessRow(
                 brightness = brightness,
                 isAuto = brightnessAuto,
-                showBrightnessView = true,
+                showBrightnessView = context.getPrefBoolean(PreferKey.showBrightnessView, true),
                 style = style,
                 onAutoClick = {
                     brightnessAuto = !brightnessAuto
