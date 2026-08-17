@@ -129,11 +129,7 @@ class RemoteBookViewModel(application: Application) : BaseViewModel(application)
                 }
                 return@execute
             }
-            isDefaultWebdav = true
-            remoteBookManager = AppWebDav.defaultBookWebDav
-                ?: throw NoStackTraceException("webDav没有配置")
-        }.onError {
-            context.toastOnUi("初始化出错:${it.localizedMessage}")
+            //没有配置服务器时静默处理,界面显示空列表,不弹出错误提示
         }.onSuccess {
             onSuccess.invoke()
         }
@@ -199,7 +195,11 @@ class RemoteBookViewModel(application: Application) : BaseViewModel(application)
     fun loadRemoteBookList(path: String?, loadCallback: (loading: Boolean) -> Unit) {
         executeLazy {
             val bookWebDav = remoteBookManager
-                ?: throw NoStackTraceException("没有配置webDav")
+                ?: run {
+                    //没有配置服务器时显示空列表
+                    dataCallback?.clear()
+                    return@executeLazy
+                }
             dataCallback?.clear()
             val url = path ?: bookWebDav.rootBookUrl
             val bookList = bookWebDav.getRemoteBookList(url)
