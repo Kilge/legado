@@ -186,10 +186,6 @@ class RemoteBookViewModel(application: Application) : BaseViewModel(application)
             origin = origin
         )
         appDb.bookDao.insert(book)
-        AppLog.put(
-            "zip免下载加入书架:book=${book.name}, hasImages=$hasImages, " +
-                "bookUrl=${book.bookUrl}"
-        )
     }
 
     fun loadRemoteBookList(path: String?, loadCallback: (loading: Boolean) -> Unit) {

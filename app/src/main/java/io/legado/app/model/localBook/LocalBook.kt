@@ -203,10 +203,6 @@ object LocalBook {
             )
             return null
         }
-        AppLog.put(
-            "zip漫画诊断:book=${book.name}, 来源=${if (localExists) "本地" else if (isWebDav) "webdav直读" else "远程下载"}, " +
-                "图片数=${images.size}, zipUri=$zipUri, isImage=${book.isImage}"
-        )
         val sortedImages = images.sortedWith(AlphanumComparator)
         val chapter = BookChapter(
             url = MD5Utils.md5Encode16(zipUri + "manga"),
@@ -792,11 +788,6 @@ object LocalBook {
                         if (hasImages) {
                             localBook.addType(BookType.image)
                         }
-                        AppLog.put(
-                            "webdav zip诊断:重新下载归档, archiveName=$archiveName, " +
-                                "innerBooks=${innerBooks?.size}, hasImages=$hasImages, " +
-                                "bookUrl=${localBook.bookUrl}, isImage=${localBook.isImage}"
-                        )
                     }
                     localBook.save()
                 } else {
