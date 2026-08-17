@@ -182,21 +182,19 @@ private fun ServerConfigContent(
                     )
                 }
                 Spacer(modifier = Modifier.height(10.dp))
-                ServerField("url", url, onUrlChange, style)
+                ServerField(stringResource(R.string.address), url, onUrlChange, style)
                 Spacer(modifier = Modifier.height(10.dp))
-                ServerField("username", username, onUsernameChange, style)
+                ServerField(stringResource(R.string.account), username, onUsernameChange, style)
                 Spacer(modifier = Modifier.height(10.dp))
                 ServerField(
-                    "password",
+                    stringResource(R.string.password_label),
                     password,
                     onPasswordChange,
                     style,
                     password = true
                 )
-                if (type == Server.TYPE.SMB) {
-                    Spacer(modifier = Modifier.height(10.dp))
-                    ServerField("path", path, onPathChange, style)
-                }
+                Spacer(modifier = Modifier.height(10.dp))
+                ServerField(stringResource(R.string.directory), path, onPathChange, style)
             }
         },
         actions = {
